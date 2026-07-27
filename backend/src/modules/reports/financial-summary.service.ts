@@ -1,0 +1,662 @@
+/**
+ * FINANCIAL SUMMARY SERVICE
+ * =========================
+ * Single source of truth for all shop dashboard cards and profit-related reports.
+ *
+ * Every KPI that involves sales, cost, profit, cash, or inventory valuation MUST be
+ * computed here — dashboard and report endpoints call these functions; they never
+ * duplicate the formulas elsewhere.
+ *
+ * Key rules enforced:
+ * - CANCELLED invoices/purchases are excluded from all totals.
+ * - COGS uses historical costAtSale / costAtReturn snapshots — never current purchasePrice.
+ * - Udhaar is counted as sale/profit when the invoice completes (remainingAmount at sale);
+ *   later customer payment collection counts only as cash received, not new sales.
+ * - Stock valuation (cost × stock, sale price × stock) is informational only — never
+ *   included in Net Profit.
+ * - Supplier payments are never counted as purchases.
+ */
+
+import { InvoiceStatus, Prisma, PurchaseStatus } from '@prisma/client';
+import { prisma } from '../../lib/prisma';
+import { multiplyMoney, roundMoney, sumMoney, toNumber } from '../../utils/money';
+import { dateFilter, resolveDateRange, type DateRangePreset, type ResolvedDateRange } from './date-range';
+
+export type FinancialSummary = {
+  range: ResolvedDateRange;
+  grossSales: number;
+  discounts: number;
+  saleReturns: number;
+  netSales: number;
+  costOfGoodsSold: number;
+  grossProfit: number;
+  expenses: number;
+  otherIncome: number;
+  netProfit: number;
+  cashReceived: number;
+  udhaarSales: number;
+  customerOutstanding: number;
+  supplierOutstanding: number;
+  stockCostValue: number;
+  expectedSellingValue: number;
+  potentialMarginOnUnsoldInventory: number;
+  invoiceCount: number;
+};
+
+export type PurchasePeriodTotals = {
+  today: number;
+  month: number;
+  year: number;
+  lifetime: number;
+};
+
+export type DashboardPayload = FinancialSummary & {
+  purchases: PurchasePeriodTotals;
+  lowStockCount: number;
+  outOfStockCount: number;
+  recentSales: {
+    id: number;
+    invoiceNumber: string;
+    date: string;
+    customerName: string | null;
+    totalAmount: number;
+    paymentMethod: string;
+  }[];
+  recentExpenses: {
+    id: number;
+    date: string;
+    categoryName: string;
+    description: string;
+    amount: number;
+  }[];
+  lowStockProducts: {
+    id: number;
+    name: string;
+    sku: string;
+    currentStock: number;
+    lowStockLimit: number;
+  }[];
+  topSellingProducts: {
+    productId: number;
+    name: string;
+    sku: string;
+    quantitySold: number;
+    revenue: number;
+  }[];
+  salesChart: { date: string; netSales: number; invoiceCount: number }[];
+};
+
+type LineAgg = { gross: number; lineDiscounts: number; cogs: number };
+
+async function aggregateInvoiceLines(from: Date | null, to: Date | null): Promise<LineAgg> {
+  const dateCond = dateFilter(from, to);
+  const items = await prisma.invoiceItem.findMany({
+    where: {
+      invoice: {
+        status: InvoiceStatus.ACTIVE,
+        ...(dateCond ? { date: dateCond } : {}),
+      },
+    },
+    select: { quantity: true, rate: true, discount: true, costAtSale: true },
+  });
+
+  let gross = 0;
+  let lineDiscounts = 0;
+  let cogs = 0;
+  for (const row of items) {
+    const qty = row.quantity;
+    const rate = toNumber(row.rate);
+    gross += multiplyMoney(rate, qty);
+    lineDiscounts += toNumber(row.discount);
+    cogs += multiplyMoney(toNumber(row.costAtSale), qty);
+  }
+  return { gross, lineDiscounts, cogs: roundMoney(cogs) };
+}
+
+async function aggregateExchangeLines(from: Date | null, to: Date | null): Promise<LineAgg> {
+  const dateCond = dateFilter(from, to);
+  const items = await prisma.exchangeItem.findMany({
+    where: {
+      exchange: dateCond ? { date: dateCond } : {},
+    },
+    select: { quantity: true, rate: true, discount: true, costAtSale: true },
+  });
+
+  let gross = 0;
+  let lineDiscounts = 0;
+  let cogs = 0;
+  for (const row of items) {
+    const qty = row.quantity;
+    const rate = toNumber(row.rate);
+    gross += multiplyMoney(rate, qty);
+    lineDiscounts += toNumber(row.discount);
+    cogs += multiplyMoney(toNumber(row.costAtSale), qty);
+  }
+  return { gross, lineDiscounts, cogs: roundMoney(cogs) };
+}
+
+async function aggregateInvoiceDiscounts(from: Date | null, to: Date | null): Promise<number> {
+  const dateCond = dateFilter(from, to);
+  const agg = await prisma.invoice.aggregate({
+    where: {
+      status: InvoiceStatus.ACTIVE,
+      ...(dateCond ? { date: dateCond } : {}),
+    },
+    _sum: { discount: true },
+  });
+  return toNumber(agg._sum.discount ?? 0);
+}
+
+async function aggregateSaleReturns(from: Date | null, to: Date | null): Promise<{ value: number; cogsReversal: number }> {
+  const dateCond = dateFilter(from, to);
+  const [returnAgg, returnItems] = await Promise.all([
+    prisma.saleReturn.aggregate({
+      where: dateCond ? { date: dateCond } : {},
+      _sum: { totalAmount: true },
+    }),
+    prisma.saleReturnItem.findMany({
+      where: {
+        saleReturn: dateCond ? { date: dateCond } : {},
+      },
+      select: { costAtReturn: true },
+    }),
+  ]);
+  const cogsReversal = sumMoney(returnItems.map((r) => toNumber(r.costAtReturn)));
+  return {
+    value: toNumber(returnAgg._sum.totalAmount ?? 0),
+    cogsReversal,
+  };
+}
+
+async function aggregateExpenses(from: Date | null, to: Date | null): Promise<number> {
+  const dateCond = dateFilter(from, to);
+  const agg = await prisma.expense.aggregate({
+    where: dateCond ? { date: dateCond } : {},
+    _sum: { amount: true },
+  });
+  return toNumber(agg._sum.amount ?? 0);
+}
+
+async function aggregateOtherIncome(from: Date | null, to: Date | null): Promise<number> {
+  const dateCond = dateFilter(from, to);
+  const agg = await prisma.otherIncome.aggregate({
+    where: dateCond ? { date: dateCond } : {},
+    _sum: { amount: true },
+  });
+  return toNumber(agg._sum.amount ?? 0);
+}
+
+async function aggregateCashReceived(from: Date | null, to: Date | null): Promise<number> {
+  const dateCond = dateFilter(from, to);
+
+  const [invoicePaid, customerPayments, exchangePaid] = await Promise.all([
+    prisma.invoice.aggregate({
+      where: {
+        status: InvoiceStatus.ACTIVE,
+        ...(dateCond ? { date: dateCond } : {}),
+      },
+      _sum: { paidAmount: true },
+    }),
+    prisma.customerPayment.aggregate({
+      where: dateCond ? { date: dateCond } : {},
+      _sum: { amount: true },
+    }),
+    prisma.exchange.aggregate({
+      where: dateCond ? { date: dateCond } : {},
+      _sum: { paidAmount: true },
+    }),
+  ]);
+
+  return sumMoney([
+    toNumber(invoicePaid._sum.paidAmount ?? 0),
+    toNumber(customerPayments._sum.amount ?? 0),
+    toNumber(exchangePaid._sum.paidAmount ?? 0),
+  ]);
+}
+
+async function aggregateUdhaarSales(from: Date | null, to: Date | null): Promise<number> {
+  const dateCond = dateFilter(from, to);
+  const agg = await prisma.invoice.aggregate({
+    where: {
+      status: InvoiceStatus.ACTIVE,
+      remainingAmount: { gt: 0 },
+      ...(dateCond ? { date: dateCond } : {}),
+    },
+    _sum: { remainingAmount: true },
+  });
+  return toNumber(agg._sum.remainingAmount ?? 0);
+}
+
+async function getCustomerOutstanding(): Promise<number> {
+  const agg = await prisma.customer.aggregate({
+    where: { isActive: true },
+    _sum: { currentBalance: true },
+  });
+  return toNumber(agg._sum.currentBalance ?? 0);
+}
+
+async function getSupplierOutstanding(): Promise<number> {
+  const suppliers = await prisma.supplier.findMany({
+    where: { isActive: true, accountId: { not: null } },
+    select: { account: { select: { ledger: { select: { balance: true } } } } },
+  });
+  let total = 0;
+  for (const s of suppliers) {
+    const bal = s.account?.ledger ? toNumber(s.account.ledger.balance) : 0;
+    if (bal < 0) total += roundMoney(-bal);
+  }
+  return roundMoney(total);
+}
+
+async function getStockValuation(): Promise<{ costValue: number; sellingValue: number }> {
+  const products = await prisma.product.findMany({
+    where: { isActive: true },
+    select: { currentStock: true, purchasePrice: true, salePrice: true },
+  });
+  let costValue = 0;
+  let sellingValue = 0;
+  for (const p of products) {
+    costValue += multiplyMoney(toNumber(p.purchasePrice), p.currentStock);
+    sellingValue += multiplyMoney(toNumber(p.salePrice), p.currentStock);
+  }
+  return { costValue: roundMoney(costValue), sellingValue: roundMoney(sellingValue) };
+}
+
+async function countInvoices(from: Date | null, to: Date | null): Promise<number> {
+  const dateCond = dateFilter(from, to);
+  return prisma.invoice.count({
+    where: {
+      status: InvoiceStatus.ACTIVE,
+      ...(dateCond ? { date: dateCond } : {}),
+    },
+  });
+}
+
+/** Core profit/sales summary for any date range. */
+export async function getFinancialSummary(
+  preset: DateRangePreset,
+  fromDate?: string,
+  toDate?: string,
+): Promise<FinancialSummary> {
+  const range = resolveDateRange(preset, fromDate, toDate);
+  const { from, to } = range;
+
+  const [invoiceLines, exchangeLines, invoiceDiscounts, returns, expenses, otherIncome, cashReceived, udhaarSales, customerOutstanding, supplierOutstanding, stockVal, invoiceCount] =
+    await Promise.all([
+      aggregateInvoiceLines(from, to),
+      aggregateExchangeLines(from, to),
+      aggregateInvoiceDiscounts(from, to),
+      aggregateSaleReturns(from, to),
+      aggregateExpenses(from, to),
+      aggregateOtherIncome(from, to),
+      aggregateCashReceived(from, to),
+      aggregateUdhaarSales(from, to),
+      getCustomerOutstanding(),
+      getSupplierOutstanding(),
+      getStockValuation(),
+      countInvoices(from, to),
+    ]);
+
+  const grossSales = roundMoney(invoiceLines.gross + exchangeLines.gross);
+  const discounts = roundMoney(invoiceLines.lineDiscounts + exchangeLines.lineDiscounts + invoiceDiscounts);
+  const saleReturns = returns.value;
+  const netSales = roundMoney(grossSales - discounts - saleReturns);
+  const costOfGoodsSold = roundMoney(invoiceLines.cogs + exchangeLines.cogs - returns.cogsReversal);
+  const grossProfit = roundMoney(netSales - costOfGoodsSold);
+  const netProfit = roundMoney(grossProfit - expenses + otherIncome);
+
+  return {
+    range,
+    grossSales,
+    discounts,
+    saleReturns,
+    netSales,
+    costOfGoodsSold,
+    grossProfit,
+    expenses,
+    otherIncome,
+    netProfit,
+    cashReceived,
+    udhaarSales,
+    customerOutstanding,
+    supplierOutstanding,
+    stockCostValue: stockVal.costValue,
+    expectedSellingValue: stockVal.sellingValue,
+    potentialMarginOnUnsoldInventory: roundMoney(stockVal.sellingValue - stockVal.costValue),
+    invoiceCount,
+  };
+}
+
+/** Purchase totals by period — never mixed into sales figures. */
+export async function getPurchasePeriodTotals(now: Date = new Date()): Promise<PurchasePeriodTotals> {
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+  const todayEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const yearStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+
+  const activeWhere: Prisma.PurchaseWhereInput = {
+    status: { not: PurchaseStatus.CANCELLED },
+  };
+
+  const [todayAgg, monthAgg, yearAgg, lifetimeAgg] = await Promise.all([
+    prisma.purchase.aggregate({
+      where: { ...activeWhere, date: { gte: todayStart, lte: todayEnd } },
+      _sum: { totalAmount: true },
+    }),
+    prisma.purchase.aggregate({
+      where: { ...activeWhere, date: { gte: monthStart, lte: todayEnd } },
+      _sum: { totalAmount: true },
+    }),
+    prisma.purchase.aggregate({
+      where: { ...activeWhere, date: { gte: yearStart, lte: todayEnd } },
+      _sum: { totalAmount: true },
+    }),
+    prisma.purchase.aggregate({
+      where: activeWhere,
+      _sum: { totalAmount: true },
+    }),
+  ]);
+
+  return {
+    today: toNumber(todayAgg._sum.totalAmount ?? 0),
+    month: toNumber(monthAgg._sum.totalAmount ?? 0),
+    year: toNumber(yearAgg._sum.totalAmount ?? 0),
+    lifetime: toNumber(lifetimeAgg._sum.totalAmount ?? 0),
+  };
+}
+
+async function getLowStockThreshold(): Promise<number> {
+  const settings = await prisma.businessSettings.findUnique({ where: { id: 1 } });
+  return settings?.lowStockLimit ?? 5;
+}
+
+async function getStockCounts(): Promise<{ lowStockCount: number; outOfStockCount: number }> {
+  const threshold = await getLowStockThreshold();
+  const products = await prisma.product.findMany({
+    where: { isActive: true },
+    select: { currentStock: true, lowStockLimit: true },
+  });
+  let lowStockCount = 0;
+  let outOfStockCount = 0;
+  for (const p of products) {
+    const limit = p.lowStockLimit ?? threshold;
+    if (p.currentStock <= 0) outOfStockCount++;
+    else if (p.currentStock <= limit) lowStockCount++;
+  }
+  return { lowStockCount, outOfStockCount };
+}
+
+async function getRecentSales(limit = 8) {
+  const rows = await prisma.invoice.findMany({
+    where: { status: InvoiceStatus.ACTIVE },
+    orderBy: { date: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      invoiceNumber: true,
+      date: true,
+      totalAmount: true,
+      paymentMethod: true,
+      customer: { select: { name: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    invoiceNumber: r.invoiceNumber,
+    date: r.date.toISOString(),
+    customerName: r.customer?.name ?? null,
+    totalAmount: toNumber(r.totalAmount),
+    paymentMethod: r.paymentMethod,
+  }));
+}
+
+async function getRecentExpenses(limit = 8) {
+  const rows = await prisma.expense.findMany({
+    orderBy: { date: 'desc' },
+    take: limit,
+    select: {
+      id: true,
+      date: true,
+      description: true,
+      amount: true,
+      category: { select: { name: true } },
+    },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    date: r.date.toISOString(),
+    categoryName: r.category.name,
+    description: r.description,
+    amount: toNumber(r.amount),
+  }));
+}
+
+async function getLowStockProducts(limit = 10) {
+  const threshold = await getLowStockThreshold();
+  const products = await prisma.product.findMany({
+    where: { isActive: true, currentStock: { gt: 0 } },
+    select: { id: true, name: true, sku: true, currentStock: true, lowStockLimit: true },
+    orderBy: { currentStock: 'asc' },
+    take: 100,
+  });
+  return products
+    .filter((p) => p.currentStock <= (p.lowStockLimit ?? threshold))
+    .slice(0, limit)
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      currentStock: p.currentStock,
+      lowStockLimit: p.lowStockLimit ?? threshold,
+    }));
+}
+
+async function getTopSellingProducts(from: Date | null, to: Date | null, limit = 5) {
+  const dateCond = dateFilter(from, to);
+  const items = await prisma.invoiceItem.findMany({
+    where: {
+      invoice: {
+        status: InvoiceStatus.ACTIVE,
+        ...(dateCond ? { date: dateCond } : {}),
+      },
+    },
+    select: {
+      productId: true,
+      quantity: true,
+      total: true,
+      product: { select: { name: true, sku: true } },
+    },
+  });
+
+  const map = new Map<number, { name: string; sku: string; qty: number; revenue: number }>();
+  for (const row of items) {
+    const cur = map.get(row.productId) ?? {
+      name: row.product.name,
+      sku: row.product.sku,
+      qty: 0,
+      revenue: 0,
+    };
+    cur.qty += row.quantity;
+    cur.revenue += toNumber(row.total);
+    map.set(row.productId, cur);
+  }
+
+  return [...map.entries()]
+    .sort((a, b) => b[1].qty - a[1].qty)
+    .slice(0, limit)
+    .map(([productId, v]) => ({
+      productId,
+      name: v.name,
+      sku: v.sku,
+      quantitySold: v.qty,
+      revenue: roundMoney(v.revenue),
+    }));
+}
+
+async function getSalesChart(from: Date | null, to: Date | null) {
+  const dateCond = dateFilter(from, to);
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      status: InvoiceStatus.ACTIVE,
+      ...(dateCond ? { date: dateCond } : {}),
+    },
+    select: { date: true, totalAmount: true },
+    orderBy: { date: 'asc' },
+  });
+
+  const byDay = new Map<string, { netSales: number; invoiceCount: number }>();
+  for (const inv of invoices) {
+    const key = inv.date.toISOString().slice(0, 10);
+    const cur = byDay.get(key) ?? { netSales: 0, invoiceCount: 0 };
+    cur.netSales += toNumber(inv.totalAmount);
+    cur.invoiceCount++;
+    byDay.set(key, cur);
+  }
+
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, v]) => ({
+      date,
+      netSales: roundMoney(v.netSales),
+      invoiceCount: v.invoiceCount,
+    }));
+}
+
+/** Full dashboard payload — all cards, lists, and chart data. */
+export async function getDashboardPayload(
+  preset: DateRangePreset,
+  fromDate?: string,
+  toDate?: string,
+): Promise<DashboardPayload> {
+  const range = resolveDateRange(preset, fromDate, toDate);
+  const summary = await getFinancialSummary(preset, fromDate, toDate);
+
+  const [purchases, stockCounts, recentSales, recentExpenses, lowStockProducts, topSellingProducts, salesChart] =
+    await Promise.all([
+      getPurchasePeriodTotals(),
+      getStockCounts(),
+      getRecentSales(),
+      getRecentExpenses(),
+      getLowStockProducts(),
+      getTopSellingProducts(range.from, range.to),
+      getSalesChart(range.from, range.to),
+    ]);
+
+  return {
+    ...summary,
+    purchases,
+    ...stockCounts,
+    recentSales,
+    recentExpenses,
+    lowStockProducts,
+    topSellingProducts,
+    salesChart,
+  };
+}
+
+/** Product-wise profit for a date range — uses historical costAtSale. */
+export async function getProductWiseProfit(from: Date | null, to: Date | null) {
+  const dateCond = dateFilter(from, to);
+  const items = await prisma.invoiceItem.findMany({
+    where: {
+      invoice: { status: InvoiceStatus.ACTIVE, ...(dateCond ? { date: dateCond } : {}) },
+    },
+    select: {
+      productId: true,
+      quantity: true,
+      total: true,
+      costAtSale: true,
+      product: { select: { name: true, sku: true, category: { select: { name: true } } } },
+    },
+  });
+
+  const map = new Map<
+    number,
+    { name: string; sku: string; category: string | null; revenue: number; cogs: number; qty: number }
+  >();
+  for (const row of items) {
+    const cur = map.get(row.productId) ?? {
+      name: row.product.name,
+      sku: row.product.sku,
+      category: row.product.category?.name ?? null,
+      revenue: 0,
+      cogs: 0,
+      qty: 0,
+    };
+    cur.qty += row.quantity;
+    cur.revenue += toNumber(row.total);
+    cur.cogs += multiplyMoney(toNumber(row.costAtSale), row.quantity);
+    map.set(row.productId, cur);
+  }
+
+  // Subtract returns
+  const returnItems = await prisma.saleReturnItem.findMany({
+    where: { saleReturn: dateCond ? { date: dateCond } : {} },
+    select: {
+      productId: true,
+      quantity: true,
+      lineTotal: true,
+      costAtReturn: true,
+      invoiceItem: { select: { product: { select: { name: true, sku: true, category: { select: { name: true } } } } } },
+    },
+  });
+  for (const row of returnItems) {
+    const pid = row.productId;
+    const cur = map.get(pid) ?? {
+      name: row.invoiceItem.product.name,
+      sku: row.invoiceItem.product.sku,
+      category: row.invoiceItem.product.category?.name ?? null,
+      revenue: 0,
+      cogs: 0,
+      qty: 0,
+    };
+    cur.qty -= row.quantity;
+    cur.revenue -= toNumber(row.lineTotal);
+    cur.cogs -= toNumber(row.costAtReturn);
+    map.set(pid, cur);
+  }
+
+  return [...map.entries()].map(([productId, v]) => ({
+    productId,
+    name: v.name,
+    sku: v.sku,
+    categoryName: v.category,
+    quantitySold: v.qty,
+    revenue: roundMoney(v.revenue),
+    costOfGoodsSold: roundMoney(v.cogs),
+    grossProfit: roundMoney(v.revenue - v.cogs),
+  }));
+}
+
+/** Invoice-wise profit — historical cost per invoice line. */
+export async function getInvoiceWiseProfit(from: Date | null, to: Date | null) {
+  const dateCond = dateFilter(from, to);
+  const invoices = await prisma.invoice.findMany({
+    where: { status: InvoiceStatus.ACTIVE, ...(dateCond ? { date: dateCond } : {}) },
+    select: {
+      id: true,
+      invoiceNumber: true,
+      date: true,
+      totalAmount: true,
+      customer: { select: { name: true } },
+      items: { select: { total: true, costAtSale: true, quantity: true } },
+    },
+    orderBy: { date: 'desc' },
+  });
+
+  return invoices.map((inv) => {
+    const revenue = toNumber(inv.totalAmount);
+    const cogs = sumMoney(inv.items.map((i) => multiplyMoney(toNumber(i.costAtSale), i.quantity)));
+    return {
+      invoiceId: inv.id,
+      invoiceNumber: inv.invoiceNumber,
+      date: inv.date.toISOString(),
+      customerName: inv.customer?.name ?? null,
+      netSales: revenue,
+      costOfGoodsSold: cogs,
+      grossProfit: roundMoney(revenue - cogs),
+    };
+  });
+}
+
+export { resolveDateRange, type DateRangePreset, type ResolvedDateRange };

@@ -8,6 +8,34 @@ import { CategoryManagePage } from './pages/accounts/CategoryManagePage';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AccountReportsPage, AccountBalancePage, TrialBalancePage, VouchersReportPage } from './pages/reports/ReportPages';
+import {
+  CategoryProfitReportPage,
+  CurrentStockReportPage,
+  CustomerBalancesReportPage,
+  CustomerPaymentsReportPage,
+  CustomerPurchasesReportPage,
+  DailySalesReportPage,
+  DamagedStockReportPage,
+  ExpensesByCategoryReportPage,
+  ExpensesDailyReportPage,
+  ExpensesRangeReportPage,
+  InvoiceProfitReportPage,
+  LowStockReportPage,
+  OtherIncomeReportPage,
+  OutOfStockReportPage,
+  PaymentMethodReportPage,
+  ProductProfitReportPage,
+  PurchaseReturnsReportPage,
+  PurchasesReportPage,
+  ReturnsExchangesReportPage,
+  SalesRangeReportPage,
+  StockMovementsReportPage,
+  StockValuationReportPage,
+  SupplierOutstandingReportPage,
+  SupplierPaymentsReportPage,
+  SupplierPurchasesReportPage,
+  UdhaarSalesReportPage,
+} from './pages/reports/ShopReportPages';
 import { SettingsPage } from './pages/system/SettingsPage';
 import { UserInfoPage } from './pages/user/UserInfoPage';
 import { ProductFormPage, ProductsListPage } from './pages/products/ProductPages';
@@ -97,6 +125,37 @@ export default function App() {
               <Route path="/reports/account-balance" element={<AccountBalancePage />} />
               <Route path="/reports/vouchers" element={<VouchersReportPage />} />
               <Route path="/reports/trial-balance" element={<TrialBalancePage />} />
+
+              <Route path="/reports/sales/daily" element={<DailySalesReportPage />} />
+              <Route path="/reports/sales/range" element={<SalesRangeReportPage />} />
+              <Route path="/reports/sales/product-profit" element={<ProductProfitReportPage />} />
+              <Route path="/reports/sales/category-profit" element={<CategoryProfitReportPage />} />
+              <Route path="/reports/sales/invoice-profit" element={<InvoiceProfitReportPage />} />
+              <Route path="/reports/sales/udhaar" element={<UdhaarSalesReportPage />} />
+              <Route path="/reports/sales/payment-methods" element={<PaymentMethodReportPage />} />
+              <Route path="/reports/sales/returns-exchanges" element={<ReturnsExchangesReportPage />} />
+
+              <Route path="/reports/stock/current" element={<CurrentStockReportPage />} />
+              <Route path="/reports/stock/low" element={<LowStockReportPage />} />
+              <Route path="/reports/stock/out" element={<OutOfStockReportPage />} />
+              <Route path="/reports/stock/damaged" element={<DamagedStockReportPage />} />
+              <Route path="/reports/stock/movements" element={<StockMovementsReportPage />} />
+              <Route path="/reports/stock/valuation" element={<StockValuationReportPage />} />
+
+              <Route path="/reports/purchases" element={<PurchasesReportPage />} />
+              <Route path="/reports/purchases/returns" element={<PurchaseReturnsReportPage />} />
+              <Route path="/reports/suppliers/purchases" element={<SupplierPurchasesReportPage />} />
+              <Route path="/reports/suppliers/outstanding" element={<SupplierOutstandingReportPage />} />
+              <Route path="/reports/suppliers/payments" element={<SupplierPaymentsReportPage />} />
+
+              <Route path="/reports/customers/balances" element={<CustomerBalancesReportPage />} />
+              <Route path="/reports/customers/payments" element={<CustomerPaymentsReportPage />} />
+              <Route path="/reports/customers/purchases" element={<CustomerPurchasesReportPage />} />
+
+              <Route path="/reports/expenses/daily" element={<ExpensesDailyReportPage />} />
+              <Route path="/reports/expenses/range" element={<ExpensesRangeReportPage />} />
+              <Route path="/reports/expenses/by-category" element={<ExpensesByCategoryReportPage />} />
+              <Route path="/reports/other-income" element={<OtherIncomeReportPage />} />
 
               <Route path="/system/settings" element={<SettingsPage />} />
               <Route path="/system/preferences" element={<Navigate to="/system/settings" replace />} />

@@ -19,6 +19,17 @@ export function downloadExcel(filename: string, sheetName: string, headers: stri
   triggerDownload(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
 }
 
+export function downloadCsv(filename: string, headers: string[], rows: (string | number)[][]) {
+  const escape = (cell: string | number) => {
+    const s = String(cell);
+    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+    return s;
+  };
+  const lines = [headers.map(escape).join(','), ...rows.map((row) => row.map(escape).join(','))];
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+  triggerDownload(blob, filename);
+}
+
 export function downloadPdf(filename: string, title: string, headers: string[], rows: (string | number)[][]) {
   const doc = new jsPDF({ orientation: rows[0]?.length > 6 ? 'landscape' : 'portrait' });
   doc.setFontSize(14);

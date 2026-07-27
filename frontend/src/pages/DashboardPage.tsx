@@ -1,169 +1,265 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PageShell, Tile } from '../components/ui/PageShell';
-import { api } from '../lib/api';
-import { formatLedgerAmount, formatVoucherNumber, formatVoucherTypeLabel, voucherTypeColorClass } from '../lib/format';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import { PageShell, Panel, PrimaryButton, Tile } from '../components/ui/PageShell';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
+import { api, type DashboardPayload, type DateRangePreset } from '../lib/api';
+import { formatDate, formatMoney } from '../lib/format';
 
-type DashboardSummary = Awaited<ReturnType<typeof api.getDashboardSummary>>;
+const PRESETS: { value: DateRangePreset; label: string }[] = [
+  { value: 'today', label: 'Today' },
+  { value: 'week', label: 'This Week' },
+  { value: 'month', label: 'This Month' },
+  { value: 'year', label: 'This Year' },
+  { value: 'lifetime', label: 'Lifetime' },
+  { value: 'custom', label: 'Custom' },
+];
 
-type MetricTone = 'cash' | 'receivables' | 'payables' | 'vouchers';
-
-const METRIC_STYLES: Record<MetricTone, { card: string; value: string }> = {
-  cash: {
-    card: 'border-l-4 border-metricCashAccent bg-metricCashBg',
-    value: 'text-metricCashAccent',
-  },
-  receivables: {
-    card: 'border-l-4 border-metricReceivablesAccent bg-metricReceivablesBg',
-    value: 'text-metricReceivablesAccent',
-  },
-  payables: {
-    card: 'border-l-4 border-metricPayablesAccent bg-metricPayablesBg',
-    value: 'text-metricPayablesAccent',
-  },
-  vouchers: {
-    card: 'border-l-4 border-metricVouchersAccent bg-metricVouchersBg',
-    value: 'text-metricVouchersAccent',
-  },
-};
-
-const VOUCHER_ACTIONS = [
-  { label: 'Payment Voucher', to: '/vouchers/payment', card: 'border-l-4 border-voucherPayment bg-bgDanger hover:border-voucherPayment', title: 'text-voucherPayment' },
-  { label: 'Receipt Voucher', to: '/vouchers/receipt', card: 'border-l-4 border-voucherReceipt bg-bgSuccess hover:border-voucherReceipt', title: 'text-voucherReceipt' },
-  { label: 'Journal Voucher', to: '/vouchers/journal', card: 'border-l-4 border-voucherJournal bg-bgAccent hover:border-voucherJournal', title: 'text-voucherJournal' },
+const QUICK_ACTIONS = [
+  { label: 'New Sale', to: '/sales/new' },
+  { label: 'Add Product', to: '/products/add' },
+  { label: 'Add Purchase', to: '/purchases/new' },
+  { label: 'Print Barcode', to: '/products/scan' },
+  { label: 'Add Expense', to: '/finance/expenses/new' },
+  { label: 'Receive Payment', to: '/customers/pay' },
+  { label: 'Pay Supplier', to: '/purchases/pay' },
 ] as const;
 
-function MetricCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: MetricTone;
-}) {
-  const style = METRIC_STYLES[tone];
+function MetricTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <Tile className={style.card}>
+    <Tile className="border-l-4 border-brand/60">
       <p className="text-xs font-medium text-textSecondary">{label}</p>
-      <p className={`mt-1 text-[22px] font-semibold leading-tight ${style.value}`}>{value}</p>
+      <p className="mt-1 text-lg font-semibold text-textPrimary">{value}</p>
+      {sub ? <p className="mt-0.5 text-[10px] text-textMuted">{sub}</p> : null}
     </Tile>
   );
 }
 
-function ActionCard({
-  to,
-  title,
-  description,
-  cardClassName,
-  titleClassName,
-}: {
-  to: string;
-  title: string;
-  description: string;
-  cardClassName: string;
-  titleClassName: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className={`rounded-lg border border-border p-3 shadow-sm transition ${cardClassName}`}
-    >
-      <h3 className={`text-sm font-semibold ${titleClassName}`}>{title}</h3>
-      <p className="mt-1 text-xs text-textSecondary">{description}</p>
-    </Link>
-  );
+function todayInput() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function DashboardPage() {
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [loadError, setLoadError] = useState('');
+  const [preset, setPreset] = useState<DateRangePreset>('today');
+  const [fromDate, setFromDate] = useState(todayInput());
+  const [toDate, setToDate] = useState(todayInput());
+  const [data, setData] = useState<DashboardPayload | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api.getShopDashboard({
+        preset,
+        fromDate: preset === 'custom' ? fromDate : undefined,
+        toDate: preset === 'custom' ? toDate : undefined,
+      });
+      setData(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+    } finally {
+      setLoading(false);
+    }
+  }, [preset, fromDate, toDate]);
 
   useEffect(() => {
-    api
-      .getDashboardSummary()
-      .then(setSummary)
-      .catch((err) => setLoadError(err instanceof Error ? err.message : 'Failed to load dashboard'));
-  }, []);
+    void load();
+  }, [load]);
 
   return (
-    <PageShell title="Dashboard" subtitle="Accounting dashboard">
-      {loadError ? <p className="mb-4 text-sm text-danger">{loadError}</p> : null}
+    <PageShell title="Dashboard" subtitle="Shop overview — all figures from unified financial summary">
+      {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard
-          label="Cash Balance"
-          value={summary ? formatLedgerAmount(summary.cashBalance) : '—'}
-          tone="cash"
+      <Panel className="mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <div>
+            <p className="mb-1 text-xs font-medium text-textMuted">Period</p>
+            <SegmentedControl
+              value={preset}
+              onChange={(v) => setPreset(v as DateRangePreset)}
+              options={PRESETS.map((p) => ({ value: p.value, label: p.label }))}
+            />
+          </div>
+          {preset === 'custom' ? (
+            <>
+              <label className="text-xs">
+                From
+                <input type="date" className="ml-1 rounded border border-border px-2 py-1 text-sm" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              </label>
+              <label className="text-xs">
+                To
+                <input type="date" className="ml-1 rounded border border-border px-2 py-1 text-sm" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              </label>
+              <PrimaryButton type="button" onClick={() => void load()} disabled={loading}>
+                Apply
+              </PrimaryButton>
+            </>
+          ) : null}
+          {loading ? <span className="text-xs text-textMuted">Updating…</span> : null}
+        </div>
+        {data ? (
+          <p className="mt-2 text-xs text-textMuted">Showing: {data.range.label}</p>
+        ) : null}
+      </Panel>
+
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+        <MetricTile label="Gross Sales" value={data ? formatMoney(data.grossSales) : '—'} />
+        <MetricTile label="Discounts" value={data ? formatMoney(data.discounts) : '—'} />
+        <MetricTile label="Returns" value={data ? formatMoney(data.saleReturns) : '—'} />
+        <MetricTile label="Net Sales" value={data ? formatMoney(data.netSales) : '—'} />
+        <MetricTile label="COGS" value={data ? formatMoney(data.costOfGoodsSold) : '—'} />
+        <MetricTile label="Gross Profit" value={data ? formatMoney(data.grossProfit) : '—'} />
+        <MetricTile label="Expenses" value={data ? formatMoney(data.expenses) : '—'} />
+        <MetricTile label="Other Income" value={data ? formatMoney(data.otherIncome) : '—'} />
+        <MetricTile label="Net Profit" value={data ? formatMoney(data.netProfit) : '—'} />
+        <MetricTile label="Cash Received" value={data ? formatMoney(data.cashReceived) : '—'} />
+        <MetricTile label="Udhaar Sales" value={data ? formatMoney(data.udhaarSales) : '—'} />
+        <MetricTile label="Customer Outstanding" value={data ? formatMoney(data.customerOutstanding) : '—'} />
+        <MetricTile label="Supplier Outstanding" value={data ? formatMoney(data.supplierOutstanding) : '—'} />
+        <MetricTile label="Stock Cost Value" value={data ? formatMoney(data.stockCostValue) : '—'} />
+        <MetricTile
+          label="Expected Selling Value"
+          value={data ? formatMoney(data.expectedSellingValue) : '—'}
+          sub="Potential margin on unsold inventory — not actual profit"
         />
-        <MetricCard
-          label="Receivables"
-          value={summary ? formatLedgerAmount(summary.receivables) : '—'}
-          tone="receivables"
-        />
-        <MetricCard
-          label="Payables"
-          value={summary ? formatLedgerAmount(summary.payables) : '—'}
-          tone="payables"
-        />
-        <MetricCard
-          label="Vouchers Today"
-          value={summary ? String(summary.vouchersToday) : '—'}
-          tone="vouchers"
-        />
+        <MetricTile label="Invoices" value={data ? String(data.invoiceCount) : '—'} />
+        <MetricTile label="Low Stock" value={data ? String(data.lowStockCount) : '—'} />
+        <MetricTile label="Out of Stock" value={data ? String(data.outOfStockCount) : '—'} />
       </div>
 
-      <Tile className="mt-4">
-        <h2 className="mb-3 text-base font-semibold text-textPrimary">Recent vouchers</h2>
+      {data ? (
+        <Panel className="mt-4">
+          <p className="mb-2 text-sm font-semibold">Purchases (separate from sales)</p>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <MetricTile label="Today" value={formatMoney(data.purchases.today)} />
+            <MetricTile label="This Month" value={formatMoney(data.purchases.month)} />
+            <MetricTile label="This Year" value={formatMoney(data.purchases.year)} />
+            <MetricTile label="Lifetime" value={formatMoney(data.purchases.lifetime)} />
+          </div>
+        </Panel>
+      ) : null}
 
-        {!summary ? (
-          <p className="text-sm text-textMuted">Loading…</p>
-        ) : summary.recentVouchers.length === 0 ? (
-          <p className="text-sm text-textMuted">No vouchers posted yet this year.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-sm">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Panel>
+          <h2 className="mb-3 text-sm font-semibold">Sales chart</h2>
+          {data?.salesChart.length ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={data.salesChart}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(v) => v.slice(5)} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v: number) => formatMoney(v)} labelFormatter={(l) => formatDate(l)} />
+                <Bar dataKey="netSales" fill="#78716c" name="Net Sales" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-textMuted">No sales in selected period.</p>
+          )}
+        </Panel>
+
+        <Panel>
+          <h2 className="mb-3 text-sm font-semibold">Top selling products</h2>
+          {data?.topSellingProducts.length ? (
+            <table className="w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border text-textMuted">
-                  <th className="py-2 pr-3 font-medium">#</th>
-                  <th className="py-2 pr-3 font-medium">Account</th>
-                  <th className="py-2 pr-3 font-medium">Type</th>
-                  <th className="py-2 text-right font-medium">Amount</th>
+                  <th className="py-1 pr-2 font-medium">Product</th>
+                  <th className="py-1 pr-2 font-medium">Qty</th>
+                  <th className="py-1 text-right font-medium">Revenue</th>
                 </tr>
               </thead>
               <tbody>
-                {summary.recentVouchers.map((v) => (
-                  <tr key={v.id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-3 font-mono text-xs font-semibold text-financial">
-                      {formatVoucherNumber(v.number, v.type)}
-                    </td>
-                    <td className="py-2 pr-3 text-textSecondary">{v.accountLabel}</td>
-                    <td className={`py-2 pr-3 font-medium ${voucherTypeColorClass(v.type)}`}>
-                      {formatVoucherTypeLabel(v.type)}
-                    </td>
-                    <td className="py-2 text-right font-medium text-textPrimary">
-                      {formatLedgerAmount(v.amount)}
-                    </td>
+                {data.topSellingProducts.map((p) => (
+                  <tr key={p.productId} className="border-b border-border last:border-0">
+                    <td className="py-1.5 pr-2">{p.name}</td>
+                    <td className="py-1.5 pr-2">{p.quantitySold}</td>
+                    <td className="py-1.5 text-right">{formatMoney(p.revenue)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
-      </Tile>
+          ) : (
+            <p className="text-sm text-textMuted">No sales data.</p>
+          )}
+        </Panel>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+        <Panel>
+          <h2 className="mb-3 text-sm font-semibold">Recent sales</h2>
+          {data?.recentSales.length ? (
+            <ul className="space-y-2 text-sm">
+              {data.recentSales.map((s) => (
+                <li key={s.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
+                  <Link to={`/sales/${s.id}`} className="font-medium text-brand hover:underline">
+                    {s.invoiceNumber}
+                  </Link>
+                  <span>{formatMoney(s.totalAmount)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-textMuted">No recent sales.</p>
+          )}
+        </Panel>
+
+        <Panel>
+          <h2 className="mb-3 text-sm font-semibold">Recent expenses</h2>
+          {data?.recentExpenses.length ? (
+            <ul className="space-y-2 text-sm">
+              {data.recentExpenses.map((e) => (
+                <li key={e.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
+                  <span className="truncate">{e.description}</span>
+                  <span>{formatMoney(e.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-textMuted">No recent expenses.</p>
+          )}
+        </Panel>
+
+        <Panel>
+          <h2 className="mb-3 text-sm font-semibold">Low stock</h2>
+          {data?.lowStockProducts.length ? (
+            <ul className="space-y-2 text-sm">
+              {data.lowStockProducts.map((p) => (
+                <li key={p.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
+                  <Link to={`/products/${p.id}`} className="truncate hover:underline">
+                    {p.name}
+                  </Link>
+                  <span className="text-danger">{p.currentStock} left</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-textMuted">All stocked up.</p>
+          )}
+        </Panel>
+      </div>
 
       <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">New voucher</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {VOUCHER_ACTIONS.map((action) => (
-            <ActionCard
-              key={action.to}
-              to={action.to}
-              title={action.label}
-              description="Open voucher form"
-              cardClassName={action.card}
-              titleClassName={action.title}
-            />
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Quick actions</h2>
+        <div className="flex flex-wrap gap-2">
+          {QUICK_ACTIONS.map((a) => (
+            <Link
+              key={a.to}
+              to={a.to}
+              className="inline-flex items-center rounded-md border border-border bg-bgSecondary px-3 py-1.5 text-sm font-medium text-textPrimary shadow-sm hover:bg-bgAccent"
+            >
+              {a.label}
+            </Link>
           ))}
         </div>
       </div>

@@ -516,6 +516,7 @@ model Invoice {
   @@index([customerId])
   @@index([date])
   @@index([status])
+  @@index([paymentMethod])
   @@index([createdAt])
 }
 

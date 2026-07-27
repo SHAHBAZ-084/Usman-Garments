@@ -599,6 +599,35 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  getShopDashboard(params?: { preset?: DateRangePreset; fromDate?: string; toDate?: string }) {
+    const query = new URLSearchParams();
+    if (params?.preset) query.set('preset', params.preset);
+    if (params?.fromDate) query.set('fromDate', params.fromDate);
+    if (params?.toDate) query.set('toDate', params.toDate);
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<DashboardPayload>(`/api/reports/dashboard${suffix}`);
+  },
+
+  getFinancialSummary(params?: { preset?: DateRangePreset; fromDate?: string; toDate?: string }) {
+    const query = new URLSearchParams();
+    if (params?.preset) query.set('preset', params.preset);
+    if (params?.fromDate) query.set('fromDate', params.fromDate);
+    if (params?.toDate) query.set('toDate', params.toDate);
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<FinancialSummary>(`/api/reports/financial-summary${suffix}`);
+  },
+
+  fetchReport<T>(path: string, params?: Record<string, string | number | undefined>) {
+    const query = new URLSearchParams();
+    if (params) {
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined && v !== '') query.set(k, String(v));
+      }
+    }
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<T>(`/api/reports${path}${suffix}`);
+  },
 };
 
 export type ProductCategory = {
@@ -1093,5 +1122,72 @@ export type OtherIncomeRecord = {
   description: string;
   note: string | null;
   createdAt: string;
+};
+
+export type DateRangePreset = 'today' | 'week' | 'month' | 'year' | 'custom' | 'lifetime';
+
+export type FinancialSummary = {
+  range: { preset: DateRangePreset; label: string };
+  grossSales: number;
+  discounts: number;
+  saleReturns: number;
+  netSales: number;
+  costOfGoodsSold: number;
+  grossProfit: number;
+  expenses: number;
+  otherIncome: number;
+  netProfit: number;
+  cashReceived: number;
+  udhaarSales: number;
+  customerOutstanding: number;
+  supplierOutstanding: number;
+  stockCostValue: number;
+  expectedSellingValue: number;
+  potentialMarginOnUnsoldInventory: number;
+  invoiceCount: number;
+};
+
+export type DashboardPayload = FinancialSummary & {
+  purchases: { today: number; month: number; year: number; lifetime: number };
+  lowStockCount: number;
+  outOfStockCount: number;
+  recentSales: Array<{
+    id: number;
+    invoiceNumber: string;
+    date: string;
+    customerName: string | null;
+    totalAmount: number;
+    paymentMethod: string;
+  }>;
+  recentExpenses: Array<{
+    id: number;
+    date: string;
+    categoryName: string;
+    description: string;
+    amount: number;
+  }>;
+  lowStockProducts: Array<{
+    id: number;
+    name: string;
+    sku: string;
+    currentStock: number;
+    lowStockLimit: number;
+  }>;
+  topSellingProducts: Array<{
+    productId: number;
+    name: string;
+    sku: string;
+    quantitySold: number;
+    revenue: number;
+  }>;
+  salesChart: Array<{ date: string; netSales: number; invoiceCount: number }>;
+};
+
+export type PaginatedResult<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 };
 

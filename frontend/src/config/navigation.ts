@@ -95,14 +95,70 @@ export const TOP_NAV: NavGroup[] = [
     children: [
       {
         kind: 'submenu',
-        label: 'Account Reports',
+        label: 'Sales',
+        children: [
+          { label: 'Daily Sales', to: '/reports/sales/daily' },
+          { label: 'Sales Range', to: '/reports/sales/range' },
+          { label: 'Product Profit', to: '/reports/sales/product-profit' },
+          { label: 'Category Profit', to: '/reports/sales/category-profit' },
+          { label: 'Invoice Profit', to: '/reports/sales/invoice-profit' },
+          { label: 'Udhaar Sales', to: '/reports/sales/udhaar' },
+          { label: 'Payment Methods', to: '/reports/sales/payment-methods' },
+          { label: 'Returns & Exchanges', to: '/reports/sales/returns-exchanges' },
+        ],
+      },
+      {
+        kind: 'submenu',
+        label: 'Stock',
+        children: [
+          { label: 'Current Stock', to: '/reports/stock/current' },
+          { label: 'Low Stock', to: '/reports/stock/low' },
+          { label: 'Out of Stock', to: '/reports/stock/out' },
+          { label: 'Damaged Stock', to: '/reports/stock/damaged' },
+          { label: 'Stock Movements', to: '/reports/stock/movements' },
+          { label: 'Stock Valuation', to: '/reports/stock/valuation' },
+        ],
+      },
+      {
+        kind: 'submenu',
+        label: 'Purchases',
+        children: [
+          { label: 'Purchases', to: '/reports/purchases' },
+          { label: 'Supplier Purchases', to: '/reports/suppliers/purchases' },
+          { label: 'Supplier Outstanding', to: '/reports/suppliers/outstanding' },
+          { label: 'Supplier Payments', to: '/reports/suppliers/payments' },
+          { label: 'Purchase Returns', to: '/reports/purchases/returns' },
+        ],
+      },
+      {
+        kind: 'submenu',
+        label: 'Customers',
+        children: [
+          { label: 'Customer Balances', to: '/reports/customers/balances' },
+          { label: 'Customer Payments', to: '/reports/customers/payments' },
+          { label: 'Customer Purchases', to: '/reports/customers/purchases' },
+        ],
+      },
+      {
+        kind: 'submenu',
+        label: 'Expenses',
+        children: [
+          { label: 'Daily Expenses', to: '/reports/expenses/daily' },
+          { label: 'Expense Range', to: '/reports/expenses/range' },
+          { label: 'By Category', to: '/reports/expenses/by-category' },
+          { label: 'Other Income', to: '/reports/other-income' },
+        ],
+      },
+      {
+        kind: 'submenu',
+        label: 'Accounting (Advanced)',
         children: [
           { label: 'Account Ledger', to: '/reports/accounts' },
           { label: 'Account Balance', to: '/reports/account-balance' },
           { label: 'Vouchers', to: '/reports/vouchers' },
+          { label: 'Detail Trial Balance', to: '/reports/trial-balance' },
         ],
       },
-      { kind: 'link', label: 'Detail Trial Balance', to: '/reports/trial-balance' },
     ],
   },
   {
