@@ -22,24 +22,6 @@ export type Account = {
   ledger?: Ledger | null;
 };
 
-export type SystemPreferences = {
-  daamiPercent: number;
-  paleDariPercent: number;
-  brokeryPercent: number;
-  marketFeeRate: number;
-  bardanaRate: number;
-  taxPercent: number;
-  kaatPercent: number;
-  mazduriPercent: number;
-  commissionPercent: number;
-  dalaliPercent: number;
-  sutliRate: number;
-  markeetFeeRate: number;
-  kantaRate: number;
-  closingDate: string | null;
-  updatedAt: string;
-};
-
 export type VoucherAccount = { id: number; name: string; code: string };
 export type VoucherUser = { id: number; displayName: string; username: string };
 
@@ -111,17 +93,6 @@ export const api = {
   },
   deleteCategory(id: number) {
     return request<AccountCategory>(`/api/accounting/categories/${id}`, { method: 'DELETE' });
-  },
-
-  getSystemPreferences() {
-    return request<SystemPreferences>('/api/preferences');
-  },
-
-  updateSystemPreferences(data: Partial<Omit<SystemPreferences, 'updatedAt'>>) {
-    return request<SystemPreferences>('/api/preferences', {
-      method: 'PATCH',
-      body: JSON.stringify(data),
-    });
   },
 
   listVouchers(params?: { fromDate?: string; toDate?: string; type?: string }) {

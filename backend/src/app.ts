@@ -7,7 +7,6 @@ import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './modules/auth/auth.routes';
 import { accountingRouter } from './modules/accounting/accounting.routes';
-import { preferencesRouter } from './modules/preferences/preferences.routes';
 
 declare module 'express-session' {
   interface SessionData {
@@ -49,7 +48,6 @@ export function createApp() {
 
   app.use('/api/auth', authRouter);
   app.use('/api/accounting', accountingRouter);
-  app.use('/api/preferences', preferencesRouter);
 
   if (env.isProduction) {
     const frontendDist = path.resolve(__dirname, '../../frontend/dist');

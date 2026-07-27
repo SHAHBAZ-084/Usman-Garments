@@ -179,22 +179,3 @@ model TrialBalanceApproval {
 
   approvedBy User @relation(fields: [approvedById], references: [id])
 }
-
-model SystemPreference {
-  id                Int      @id @default(1)
-  daamiPercent      Decimal  @default(0)
-  paleDariPercent   Decimal  @default(0)
-  brokeryPercent    Decimal  @default(0)
-  marketFeeRate     Decimal  @default(0)
-  bardanaRate       Decimal  @default(0)
-  taxPercent        Decimal  @default(0)
-  kaatPercent       Decimal  @default(0)
-  mazduriPercent    Decimal  @default(0)
-  commissionPercent Decimal  @default(0)
-  dalaliPercent     Decimal  @default(0)
-  sutliRate         Decimal  @default(0)
-  markeetFeeRate    Decimal  @default(0)
-  kantaRate         Decimal  @default(0)
-  closingDate       String?
-  updatedAt         DateTime @updatedAt
-}
