@@ -4,7 +4,7 @@ export {};
 
 declare global {
   interface Window {
-    grainPos?: {
+    usmanGarments?: {
       platform: NodeJS.Platform;
     };
   }

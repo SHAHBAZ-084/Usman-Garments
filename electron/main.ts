@@ -25,7 +25,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 1024,
     minHeight: 700,
-    title: 'Grain Market POS',
+    title: 'Usman Garments',
     show: false,
     backgroundColor: '#f4f5f7',
     webPreferences: {

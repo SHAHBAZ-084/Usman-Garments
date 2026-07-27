@@ -1,6 +1,6 @@
-# Grain Market POS
+# Usman Garments
 
-Offline desktop point-of-sale for a single grain market client.
+Offline desktop accounting app for Usman Garments.
 
 ## Stack
 
@@ -13,7 +13,7 @@ Offline desktop point-of-sale for a single grain market client.
 ## Getting started
 
 ```bash
-cd "Grain market Project"
+cd "Usman Garments"
 npm install
 npm run db:migrate -w backend
 npm run db:seed -w backend
@@ -40,14 +40,13 @@ Default login (change after first use):
 - Express API runs on `http://127.0.0.1:3847`
 - In development, Vite serves the UI on port `5173` and proxies `/api` to the backend
 - In production, Express serves the built frontend and Electron loads `http://127.0.0.1:3847`
-- SQLite database file: `backend/prisma/data/grain-pos.db`
+- SQLite database file: `backend/prisma/data/usman-garments.db`
 
-## Accounting (copied from CROWNEV reference)
+## Accounting core
 
-Core double-entry accounting is wired up under `/api/accounting/*`:
+Double-entry accounting under `/api/accounting/*`:
 
-- Chart of accounts, vouchers, ledger, trial balance, financial years
-- Single-shop schema (no `branchId`)
-- Default categories and accounts seeded on first run
-
-Invoice posting patterns from CROWNEV (`createSaleInvoice`, `createPurchaseInvoice`, `createServiceInvoice`) will be adapted next when you define grain sales/purchase flows.
+- Chart of accounts (categories and accounts)
+- Payment, receipt, and journal vouchers
+- Ledger, trial balance, and financial years
+- Default categories on first run: **Bank** and **Cash** (with Cash in Hand account)

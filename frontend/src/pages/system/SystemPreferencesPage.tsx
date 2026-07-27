@@ -8,18 +8,18 @@ type PrefForm = Omit<SystemPreferences, 'updatedAt'>;
 type NumericPrefKey = Exclude<keyof PrefForm, 'closingDate'>;
 
 const PREF_FIELDS: { key: NumericPrefKey; label: string; hint?: string }[] = [
-  { key: 'daamiPercent', label: 'Daami (%)', hint: 'Used by Kachi Maal for profit/commission' },
-  { key: 'paleDariPercent', label: 'Pale Dari (%)', hint: 'Labour rate — Kachi Maal' },
-  { key: 'brokeryPercent', label: 'Brokery (%)', hint: 'Broker rate — Kachi Maal' },
-  { key: 'marketFeeRate', label: 'Market Fee (per bag)', hint: 'Flat rate per calculated bag — Kachi Maal' },
-  { key: 'bardanaRate', label: 'Bardana Rate', hint: 'Stored for future invoice types; not auto-filled on Kachi Maal' },
+  { key: 'daamiPercent', label: 'Daami (%)' },
+  { key: 'paleDariPercent', label: 'Pale Dari (%)' },
+  { key: 'brokeryPercent', label: 'Brokery (%)' },
+  { key: 'marketFeeRate', label: 'Market Fee (per bag)' },
+  { key: 'bardanaRate', label: 'Bardana Rate' },
   { key: 'taxPercent', label: 'Tax (%)' },
   { key: 'kaatPercent', label: 'Kaat (%)' },
   { key: 'mazduriPercent', label: 'Mazduri (%)' },
   { key: 'commissionPercent', label: 'Commission (%)' },
   { key: 'dalaliPercent', label: 'Dalali (%)' },
   { key: 'sutliRate', label: 'Sutli' },
-  { key: 'markeetFeeRate', label: 'Markeet Fee', hint: 'Legacy separate field — confirm mapping before other invoice types' },
+  { key: 'markeetFeeRate', label: 'Markeet Fee' },
   { key: 'kantaRate', label: 'Kanta' },
 ];
 
@@ -102,7 +102,7 @@ export function SystemPreferencesPage() {
         {form ? (
           <form className="mt-6 space-y-4" onSubmit={onSave}>
             <p className="text-sm text-textSecondary">
-              Rates below are read live when you open Kachi Maal — change them here, not in code.
+              Shop-wide numeric defaults. Values are stored for future use and reporting.
             </p>
             <div className="grid gap-4 sm:grid-cols-2">
               {PREF_FIELDS.map((field) => (

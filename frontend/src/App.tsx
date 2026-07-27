@@ -5,15 +5,9 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AccountManagePage } from './pages/accounts/AccountManagePage';
 import { CategoryManagePage } from './pages/accounts/CategoryManagePage';
-import { PurchasePartiesPage, SalePartiesPage } from './pages/accounts/PartiesPage';
-import { ProductAddPage, ProductRemovePage } from './pages/accounts/ProductManagePage';
-import { BardanaPage } from './pages/inventory/BardanaPage';
-import { InvoiceFormPage } from './pages/invoices/InvoiceFormPage';
-import { InvoiceHistoryPage } from './pages/invoices/InvoiceHistoryPage';
-import { ViewInvoicePage } from './pages/invoices/ViewInvoicePage';
 import { LoginPage } from './pages/LoginPage';
 import { PosHomePage } from './pages/PosHomePage';
-import { AccountReportsPage, AccountBalancePage, SalePurchaseReportsPage, TrialBalancePage, VouchersReportPage } from './pages/reports/ReportPages';
+import { AccountReportsPage, AccountBalancePage, TrialBalancePage, VouchersReportPage } from './pages/reports/ReportPages';
 import { SystemPreferencesPage } from './pages/system/SystemPreferencesPage';
 import { UserInfoPage } from './pages/user/UserInfoPage';
 import { VoucherFormPage, VoucherListPage } from './pages/vouchers/VoucherPages';
@@ -35,19 +29,6 @@ export default function App() {
               <Route path="/accounts/manage/add" element={<AccountManagePage mode="add" />} />
               <Route path="/accounts/manage/edit" element={<AccountManagePage mode="edit" />} />
               <Route path="/accounts/manage/remove" element={<AccountManagePage mode="remove" />} />
-              <Route path="/accounts/products/add" element={<ProductAddPage />} />
-              <Route path="/accounts/products/remove" element={<ProductRemovePage />} />
-              <Route path="/accounts/sale-parties" element={<SalePartiesPage />} />
-              <Route path="/accounts/purchase-parties" element={<PurchasePartiesPage />} />
-
-              <Route path="/invoices/sale-commission" element={<InvoiceFormPage slug="sale-commission" />} />
-              <Route path="/invoices/sale-paunch" element={<InvoiceFormPage slug="sale-paunch" />} />
-              <Route path="/invoices/purchase-maal" element={<InvoiceFormPage slug="purchase-maal" />} />
-              <Route path="/invoices/kachi-maal" element={<InvoiceFormPage slug="kachi-maal" />} />
-              <Route path="/invoices/view-invoice" element={<ViewInvoicePage />} />
-              <Route path="/invoices/history" element={<InvoiceHistoryPage />} />
-
-              <Route path="/inventory/bardana" element={<BardanaPage />} />
 
               <Route path="/vouchers/payment" element={<VoucherFormPage kind="payment" />} />
               <Route path="/vouchers/journal" element={<VoucherFormPage kind="journal" />} />
@@ -58,7 +39,6 @@ export default function App() {
               <Route path="/reports/account-balance" element={<AccountBalancePage />} />
               <Route path="/reports/vouchers" element={<VouchersReportPage />} />
               <Route path="/reports/trial-balance" element={<TrialBalancePage />} />
-              <Route path="/reports/sale-purchase" element={<SalePurchaseReportsPage />} />
 
               <Route path="/system/preferences" element={<SystemPreferencesPage />} />
               <Route path="/user" element={<UserInfoPage />} />

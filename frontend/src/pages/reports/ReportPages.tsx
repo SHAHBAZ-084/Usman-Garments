@@ -314,19 +314,6 @@ export function TrialBalancePage() {
   );
 }
 
-export function SalePurchaseReportsPage() {
-  return (
-    <PageShell title="Sale/Purchase Reports" subtitle="Combined invoice reporting">
-      <Panel>
-        <p className="text-sm text-textSecondary">
-          Use <strong>View Previous Bill</strong> under Sale/Purchase Invoice for the unified history.
-          Detailed sale/purchase analytics will be added with invoice posting rules.
-        </p>
-      </Panel>
-    </PageShell>
-  );
-}
-
 type BalanceSideFilter = 'both' | 'debit' | 'credit';
 type VoucherTypeFilter = 'all' | 'PAYMENT' | 'RECEIPT' | 'JOURNAL' | 'KACHI' | 'PURCHASE_MAAL';
 

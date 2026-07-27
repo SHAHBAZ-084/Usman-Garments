@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { TOP_NAV } from '../config/navigation';
 import { PageShell, Tile } from '../components/ui/PageShell';
 import { api } from '../lib/api';
 import { formatLedgerAmount, formatVoucherNumber, formatVoucherTypeLabel, voucherTypeColorClass } from '../lib/format';
@@ -25,29 +24,6 @@ const METRIC_STYLES: Record<MetricTone, { card: string; value: string }> = {
   vouchers: {
     card: 'border-l-4 border-metricVouchersAccent bg-metricVouchersBg',
     value: 'text-metricVouchersAccent',
-  },
-};
-
-const INVOICE_CARD_STYLES: Record<string, { card: string; title: string }> = {
-  '/invoices/sale-commission': {
-    card: 'border-l-4 border-cardSaleCommissionAccent bg-cardSaleCommissionBg hover:border-cardSaleCommissionAccent',
-    title: 'text-cardSaleCommissionAccent',
-  },
-  '/invoices/sale-paunch': {
-    card: 'border-l-4 border-cardSalePaunchAccent bg-cardSalePaunchBg hover:border-cardSalePaunchAccent',
-    title: 'text-cardSalePaunchAccent',
-  },
-  '/invoices/purchase-maal': {
-    card: 'border-l-4 border-cardPurchaseMaalAccent bg-cardPurchaseMaalBg hover:border-cardPurchaseMaalAccent',
-    title: 'text-cardPurchaseMaalAccent',
-  },
-  '/invoices/kachi-maal': {
-    card: 'border-l-4 border-cardKachiMaalAccent bg-cardKachiMaalBg hover:border-cardKachiMaalAccent',
-    title: 'text-cardKachiMaalAccent',
-  },
-  '/invoices/history': {
-    card: 'border-l-4 border-cardInvoiceHistoryAccent bg-cardInvoiceHistoryBg hover:border-cardInvoiceHistoryAccent',
-    title: 'text-cardInvoiceHistoryAccent',
   },
 };
 
@@ -102,10 +78,6 @@ function ActionCard({
 export function PosHomePage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loadError, setLoadError] = useState('');
-
-  const invoiceLinks = (
-    TOP_NAV.find((g) => g.label === 'Sale/Purchase Invoice')?.children ?? []
-  ).filter((item): item is { kind: 'link'; label: string; to: string; description?: string } => item.kind === 'link');
 
   useEffect(() => {
     api
@@ -193,25 +165,6 @@ export function PosHomePage() {
               titleClassName={action.title}
             />
           ))}
-        </div>
-      </div>
-
-      <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Invoices</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {invoiceLinks.map((link) => {
-            const style = INVOICE_CARD_STYLES[link.to] ?? INVOICE_CARD_STYLES['/invoices/history'];
-            return (
-              <ActionCard
-                key={link.to}
-                to={link.to}
-                title={link.label}
-                description={link.to === '/invoices/history' ? 'All invoice types in one list' : 'Open invoice form'}
-                cardClassName={style.card}
-                titleClassName={style.title}
-              />
-            );
-          })}
         </div>
       </div>
     </PageShell>

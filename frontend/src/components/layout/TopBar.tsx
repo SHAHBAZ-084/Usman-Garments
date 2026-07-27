@@ -94,7 +94,7 @@ export function TopBar() {
     <header className="app-topnav sticky top-0 isolate shadow-md">
       <div className="flex min-h-12 items-center gap-1 px-4">
         <Link to="/" className="app-topnav-brand mr-2 shrink-0 pr-2 text-sm">
-          Grain Market POS
+          Usman Garments
         </Link>
         <nav className="flex flex-1 flex-wrap items-center gap-1">
           {TOP_NAV.map((group) =>

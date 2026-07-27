@@ -1,8 +1,8 @@
 {
-  "name": "grain-market-pos",
+  "name": "usman-garments",
   "version": "0.1.0",
   "private": true,
-  "description": "Offline desktop POS for grain market — Electron + React + Express + SQLite",
+  "description": "Offline desktop accounting for Usman Garments — Electron + React + Express + SQLite",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run electron:dev\"",

@@ -2,7 +2,7 @@ import { createContext, ReactNode, useContext, useEffect, useState } from 'react
 
 export type ThemeMode = 'light' | 'dark';
 
-const STORAGE_KEY = 'grain-pos-theme';
+const STORAGE_KEY = 'usman-garments-theme';
 
 type ThemeContextValue = {
   theme: ThemeMode;

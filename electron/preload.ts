@@ -1,5 +1,5 @@
 import { contextBridge } from 'electron';
 
-contextBridge.exposeInMainWorld('grainPos', {
+contextBridge.exposeInMainWorld('usmanGarments', {
   platform: process.platform,
 });

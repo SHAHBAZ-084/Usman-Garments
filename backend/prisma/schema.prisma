@@ -15,11 +15,6 @@ enum VoucherType {
   PURCHASE_MAAL
 }
 
-enum BoriThelaMode {
-  BORI
-  THELA
-}
-
 enum VoucherStatus {
   ACTIVE
   CANCELLED
@@ -43,19 +38,6 @@ enum FinancialYearStatus {
   CLOSED
 }
 
-enum InvoiceType {
-  SALE_COMMISSION
-  SALE_PAUNCH
-  PURCHASE_MAAL
-  KACHI_MAAL
-}
-
-enum InvoiceStatus {
-  DRAFT
-  POSTED
-  CANCELLED
-}
-
 model User {
   id           Int      @id @default(autoincrement())
   username     String   @unique
@@ -64,41 +46,11 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  vouchersCreated  Voucher[]              @relation("VoucherCreatedBy")
-  vouchersModified Voucher[]              @relation("VoucherModifiedBy")
-  vouchersDeleted  Voucher[]              @relation("VoucherDeletedBy")
-  financialYearsClosed FinancialYear[]    @relation("FinancialYearClosedBy")
+  vouchersCreated       Voucher[]              @relation("VoucherCreatedBy")
+  vouchersModified      Voucher[]              @relation("VoucherModifiedBy")
+  vouchersDeleted       Voucher[]              @relation("VoucherDeletedBy")
+  financialYearsClosed  FinancialYear[]        @relation("FinancialYearClosedBy")
   trialBalanceApprovals TrialBalanceApproval[]
-  invoicesCreated       Invoice[]
-}
-
-model Supplier {
-  id            Int      @id @default(autoincrement())
-  name          String
-  contactPerson String?
-  phone         String?
-  email         String?
-  address       String?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-
-  invoices Invoice[]
-}
-
-model Customer {
-  id         Int      @id @default(autoincrement())
-  name       String
-  fatherName String?
-  cnic       String?  @unique
-  phone      String?
-  email      String?
-  address    String?
-  isActive   Boolean  @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
-
-  invoices Invoice[]
 }
 
 model AccountCategory {
@@ -124,10 +76,6 @@ model Account {
   debitVouchers   Voucher[]                     @relation("DebitAccount")
   creditVouchers  Voucher[]                     @relation("CreditAccount")
   closingBalances FinancialYearClosingBalance[]
-  product              Product?
-  kachiMaalLines         KachiMaalLine[]   @relation("KachiMaalPartyAccount")
-  purchaseMaalLines        PurchaseMaalLine[] @relation("PurchaseMaalPartyAccount")
-  kachiMaalDebitInvoices   Invoice[]         @relation("KachiMaalDebitAccount")
 }
 
 model Ledger {
@@ -160,23 +108,23 @@ model LedgerEntry {
 }
 
 model Voucher {
-  id              Int           @id @default(autoincrement())
-  type            VoucherType
-  number          Int
-  date            DateTime
-  debitAccountId  Int?
-  creditAccountId Int?
-  amount          Decimal
-  description     String?
-  reference       String?
-  status          VoucherStatus @default(ACTIVE)
-  createdById     Int
-  modifiedById    Int?
-  deletedById     Int?
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-  deletedAt       DateTime?
-  financialYearId Int?
+  id                Int           @id @default(autoincrement())
+  type              VoucherType
+  number            Int
+  date              DateTime
+  debitAccountId    Int?
+  creditAccountId   Int?
+  amount            Decimal
+  description       String?
+  reference         String?
+  status            VoucherStatus @default(ACTIVE)
+  createdById       Int
+  modifiedById      Int?
+  deletedById       Int?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+  financialYearId   Int?
 
   financialYear FinancialYear? @relation(fields: [financialYearId], references: [id])
   debitAccount  Account?       @relation("DebitAccount", fields: [debitAccountId], references: [id])
@@ -185,7 +133,6 @@ model Voucher {
   modifiedBy    User?          @relation("VoucherModifiedBy", fields: [modifiedById], references: [id])
   deletedBy     User?          @relation("VoucherDeletedBy", fields: [deletedById], references: [id])
   ledgerEntries LedgerEntry[]
-  invoiceLink   InvoiceVoucher?
 
   @@unique([financialYearId, type, number])
   @@index([financialYearId, type])
@@ -206,7 +153,6 @@ model FinancialYear {
   closedBy        User?                         @relation("FinancialYearClosedBy", fields: [closedById], references: [id])
   closingBalances FinancialYearClosingBalance[]
   vouchers        Voucher[]
-  invoices        Invoice[]
 
   @@index([status])
 }
@@ -234,117 +180,6 @@ model TrialBalanceApproval {
   approvedBy User @relation(fields: [approvedById], references: [id])
 }
 
-model Product {
-  id        Int      @id @default(autoincrement())
-  name      String
-  code      String   @unique
-  unit      String?
-  accountId Int      @unique
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  account      Account       @relation(fields: [accountId], references: [id])
-  invoiceItems InvoiceItem[]
-  invoices     Invoice[]
-}
-
-model Invoice {
-  id              Int           @id @default(autoincrement())
-  type            InvoiceType
-  status          InvoiceStatus @default(DRAFT)
-  reference       String        @unique
-  customerId      Int?
-  supplierId      Int?
-  total           Decimal       @default(0)
-  notes           String?
-  invoiceDate     DateTime?
-  billNo          String?
-  gariNo          String?
-  jins            String?
-  qism            String?
-  tafseel         String?
-  debitAccountId  Int?
-  miscAmount      Decimal       @default(0)
-  lowerBardanaMode     BoriThelaMode?
-  lowerBardanaQty      Decimal?
-  lowerBardanaRate     Decimal?
-  lowerBardanaAmount   Decimal?
-  marketFeeEnabled     Boolean       @default(false)
-  mazduriEnabled       Boolean       @default(false)
-  productId              Int?
-  legacyInventoryPosting Boolean       @default(false)
-  financialYearId Int?
-  createdById     Int
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  customer      Customer?     @relation(fields: [customerId], references: [id])
-  supplier      Supplier?     @relation(fields: [supplierId], references: [id])
-  debitAccount  Account?      @relation("KachiMaalDebitAccount", fields: [debitAccountId], references: [id])
-  product       Product?      @relation(fields: [productId], references: [id])
-  financialYear FinancialYear? @relation(fields: [financialYearId], references: [id])
-  createdBy     User          @relation(fields: [createdById], references: [id])
-  items         InvoiceItem[]
-  vouchers      InvoiceVoucher[]
-  kachiMaalLines KachiMaalLine[]
-  purchaseMaalLines PurchaseMaalLine[]
-}
-
-model KachiMaalLine {
-  id               Int           @id @default(autoincrement())
-  invoiceId        Int
-  partyAccountId   Int
-  jins             String?
-  qism             String?
-  boriOrThelaMode  BoriThelaMode
-  bagCount         Decimal       @default(0)
-  bhartii          Decimal       @default(0)
-  dharanCount      Decimal       @default(0)
-  looseKg          Decimal       @default(0)
-  totalWeightKg    Decimal       @default(0)
-  ratePerMaund     Decimal       @default(0)
-  amount           Decimal       @default(0)
-  bardanaQty       Decimal?
-  bardanaRate      Decimal?
-  bardanaAmount    Decimal?
-  netCreditToParty Decimal       @default(0)
-  sortOrder        Int           @default(0)
-
-  invoice      Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  partyAccount Account @relation("KachiMaalPartyAccount", fields: [partyAccountId], references: [id])
-
-  @@index([invoiceId])
-}
-
-model PurchaseMaalLine {
-  id               Int           @id @default(autoincrement())
-  invoiceId        Int
-  partyAccountId   Int
-  jins             String?
-  qism             String?
-  boriOrThelaMode  BoriThelaMode
-  bagCount         Decimal       @default(0)
-  bhartii          Decimal       @default(0)
-  dharanCount      Decimal       @default(0)
-  looseKg          Decimal       @default(0)
-  totalWeightKg    Decimal       @default(0)
-  ratePerMaund     Decimal       @default(0)
-  amount           Decimal       @default(0)
-  bardanaQty       Decimal?
-  bardanaRate      Decimal?
-  bardanaAmount    Decimal?
-  dammiChecked     Boolean       @default(false)
-  dammiAmount      Decimal       @default(0)
-  netCreditToParty Decimal       @default(0)
-  sortOrder        Int           @default(0)
-
-  invoice      Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  partyAccount Account @relation("PurchaseMaalPartyAccount", fields: [partyAccountId], references: [id])
-
-  @@index([invoiceId])
-}
-
 model SystemPreference {
   id                Int      @id @default(1)
   daamiPercent      Decimal  @default(0)
@@ -362,41 +197,4 @@ model SystemPreference {
   kantaRate         Decimal  @default(0)
   closingDate       String?
   updatedAt         DateTime @updatedAt
-}
-
-model InvoiceItem {
-  id        Int     @id @default(autoincrement())
-  invoiceId Int
-  productId Int?
-  label     String
-  quantity  Decimal @default(0)
-  unitPrice Decimal @default(0)
-  total     Decimal @default(0)
-
-  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  product Product? @relation(fields: [productId], references: [id])
-
-  @@index([invoiceId])
-}
-
-model InvoiceVoucher {
-  id        Int @id @default(autoincrement())
-  invoiceId Int
-  voucherId Int @unique
-
-  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  voucher Voucher @relation(fields: [voucherId], references: [id])
-
-  @@index([invoiceId])
-}
-
-model BardanaStock {
-  id        Int      @id @default(autoincrement())
-  name      String
-  quantity  Decimal  @default(0)
-  unit      String   @default("bag")
-  notes     String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
 }

@@ -22,37 +22,6 @@ export type Account = {
   ledger?: Ledger | null;
 };
 
-export type Product = {
-  id: number;
-  name: string;
-  code: string;
-  unit: string | null;
-  accountId: number;
-  account?: { id: number; name: string; code: string; ledger?: { balance: number | string } | null };
-};
-
-export type Party = {
-  id: number;
-  name: string;
-  phone?: string | null;
-  email?: string | null;
-  address?: string | null;
-  accountId?: number | null;
-  /** Signed ledger balance from linked Account → Ledger (positive = Dr, negative = Cr). */
-  balance: number;
-};
-
-export type Invoice = {
-  id: number;
-  type: string;
-  status: string;
-  reference: string;
-  total: number | string;
-  createdAt: string;
-  customer?: Party | null;
-  supplier?: Party | null;
-};
-
 export type SystemPreferences = {
   daamiPercent: number;
   paleDariPercent: number;
@@ -69,67 +38,6 @@ export type SystemPreferences = {
   kantaRate: number;
   closingDate: string | null;
   updatedAt: string;
-};
-
-export type KachiMaalInvoiceResult = Invoice & {
-  vouchers?: { voucher: Voucher }[];
-};
-
-export type InvoiceItemDetail = {
-  id: number;
-  label: string;
-  quantity: number | string;
-  unitPrice: number | string;
-  total: number | string;
-  product?: Product | null;
-};
-
-export type MaalLineDetail = {
-  id: number;
-  jins?: string | null;
-  qism?: string | null;
-  boriOrThelaMode: 'BORI' | 'THELA';
-  bagCount: number | string;
-  bhartii: number | string;
-  dharanCount: number | string;
-  looseKg: number | string;
-  totalWeightKg: number | string;
-  ratePerMaund: number | string;
-  amount: number | string;
-  bardanaQty?: number | string | null;
-  bardanaRate?: number | string | null;
-  bardanaAmount?: number | string | null;
-  netCreditToParty: number | string;
-  partyAccount?: VoucherAccount | null;
-  dammiChecked?: boolean;
-  dammiAmount?: number | string | null;
-};
-
-export type KachiMaalLineDetail = MaalLineDetail;
-
-export type PurchaseMaalLineDetail = MaalLineDetail;
-
-export type InvoiceDetail = Invoice & {
-  invoiceDate?: string | null;
-  billNo?: string | null;
-  gariNo?: string | null;
-  jins?: string | null;
-  qism?: string | null;
-  tafseel?: string | null;
-  notes?: string | null;
-  miscAmount?: number | string | null;
-  lowerBardanaMode?: 'BORI' | 'THELA' | null;
-  lowerBardanaQty?: number | string | null;
-  lowerBardanaRate?: number | string | null;
-  lowerBardanaAmount?: number | string | null;
-  marketFeeEnabled?: boolean;
-  mazduriEnabled?: boolean;
-  debitAccount?: VoucherAccount | null;
-  items?: InvoiceItemDetail[];
-  kachiMaalLines?: KachiMaalLineDetail[];
-  purchaseMaalLines?: PurchaseMaalLineDetail[];
-  vouchers?: { voucher: Voucher }[];
-  createdBy?: VoucherUser | null;
 };
 
 export type VoucherAccount = { id: number; name: string; code: string };
@@ -203,121 +111,6 @@ export const api = {
   },
   deleteCategory(id: number) {
     return request<AccountCategory>(`/api/accounting/categories/${id}`, { method: 'DELETE' });
-  },
-
-  listProducts() {
-    return request<Product[]>('/api/products');
-  },
-  createProduct(data: { name: string; unit?: string; code?: string }) {
-    return request<Product>('/api/products', { method: 'POST', body: JSON.stringify(data) });
-  },
-  removeProduct(id: number) {
-    return request<{ ok: boolean }>(`/api/products/${id}`, { method: 'DELETE' });
-  },
-
-  listSaleParties() {
-    return request<Party[]>('/api/parties/sale-parties');
-  },
-  createSaleParty(data: Record<string, string | undefined>) {
-    return request<Party>('/api/parties/sale-parties', { method: 'POST', body: JSON.stringify(data) });
-  },
-  removeSaleParty(id: number) {
-    return request<Party>(`/api/parties/sale-parties/${id}`, { method: 'DELETE' });
-  },
-
-  listPurchaseParties() {
-    return request<Party[]>('/api/parties/purchase-parties');
-  },
-  createPurchaseParty(data: Record<string, string | undefined>) {
-    return request<Party>('/api/parties/purchase-parties', { method: 'POST', body: JSON.stringify(data) });
-  },
-  removePurchaseParty(id: number) {
-    return request<Party>(`/api/parties/purchase-parties/${id}`, { method: 'DELETE' });
-  },
-
-  listInvoices(type?: string) {
-    const query = type ? `?type=${type}` : '';
-    return request<Invoice[]>(`/api/invoices${query}`);
-  },
-
-  getInvoiceByReference(reference: string) {
-    const query = new URLSearchParams({ reference });
-    return request<InvoiceDetail>(`/api/invoices/by-reference?${query.toString()}`);
-  },
-
-  getNextKachiMaalReference() {
-    return request<{ reference: string }>('/api/invoices/kachi-maal/next-reference');
-  },
-
-  createKachiMaalInvoice(data: {
-    invoiceDate: string;
-    billNo?: string;
-    gariNo?: string;
-    jins?: string;
-    qism?: string;
-    tafseel?: string;
-    debitAccountId: number;
-    miscAmount?: number;
-    lowerBardanaMode?: 'BORI' | 'THELA' | null;
-    lowerBardanaQty?: number | null;
-    lowerBardanaRate?: number | null;
-    lines: {
-      partyAccountId: number;
-      jins?: string;
-      qism?: string;
-      boriOrThelaMode: 'BORI' | 'THELA';
-      bagCount: number;
-      bhartii: number;
-      dharanCount: number;
-      looseKg: number;
-      ratePerMaund: number;
-      bardanaQty?: number | null;
-      bardanaRate?: number | null;
-    }[];
-  }) {
-    return request<KachiMaalInvoiceResult>('/api/invoices/kachi-maal', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
-
-  getNextPurchaseMaalReference() {
-    return request<{ reference: string }>('/api/invoices/purchase-maal/next-reference');
-  },
-
-  createPurchaseMaalInvoice(data: {
-    invoiceDate: string;
-    productId: number;
-    billNo?: string;
-    gariNo?: string;
-    jins?: string;
-    qism?: string;
-    tafseel?: string;
-    debitAccountId: number;
-    marketFeeEnabled?: boolean;
-    mazduriEnabled?: boolean;
-    lowerBardanaMode?: 'BORI' | 'THELA' | null;
-    lowerBardanaQty?: number | null;
-    lowerBardanaRate?: number | null;
-    lines: {
-      partyAccountId: number;
-      jins?: string;
-      qism?: string;
-      boriOrThelaMode: 'BORI' | 'THELA';
-      bagCount: number;
-      bhartii: number;
-      dharanCount: number;
-      looseKg: number;
-      ratePerMaund: number;
-      bardanaQty?: number | null;
-      bardanaRate?: number | null;
-      dammiChecked?: boolean;
-    }[];
-  }) {
-    return request<KachiMaalInvoiceResult>('/api/invoices/purchase-maal', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
   },
 
   getSystemPreferences() {
@@ -466,12 +259,5 @@ export const api = {
       totalDebit: number;
       totalCredit: number;
     }>(`/api/accounting/reports/account-balance?${query.toString()}`);
-  },
-
-  listBardana() {
-    return request<{ id: number; name: string; quantity: number | string; unit: string }[]>('/api/inventory/bardana');
-  },
-  createBardana(data: { name: string; quantity?: number; unit?: string; notes?: string }) {
-    return request('/api/inventory/bardana', { method: 'POST', body: JSON.stringify(data) });
   },
 };

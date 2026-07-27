@@ -6,8 +6,8 @@ import {
 } from '../../test-helpers/financial-year';
 import {
   bootstrapChartOfAccounts,
+  createAccount,
   createVoucher,
-  ensureCustomerAccount,
   getTrialBalance,
   listAccounts,
 } from './accounting.service';
@@ -29,7 +29,7 @@ describe('voucher posting (PART 7 scenarios)', () => {
   let userId: number;
   let cashId: number;
   let electricityId: number;
-  let customerAccountId: number;
+  let receivableAccountId: number;
   let bankId: number;
   let voucherDate: string;
 
@@ -43,37 +43,48 @@ describe('voucher posting (PART 7 scenarios)', () => {
     const cash = await accountByName('Cash in Hand');
     cashId = cash.id;
 
-    const accounts = await listAccounts();
-    let expense = accounts.find((a) => a.name.toLowerCase().includes('electricity'));
-    if (!expense) {
-      const expenseCat = await prisma.accountCategory.findFirst({ where: { name: 'Expenses' } });
-      if (!expenseCat) throw new Error('Expenses category missing');
-      const created = await prisma.account.create({
-        data: {
+    const expenseCat = await prisma.accountCategory.findFirst({ where: { name: 'Expenses' } });
+    if (!expenseCat) {
+      const createdCat = await prisma.accountCategory.create({ data: { name: 'Expenses' } });
+      const expense = await createAccount({
+        categoryId: createdCat.id,
+        name: 'Electricity Expense',
+        code: 'EXP-ELEC',
+        type: 'EXPENSE',
+      });
+      electricityId = expense.id;
+    } else {
+      const accounts = await listAccounts();
+      const expense = accounts.find((a) => a.name.toLowerCase().includes('electricity'));
+      if (!expense) {
+        const created = await createAccount({
           categoryId: expenseCat.id,
           name: 'Electricity Expense',
           code: 'EXP-ELEC',
           type: 'EXPENSE',
-        },
-      });
-      await prisma.ledger.create({ data: { accountId: created.id, balance: 0 } });
-      electricityId = created.id;
-    } else {
-      electricityId = expense.id;
+        });
+        electricityId = created.id;
+      } else {
+        electricityId = expense.id;
+      }
     }
 
-    let customerParty = await prisma.customer.findFirst({ where: { isActive: true } });
-    if (!customerParty) {
-      customerParty = await prisma.$transaction(async (tx) => {
-        const created = await tx.customer.create({ data: { name: 'Test Customer' } });
-        await ensureCustomerAccount(tx, { id: created.id, name: created.name });
-        return created;
+    const existingReceivable = await prisma.account.findFirst({ where: { code: 'RCV-TEST', isActive: true } });
+    if (existingReceivable) {
+      receivableAccountId = existingReceivable.id;
+    } else {
+      const receivableCat = await prisma.accountCategory.findFirst({ where: { name: 'Receivables' } });
+      const categoryId = receivableCat
+        ? receivableCat.id
+        : (await prisma.accountCategory.create({ data: { name: 'Receivables' } })).id;
+      const receivable = await createAccount({
+        categoryId,
+        name: 'Test Customer',
+        code: 'RCV-TEST',
+        type: 'ASSET',
       });
+      receivableAccountId = receivable.id;
     }
-    const customerCode = `C${String(customerParty.id).padStart(4, '0')}`;
-    const customerAccount = await prisma.account.findFirst({ where: { code: customerCode } });
-    if (!customerAccount) throw new Error('Customer ledger account missing');
-    customerAccountId = customerAccount.id;
 
     const bankCat = await prisma.accountCategory.findFirst({ where: { name: 'Bank' } });
     if (!bankCat) throw new Error('Bank category missing');
@@ -111,14 +122,14 @@ describe('voucher posting (PART 7 scenarios)', () => {
     expect(expTb.debit).toBeGreaterThan(0);
   });
 
-  it('Receipt: Customer credited, Cash debited +50,000', async () => {
+  it('Receipt: receivable credited, Cash debited +50,000', async () => {
     const cashBefore = await ledgerBalance(cashId);
-    const custBefore = await ledgerBalance(customerAccountId);
+    const receivableBefore = await ledgerBalance(receivableAccountId);
 
     await createVoucher({
       type: 'RECEIPT',
       debitAccountId: cashId,
-      creditAccountId: customerAccountId,
+      creditAccountId: receivableAccountId,
       amount: 50000,
       date: voucherDate,
       createdById: userId,
@@ -126,9 +137,9 @@ describe('voucher posting (PART 7 scenarios)', () => {
     });
 
     expect(await ledgerBalance(cashId)).toBe(cashBefore + 50000);
-    expect(await ledgerBalance(customerAccountId)).toBe(custBefore - 50000);
-    if (await ledgerBalance(customerAccountId) < 0) {
-      const tb = trialBalanceFromSignedBalance(await ledgerBalance(customerAccountId));
+    expect(await ledgerBalance(receivableAccountId)).toBe(receivableBefore - 50000);
+    if (await ledgerBalance(receivableAccountId) < 0) {
+      const tb = trialBalanceFromSignedBalance(await ledgerBalance(receivableAccountId));
       expect(tb.credit).toBeGreaterThan(0);
     }
   });

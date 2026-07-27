@@ -7,10 +7,6 @@ import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './modules/auth/auth.routes';
 import { accountingRouter } from './modules/accounting/accounting.routes';
-import { partiesRouter } from './modules/parties/parties.routes';
-import { productsRouter } from './modules/products/products.routes';
-import { invoicesRouter } from './modules/invoices/invoices.routes';
-import { inventoryRouter } from './modules/inventory/inventory.routes';
 import { preferencesRouter } from './modules/preferences/preferences.routes';
 
 declare module 'express-session' {
@@ -48,15 +44,11 @@ export function createApp() {
   );
 
   app.get('/api/health', (_req, res) => {
-    res.json({ ok: true, app: 'grain-market-pos' });
+    res.json({ ok: true, app: 'usman-garments' });
   });
 
   app.use('/api/auth', authRouter);
   app.use('/api/accounting', accountingRouter);
-  app.use('/api/parties', partiesRouter);
-  app.use('/api/products', productsRouter);
-  app.use('/api/invoices', invoicesRouter);
-  app.use('/api/inventory', inventoryRouter);
   app.use('/api/preferences', preferencesRouter);
 
   if (env.isProduction) {

@@ -36,32 +36,7 @@ export const TOP_NAV: NavGroup[] = [
           { label: 'Remove Account', to: '/accounts/manage/remove' },
         ],
       },
-      {
-        kind: 'submenu',
-        label: 'Product',
-        children: [
-          { label: 'Add Product', to: '/accounts/products/add', description: 'Auto-creates Maal Khata inventory ledger' },
-          { label: 'Remove Product', to: '/accounts/products/remove' },
-        ],
-      },
-      { kind: 'link', label: 'Sale Party', to: '/accounts/sale-parties' },
-      { kind: 'link', label: 'Purchase Party', to: '/accounts/purchase-parties' },
     ],
-  },
-  {
-    label: 'Sale/Purchase Invoice',
-    children: [
-      { kind: 'link', label: 'Sale on Commission', to: '/invoices/sale-commission' },
-      { kind: 'link', label: 'Sale on Paunch', to: '/invoices/sale-paunch' },
-      { kind: 'link', label: 'Purchase to Maal', to: '/invoices/purchase-maal' },
-      { kind: 'link', label: 'Kachi Maal', to: '/invoices/kachi-maal' },
-      { kind: 'link', label: 'View Invoice', to: '/invoices/view-invoice' },
-      { kind: 'link', label: 'View Previous Bill', to: '/invoices/history' },
-    ],
-  },
-  {
-    label: 'Inventory Stock',
-    children: [{ kind: 'link', label: 'Bardana', to: '/inventory/bardana' }],
   },
   {
     label: 'Voucher',
@@ -85,7 +60,6 @@ export const TOP_NAV: NavGroup[] = [
         ],
       },
       { kind: 'link', label: 'Detail Trial Balance', to: '/reports/trial-balance' },
-      { kind: 'link', label: 'Sale/Purchase Reports', to: '/reports/sale-purchase' },
     ],
   },
   {
@@ -97,10 +71,3 @@ export const TOP_NAV: NavGroup[] = [
     to: '/user',
   },
 ];
-
-export const INVOICE_TYPE_LABELS: Record<string, string> = {
-  SALE_COMMISSION: 'Sale on Commission',
-  SALE_PAUNCH: 'Sale on Paunch',
-  PURCHASE_MAAL: 'Purchase to Maal',
-  KACHI_MAAL: 'Kachi Maal',
-};

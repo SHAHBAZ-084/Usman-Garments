@@ -1,7 +1,7 @@
 import { AccountType, FinancialYearStatus, LedgerEntryType, Prisma, VoucherStatus, VoucherType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/helpers';
-import { assertNotMaalKhataLinkedAccount, isMaalKhataCategoryName } from '../products/maal-khata';
+import { assertNotMaalKhataLinkedAccount, isMaalKhataCategoryName } from './maal-khata-legacy';
 import {
   compareLedgerEntries,
   computeLedgerBalance,
@@ -330,17 +330,7 @@ export const INVENTORY_CATEGORY_NAME = 'Inventory';
 export const INVENTORY_ACCOUNT_NAME = 'Inventory';
 export const CASH_IN_HAND_ACCOUNT_NAME = 'Cash in Hand';
 
-export const DEFAULT_CATEGORY_NAMES = [
-  'Assets',
-  'Cash',
-  'Bank',
-  CUSTOMERS_CATEGORY_NAME,
-  SUPPLIERS_CATEGORY_NAME,
-  INVENTORY_CATEGORY_NAME,
-  INCOME_CATEGORY_NAME,
-  'Expenses',
-  'Capital',
-] as const;
+export const DEFAULT_CATEGORY_NAMES = ['Bank', 'Cash'] as const;
 
 export function isSuppliersCategoryName(name: string) {
   return name.trim().toLowerCase() === SUPPLIERS_CATEGORY_NAME.toLowerCase();
@@ -378,19 +368,11 @@ export async function ensureInventoryCategory() {
 export async function listAccountCategories() {
   await bootstrapChartOfAccounts();
 
-  const [categories, customerCount, supplierCount, inventoryAccounts] = await Promise.all([
-    prisma.accountCategory.findMany({
-      where: { isActive: true },
-      include: { accounts: { where: { isActive: true }, include: { ledger: true } } },
-      orderBy: { name: 'asc' },
-    }),
-    prisma.customer.count({ where: { isActive: true } }),
-    prisma.supplier.count({ where: { isActive: true } }),
-    prisma.account.count({
-      where: { isActive: true, name: { equals: INVENTORY_ACCOUNT_NAME },
-      },
-    }),
-  ]);
+  const categories = await prisma.accountCategory.findMany({
+    where: { isActive: true },
+    include: { accounts: { where: { isActive: true }, include: { ledger: true } } },
+    orderBy: { name: 'asc' },
+  });
 
   return categories.map((category) => {
     const isCustomers = isCustomersCategoryName(category.name);
@@ -401,13 +383,7 @@ export async function listAccountCategories() {
       isCustomersCategory: isCustomers,
       isSuppliersCategory: isSuppliers,
       isInventoryCategory: isInventory,
-      entryCount: isCustomers
-        ? customerCount
-        : isSuppliers
-          ? supplierCount
-          : isInventory
-            ? inventoryAccounts
-            : category.accounts.length,
+      entryCount: category.accounts.length,
     };
   });
 }
@@ -571,20 +547,6 @@ export async function createAccount(data: {
     where: { id: data.categoryId, isActive: true },
   });
   if (!category) throw new AppError(400, 'Invalid category');
-
-  if (isCustomersCategoryName(category.name) || isSuppliersCategoryName(category.name)) {
-    throw new AppError(
-      400,
-      'Customer and supplier accounts are created from the Customers and Suppliers menus',
-    );
-  }
-
-  if (isMaalKhataCategoryName(category.name)) {
-    throw new AppError(
-      400,
-      'Maal Khata ledgers are created automatically when you add a product',
-    );
-  }
 
   const type = await resolveAccountType(data.categoryId, data.type);
   const trimmedCode = data.code
@@ -912,11 +874,6 @@ function reportBalanceFromEntries(
 }
 
 export async function listAccounts() {
-  await prisma.$transaction(async (tx) => {
-    await consolidateDuplicateInventoryAccounts(tx);
-    await syncCustomerSupplierAccountsInTx(tx);
-  });
-
   const accounts = await prisma.account.findMany({
     where: { isActive: true },
     include: { category: true, ledger: true },
@@ -929,14 +886,6 @@ export async function listAccounts() {
       ? { ...ledger, balance: Number(ledger.balance) }
       : null,
   }));
-}
-
-async function ensureCustomersCategoryInTx(tx: Prisma.TransactionClient) {
-  const existing = await tx.accountCategory.findFirst({
-    where: { isActive: true, name: { equals: CUSTOMERS_CATEGORY_NAME } },
-  });
-  if (existing) return existing;
-  return tx.accountCategory.create({ data: { name: CUSTOMERS_CATEGORY_NAME } });
 }
 
 export async function ensureSaleRevenueAccount(tx: Prisma.TransactionClient) {
@@ -993,78 +942,6 @@ export async function ensureServiceRevenueAccount(tx: Prisma.TransactionClient) 
   return tx.account.findUniqueOrThrow({ where: { id: account.id }, include: { ledger: true } });
 }
 
-export async function ensureCustomerAccount(
-  tx: Prisma.TransactionClient,
-  customer: { id: number; name: string },
-) {
-  const category = await ensureCustomersCategoryInTx(tx);
-  const code = `C${String(customer.id).padStart(4, '0')}`;
-
-  const existing = await tx.account.findFirst({
-    where: { isActive: true, code },
-    include: { ledger: true },
-  });
-  if (existing) {
-    if (!existing.ledger) {
-      await tx.ledger.create({ data: { accountId: existing.id, balance: 0 } });
-    }
-    if (existing.name !== customer.name) {
-      await tx.account.update({ where: { id: existing.id }, data: { name: customer.name } });
-    }
-    return tx.account.findUniqueOrThrow({ where: { id: existing.id }, include: { ledger: true } });
-  }
-
-  const account = await tx.account.create({
-    data: { categoryId: category.id,
-      name: customer.name,
-      code,
-      type: AccountType.ASSET,
-    },
-  });
-  await tx.ledger.create({ data: { accountId: account.id, balance: 0 } });
-  return tx.account.findUniqueOrThrow({ where: { id: account.id }, include: { ledger: true } });
-}
-
-async function ensureSuppliersCategoryInTx(tx: Prisma.TransactionClient) {
-  const existing = await tx.accountCategory.findFirst({
-    where: { isActive: true, name: { equals: SUPPLIERS_CATEGORY_NAME } },
-  });
-  if (existing) return existing;
-  return tx.accountCategory.create({ data: { name: SUPPLIERS_CATEGORY_NAME } });
-}
-
-export async function ensureSupplierAccount(
-  tx: Prisma.TransactionClient,
-  supplier: { id: number; name: string },
-) {
-  const category = await ensureSuppliersCategoryInTx(tx);
-  const code = `S${String(supplier.id).padStart(4, '0')}`;
-
-  const existing = await tx.account.findFirst({
-    where: { isActive: true, code },
-    include: { ledger: true },
-  });
-  if (existing) {
-    if (!existing.ledger) {
-      await tx.ledger.create({ data: { accountId: existing.id, balance: 0 } });
-    }
-    if (existing.name !== supplier.name) {
-      await tx.account.update({ where: { id: existing.id }, data: { name: supplier.name } });
-    }
-    return tx.account.findUniqueOrThrow({ where: { id: existing.id }, include: { ledger: true } });
-  }
-
-  const account = await tx.account.create({
-    data: { categoryId: category.id,
-      name: supplier.name,
-      code,
-      type: AccountType.LIABILITY,
-    },
-  });
-  await tx.ledger.create({ data: { accountId: account.id, balance: 0 } });
-  return tx.account.findUniqueOrThrow({ where: { id: account.id }, include: { ledger: true } });
-}
-
 export const KACHI_MAAL_CATEGORY_NAMES = {
   INT_PURCHASE: 'Int. Purchase Party',
   EXT_PURCHASE: 'Ext. Purchase Party',
@@ -1112,32 +989,6 @@ export async function ensureKachiMaalAccounts(
     marketFee: { id: marketFee.id, name: marketFee.name },
     misc: { id: misc.id, name: misc.name },
   };
-}
-
-async function syncCustomerSupplierAccountsInTx(tx: Prisma.TransactionClient) {
-  const [customers, suppliers] = await Promise.all([
-    tx.customer.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-    }),
-    tx.supplier.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-    }),
-  ]);
-
-  for (const customer of customers) {
-    await ensureCustomerAccount(tx, customer);
-  }
-  for (const supplier of suppliers) {
-    await ensureSupplierAccount(tx, supplier);
-  }
-}
-
-export async function syncCustomerSupplierAccounts() {
-  await prisma.$transaction(async (tx) => {
-    await syncCustomerSupplierAccountsInTx(tx);
-  });
 }
 
 export async function ensureInventoryAccount(tx: Prisma.TransactionClient) {
@@ -1340,21 +1191,14 @@ export async function bootstrapChartOfAccounts() {
       await ensureCategoryInTx(tx, name);
     }
 
-    await consolidateDuplicateInventoryCategories(tx);
-
     const cashCategory = await ensureCategoryInTx(tx, 'Cash');
     await ensureDefaultAccountInTx(
-  tx,
+      tx,
       cashCategory.id,
       CASH_IN_HAND_ACCOUNT_NAME,
       AccountType.ASSET,
       '1',
     );
-
-    await ensureInventoryAccount(tx);
-    await ensureSaleRevenueAccount(tx);
-    await ensureServiceRevenueAccount(tx);
-    await consolidateDuplicateInventoryAccounts(tx);
   });
 }
 
@@ -1655,14 +1499,6 @@ const voucherInclude = {
   deletedBy: { select: { id: true, displayName: true, username: true } },
 } as const;
 
-function customerAccountCode(id: number) {
-  return `C${String(id).padStart(4, '0')}`;
-}
-
-function supplierAccountCode(id: number) {
-  return `S${String(id).padStart(4, '0')}`;
-}
-
 function voucherDashboardAccountLabel(voucher: {
   type: VoucherType;
   description?: string | null;
@@ -1702,39 +1538,8 @@ export async function getDashboardSummary() {
     }
   }
 
-  const [customers, suppliers] = await Promise.all([
-    prisma.customer.findMany({ where: { isActive: true }, select: { id: true } }),
-    prisma.supplier.findMany({ where: { isActive: true }, select: { id: true } }),
-  ]);
-
-  const partyCodes = [
-    ...customers.map((c) => customerAccountCode(c.id)),
-    ...suppliers.map((s) => supplierAccountCode(s.id)),
-  ];
-
-  const partyAccounts =
-    partyCodes.length > 0
-      ? await prisma.account.findMany({
-          where: { code: { in: partyCodes }, isActive: true },
-          include: { ledger: true },
-        })
-      : [];
-
-  const partyAccountByCode = new Map(partyAccounts.map((a) => [a.code, a]));
-
-  let receivables = 0;
-  for (const customer of customers) {
-    const account = partyAccountByCode.get(customerAccountCode(customer.id));
-    const balance = account?.ledger ? Number(account.ledger.balance) : 0;
-    if (balance > 0) receivables += balance;
-  }
-
-  let payables = 0;
-  for (const supplier of suppliers) {
-    const account = partyAccountByCode.get(supplierAccountCode(supplier.id));
-    const balance = account?.ledger ? Number(account.ledger.balance) : 0;
-    if (balance < 0) payables += Math.abs(balance);
-  }
+  const receivables = 0;
+  const payables = 0;
 
   const todayStart = startOfDay(new Date());
   const todayEnd = endOfDay(new Date());
