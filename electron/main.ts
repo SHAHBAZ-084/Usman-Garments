@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 
 const isDev = process.env.NODE_ENV === 'development';
@@ -8,12 +8,12 @@ let mainWindow: BrowserWindow | null = null;
 
 async function startBackend(): Promise<void> {
   if (isDev) {
-    // Backend runs as a separate dev process via concurrently.
     return;
   }
 
   process.env.PORT = BACKEND_PORT;
   process.env.NODE_ENV = 'production';
+  process.env.USMAN_USER_DATA = app.getPath('userData');
 
   const backendEntry = path.join(__dirname, '../backend/dist/index.js');
   await import(backendEntry);
@@ -39,6 +39,10 @@ function createWindow(): void {
     console.error('Window failed to load:', errorCode, errorDescription);
   });
 
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    console.error('Renderer crashed:', details.reason);
+  });
+
   if (isDev) {
     mainWindow.loadURL('http://127.0.0.1:5173');
     mainWindow.once('ready-to-show', () => {
@@ -60,6 +64,13 @@ function createWindow(): void {
     mainWindow = null;
   });
 }
+
+ipcMain.handle('restart-app', () => {
+  app.relaunch();
+  app.exit(0);
+});
+
+ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 
 app.whenReady().then(async () => {
   await startBackend();

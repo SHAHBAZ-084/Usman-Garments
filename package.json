@@ -10,6 +10,7 @@
     "dev:web": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "electron:dev": "npm run build:electron && wait-on http://127.0.0.1:5173 http://127.0.0.1:3847/api/health && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build -w backend && npm run build -w frontend && npm run build:electron",
+    "dist:win": "npm run electron:build && electron-builder --win",
     "build:electron": "tsc -p electron/tsconfig.json",
     "start": "cross-env NODE_ENV=production electron .",
     "postinstall": "npm run db:generate -w backend"
@@ -22,7 +23,33 @@
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
     "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
     "typescript": "^5.7.3",
     "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.usmanmall.desktop",
+    "productName": "Usman Mall",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "backend/dist/**/*",
+      "frontend/dist/**/*",
+      "backend/prisma/schema.prisma",
+      "backend/prisma/migrations/**/*",
+      "backend/package.json",
+      "node_modules/**/*"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "artifactName": "Usman-Mall-Setup-${version}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

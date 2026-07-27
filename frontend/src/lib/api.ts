@@ -628,6 +628,54 @@ export const api = {
     const suffix = query.toString() ? `?${query}` : '';
     return request<T>(`/api/reports${path}${suffix}`);
   },
+
+  getSystemHealth() {
+    return request<{
+      dataLocation: { mode: string; dataRoot: string; databasePath: string };
+      databaseIntegrity: { ok: boolean; detail: string };
+      trialBalance: { ok: boolean; totalDebit: number; totalCredit: number };
+      stockReconciliation: {
+        ok: boolean;
+        productsChecked: number;
+        mismatches: { productId: number; name: string; expected: number; actual: number }[];
+      };
+      databaseSizeBytes: number;
+      freeDiskSpaceBytes: number | null;
+      backup: { lastBackupAt: string | null; lastAutomaticAt: string | null };
+      recentBackups: Array<{ id: string; folderPath: string; createdAt: string; totalSize: number }>;
+    }>('/api/system/health');
+  },
+
+  getLogsPath() {
+    return request<{ path: string }>('/api/system/logs-path');
+  },
+
+  listBackups() {
+    return request<{ items: Array<{ id: string; folderPath: string; createdAt: string; totalSize: number }> }>(
+      '/api/backup',
+    );
+  },
+
+  createBackup(destinationFolder?: string) {
+    return request<{ folderPath: string; createdAt: string }>('/api/backup/create', {
+      method: 'POST',
+      body: JSON.stringify({ destinationFolder }),
+    });
+  },
+
+  validateBackup(folderPath: string) {
+    return request<{ ok: boolean }>('/api/backup/validate', {
+      method: 'POST',
+      body: JSON.stringify({ folderPath }),
+    });
+  },
+
+  restoreBackup(folderPath: string) {
+    return request<{ ok: boolean; requiresRestart: boolean; safetyBackupPath: string }>('/api/backup/restore', {
+      method: 'POST',
+      body: JSON.stringify({ folderPath }),
+    });
+  },
 };
 
 export type ProductCategory = {

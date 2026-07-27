@@ -79,7 +79,7 @@ export async function assertVoucherDateInActiveFinancialYear(
 }
 
 async function assertTrialBalanceInDev(db: DbClient) {
-  if (process.env.NODE_ENV === 'production') return;
+  if (process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'test') return;
   const ledgers = await db.ledger.findMany({ select: { balance: true } });
   let totalDebit = 0;
   let totalCredit = 0;

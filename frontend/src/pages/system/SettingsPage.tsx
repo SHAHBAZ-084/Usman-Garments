@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   FieldLabel,
   PageShell,
@@ -38,6 +39,7 @@ export function SettingsPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -352,7 +354,33 @@ export function SettingsPage() {
                 onChange={(e) => patchField('backupFolderPath', e.target.value)}
                 placeholder="e.g. D:\UsmanMall\Backups"
               />
-              <p className="mt-1 text-xs text-textMuted">Path only for now. Backup and restore arrive in a later phase.</p>
+              <p className="mt-1 text-xs text-textMuted">
+                Manual backups are stored here when set; otherwise defaults to the app data folder. See{' '}
+                <Link to="/system/health" className="text-brand underline">
+                  System Health
+                </Link>{' '}
+                for backup history and restore.
+              </p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <SecondaryButton
+                type="button"
+                disabled={backupBusy}
+                onClick={async () => {
+                  setBackupBusy(true);
+                  setMessage('');
+                  try {
+                    await api.createBackup(form.backupFolderPath || undefined);
+                    setMessage('Backup created successfully.');
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Backup failed');
+                  } finally {
+                    setBackupBusy(false);
+                  }
+                }}
+              >
+                {backupBusy ? 'Backing up…' : 'Create backup now'}
+              </SecondaryButton>
             </div>
           </Tile>
 

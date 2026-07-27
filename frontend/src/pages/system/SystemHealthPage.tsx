@@ -1,0 +1,260 @@
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { PageShell, Panel, PrimaryButton, SecondaryButton, Tile } from '../../components/ui/PageShell';
+import { api } from '../../lib/api';
+import { formatDate, formatMoney } from '../../lib/format';
+
+function formatBytes(n: number) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`inline-flex rounded px-2 py-0.5 text-xs font-medium ${ok ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+      {label}: {ok ? 'OK' : 'Issue'}
+    </span>
+  );
+}
+
+export function SystemHealthPage() {
+  const [report, setReport] = useState<Awaited<ReturnType<typeof api.getSystemHealth>> | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const [restorePath, setRestorePath] = useState('');
+  const [message, setMessage] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      setReport(await api.getSystemHealth());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load health report');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function createBackupNow() {
+    setBackupBusy(true);
+    setMessage('');
+    try {
+      await api.createBackup();
+      setMessage('Backup created successfully.');
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Backup failed');
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  async function restoreFromBackup() {
+    const folder = restorePath.trim();
+    if (!folder) {
+      setMessage('Enter the full path to a backup folder.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'Restore will replace your current database and uploaded images with the selected backup.\n\n' +
+        'A safety copy of your current data is created automatically first.\n\n' +
+        'The app will need to restart after restore.\n\n' +
+        'This cannot be undone except by restoring another backup. Continue?',
+    );
+    if (!confirmed) return;
+
+    setRestoreBusy(true);
+    setMessage('');
+    try {
+      await api.validateBackup(folder);
+      const result = await api.restoreBackup(folder);
+      setMessage(`Restore complete. Safety copy: ${result.safetyBackupPath}. Restarting…`);
+      setTimeout(() => restartApp(), 1500);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Restore failed');
+    } finally {
+      setRestoreBusy(false);
+    }
+  }
+
+  function pickRecentBackup(folderPath: string) {
+    setRestorePath(folderPath);
+  }
+
+  function restartApp() {
+    if (window.usmanGarments?.restartApp) {
+      void window.usmanGarments.restartApp();
+    } else {
+      window.location.reload();
+    }
+  }
+
+  async function openLogsFolder() {
+    try {
+      const { path: logsPath } = await api.getLogsPath();
+      setMessage(`Logs folder: ${logsPath}`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not resolve logs path');
+    }
+  }
+
+  return (
+    <PageShell
+      title="System Health"
+      subtitle="Database integrity, accounting balance, backups, and recovery"
+      actions={
+        <SecondaryButton type="button" onClick={() => void load()} disabled={loading}>
+          {loading ? 'Checking…' : 'Refresh'}
+        </SecondaryButton>
+      }
+    >
+      {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+      {message ? <p className="mb-3 text-sm text-textSecondary">{message}</p> : null}
+
+      {report ? (
+        <>
+          <div className="mb-4 flex flex-wrap gap-2">
+            <StatusBadge ok={report.databaseIntegrity.ok} label="Database" />
+            <StatusBadge ok={report.trialBalance.ok} label="Trial balance" />
+            <StatusBadge ok={report.stockReconciliation.ok} label="Stock reconciliation" />
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <Tile>
+              <p className="text-xs text-textMuted">Data location</p>
+              <p className="mt-1 text-sm font-medium capitalize">{report.dataLocation.mode}</p>
+              <p className="mt-1 break-all text-xs text-textSecondary">{report.dataLocation.dataRoot}</p>
+            </Tile>
+            <Tile>
+              <p className="text-xs text-textMuted">Database size</p>
+              <p className="mt-1 text-lg font-semibold">{formatBytes(report.databaseSizeBytes)}</p>
+            </Tile>
+            <Tile>
+              <p className="text-xs text-textMuted">Free disk space</p>
+              <p className="mt-1 text-lg font-semibold">
+                {report.freeDiskSpaceBytes != null ? formatBytes(report.freeDiskSpaceBytes) : 'Unknown'}
+              </p>
+            </Tile>
+            <Tile>
+              <p className="text-xs text-textMuted">Last backup</p>
+              <p className="mt-1 text-sm font-medium">
+                {report.backup.lastBackupAt ? formatDate(report.backup.lastBackupAt) : 'Never'}
+              </p>
+            </Tile>
+            <Tile>
+              <p className="text-xs text-textMuted">Trial balance</p>
+              <p className="mt-1 text-sm">
+                Dr {formatMoney(report.trialBalance.totalDebit)} / Cr {formatMoney(report.trialBalance.totalCredit)}
+              </p>
+            </Tile>
+            <Tile>
+              <p className="text-xs text-textMuted">Stock check</p>
+              <p className="mt-1 text-sm">
+                {report.stockReconciliation.productsChecked} products — {report.stockReconciliation.mismatches.length}{' '}
+                mismatch(es)
+              </p>
+            </Tile>
+          </div>
+
+          {report.stockReconciliation.mismatches.length > 0 ? (
+            <Panel className="mt-4">
+              <h2 className="mb-2 text-sm font-semibold">Stock mismatches (sample)</h2>
+              <ul className="text-sm text-textSecondary">
+                {report.stockReconciliation.mismatches.map((m) => (
+                  <li key={m.productId}>
+                    {m.name}: expected {m.expected}, actual {m.actual}
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : null}
+
+          <Panel className="mt-4">
+            <h2 className="mb-3 text-sm font-semibold">Recovery actions</h2>
+            <div className="flex flex-wrap gap-2">
+              <PrimaryButton type="button" onClick={() => void createBackupNow()} disabled={backupBusy}>
+                {backupBusy ? 'Creating…' : 'Create Backup Now'}
+              </PrimaryButton>
+              <SecondaryButton type="button" onClick={restartApp}>
+                Restart App
+              </SecondaryButton>
+              <SecondaryButton type="button" onClick={() => void openLogsFolder()}>
+                Open Logs Folder
+              </SecondaryButton>
+              <Link to="/system/settings" className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-sm">
+                Backup settings
+              </Link>
+            </div>
+          </Panel>
+
+          <Panel className="mt-4 border-amber-200 bg-amber-50/50">
+            <h2 className="mb-2 text-sm font-semibold text-amber-900">Restore from backup</h2>
+            <p className="mb-3 text-xs text-amber-900/80">
+              Destructive: replaces current database and uploads. A safety copy is created automatically before restore.
+            </p>
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="flex min-w-[280px] flex-1 flex-col text-xs">
+                Backup folder path
+                <input
+                  type="text"
+                  className="mt-1 rounded border border-border px-2 py-1.5 text-sm"
+                  value={restorePath}
+                  onChange={(e) => setRestorePath(e.target.value)}
+                  placeholder="C:\Backups\usman-mall-backup-..."
+                />
+              </label>
+              <SecondaryButton type="button" onClick={() => void restoreFromBackup()} disabled={restoreBusy}>
+                {restoreBusy ? 'Restoring…' : 'Restore backup'}
+              </SecondaryButton>
+            </div>
+          </Panel>
+
+          {report.recentBackups.length > 0 ? (
+            <Panel className="mt-4">
+              <h2 className="mb-2 text-sm font-semibold">Recent backups</h2>
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-textMuted">
+                    <th className="py-1 pr-2">Date</th>
+                    <th className="py-1 pr-2">Size</th>
+                    <th className="py-1 pr-2">Path</th>
+                    <th className="py-1" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.recentBackups.map((b) => (
+                    <tr key={b.id} className="border-b border-border last:border-0">
+                      <td className="py-1.5 pr-2">{formatDate(b.createdAt)}</td>
+                      <td className="py-1.5 pr-2">{formatBytes(b.totalSize)}</td>
+                      <td className="py-1.5 break-all text-xs text-textMuted">{b.folderPath}</td>
+                      <td className="py-1.5">
+                        <button
+                          type="button"
+                          className="text-xs text-brand underline"
+                          onClick={() => pickRecentBackup(b.folderPath)}
+                        >
+                          Use for restore
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Panel>
+          ) : null}
+        </>
+      ) : loading ? (
+        <p className="text-sm text-textMuted">Running health checks…</p>
+      ) : null}
+    </PageShell>
+  );
+}

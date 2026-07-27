@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { Prisma, ReceiptSize, ThemeMode } from '@prisma/client';
+import { getUploadsDir as resolveUploadsDir } from '../../config/paths';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/helpers';
 import { isValidBarcodeLabelSize, normalizeBarcodeLabelSize } from './label-size';
@@ -155,9 +156,7 @@ export async function updateBusinessSettings(input: BusinessSettingsUpdateInput)
 }
 
 export function getUploadsDir() {
-  const dir = path.resolve(__dirname, '../../../prisma/data/uploads');
-  fs.mkdirSync(dir, { recursive: true });
-  return dir;
+  return resolveUploadsDir();
 }
 
 export async function saveBusinessLogo(file: {

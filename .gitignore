@@ -9,3 +9,4 @@ dist-electron/
 .DS_Store
 Thumbs.db
 backend/prisma/data/uploads/
+backend/.vitest-test-env.json

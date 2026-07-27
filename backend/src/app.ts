@@ -15,7 +15,9 @@ import { customersRouter } from './modules/customers/customers.routes';
 import { salesRouter } from './modules/sales/sales.routes';
 import { financeRouter } from './modules/finance/finance.routes';
 import { reportsRouter } from './modules/reports/reports.routes';
-import { getUploadsDir } from './modules/settings/settings.service';
+import { backupRouter } from './modules/backup/backup.routes';
+import { healthRouter } from './modules/health/health.routes';
+import { getUploadsDir } from './config/paths';
 
 declare module 'express-session' {
   interface SessionData {
@@ -66,6 +68,8 @@ export function createApp() {
   app.use('/api/sales', salesRouter);
   app.use('/api/finance', financeRouter);
   app.use('/api/reports', reportsRouter);
+  app.use('/api/backup', backupRouter);
+  app.use('/api/system', healthRouter);
 
   if (env.isProduction) {
     const frontendDist = path.resolve(__dirname, '../../frontend/dist');

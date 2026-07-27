@@ -36,7 +36,9 @@ import {
   SupplierPurchasesReportPage,
   UdhaarSalesReportPage,
 } from './pages/reports/ShopReportPages';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { SettingsPage } from './pages/system/SettingsPage';
+import { SystemHealthPage } from './pages/system/SystemHealthPage';
 import { UserInfoPage } from './pages/user/UserInfoPage';
 import { ProductFormPage, ProductsListPage } from './pages/products/ProductPages';
 import { BarcodeScanPage } from './pages/products/BarcodeScanPage';
@@ -69,6 +71,7 @@ import { VoucherFormPage, VoucherListPage } from './pages/vouchers/VoucherPages'
 
 export default function App() {
   return (
+    <ErrorBoundary>
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
@@ -158,6 +161,7 @@ export default function App() {
               <Route path="/reports/other-income" element={<OtherIncomeReportPage />} />
 
               <Route path="/system/settings" element={<SettingsPage />} />
+              <Route path="/system/health" element={<SystemHealthPage />} />
               <Route path="/system/preferences" element={<Navigate to="/system/settings" replace />} />
               <Route path="/user" element={<UserInfoPage />} />
             </Route>
@@ -167,5 +171,6 @@ export default function App() {
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>
+    </ErrorBoundary>
   );
 }

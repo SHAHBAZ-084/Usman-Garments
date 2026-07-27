@@ -46,8 +46,10 @@ describe('unified voucher numbering', () => {
     const accounts = await listAccounts();
     let expense = accounts.find((a) => a.name.toLowerCase().includes('electricity'));
     if (!expense) {
-      const expenseCat = await prisma.accountCategory.findFirst({ where: { name: 'Expenses' } });
-      if (!expenseCat) throw new Error('Expenses category missing');
+      let expenseCat = await prisma.accountCategory.findFirst({ where: { name: 'Expenses' } });
+      if (!expenseCat) {
+        expenseCat = await prisma.accountCategory.create({ data: { name: 'Expenses' } });
+      }
       const created = await prisma.account.create({
         data: {
           categoryId: expenseCat.id,

@@ -53,6 +53,7 @@ export function DashboardPage() {
   const [fromDate, setFromDate] = useState(todayInput());
   const [toDate, setToDate] = useState(todayInput());
   const [data, setData] = useState<DashboardPayload | null>(null);
+  const [backupStatus, setBackupStatus] = useState<{ lastBackupAt: string | null; ok: boolean } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -66,6 +67,15 @@ export function DashboardPage() {
         toDate: preset === 'custom' ? toDate : undefined,
       });
       setData(result);
+      try {
+        const health = await api.getSystemHealth();
+        setBackupStatus({
+          lastBackupAt: health.backup.lastBackupAt,
+          ok: Boolean(health.backup.lastBackupAt),
+        });
+      } catch {
+        setBackupStatus(null);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
     } finally {
@@ -80,6 +90,14 @@ export function DashboardPage() {
   return (
     <PageShell title="Dashboard" subtitle="Shop overview — all figures from unified financial summary">
       {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+      {backupStatus ? (
+        <p className={`mb-3 text-xs ${backupStatus.ok ? 'text-textMuted' : 'text-amber-700'}`}>
+          Last backup: {backupStatus.lastBackupAt ? formatDate(backupStatus.lastBackupAt) : 'Never'} —{' '}
+          <Link to="/system/health" className="underline">
+            System Health
+          </Link>
+        </p>
+      ) : null}
 
       <Panel className="mb-4">
         <div className="flex flex-wrap items-end gap-3">
