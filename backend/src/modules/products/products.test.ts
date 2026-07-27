@@ -6,19 +6,23 @@ import {
   adjustStock,
   createProduct,
   deactivateProduct,
+  getProductByBarcode,
   manualStockAdjustment,
+  updateProduct,
 } from './products.service';
 
+const TEST_NAME_PREFIX = 'TEST-P4-';
+
 async function cleanupTestProducts() {
-  await prisma.stockMovement.deleteMany({
-    where: { product: { sku: { startsWith: 'TEST-P4-' } } },
+  const products = await prisma.product.findMany({
+    where: { name: { startsWith: TEST_NAME_PREFIX } },
+    select: { id: true },
   });
-  await prisma.productVariant.deleteMany({
-    where: { sku: { startsWith: 'TEST-P4-' } },
-  });
-  await prisma.product.deleteMany({
-    where: { sku: { startsWith: 'TEST-P4-' } },
-  });
+  const ids = products.map((p) => p.id);
+  if (ids.length === 0) return;
+  await prisma.stockMovement.deleteMany({ where: { productId: { in: ids } } });
+  await prisma.productVariant.deleteMany({ where: { productId: { in: ids } } });
+  await prisma.product.deleteMany({ where: { id: { in: ids } } });
 }
 
 describe('products inventory foundation', () => {
@@ -26,11 +30,55 @@ describe('products inventory foundation', () => {
     await cleanupTestProducts();
   });
 
+  it('stores purchase price as 0 when omitted, not equal to sale price', async () => {
+    const product = await createProduct({
+      name: `${TEST_NAME_PREFIX}No Cost`,
+      salePrice: 500,
+    });
+
+    expect(product.purchasePrice).toBe(0);
+    expect(product.purchasePrice).not.toBe(product.salePrice);
+    expect(product.costNotSet).toBe(true);
+
+    const updated = await updateProduct(product.id, { purchasePrice: 350 });
+    expect(updated.purchasePrice).toBe(350);
+    expect(updated.costNotSet).toBe(false);
+  });
+
+  it('auto-generates product code and barcode when omitted', async () => {
+    const product = await createProduct({
+      name: `${TEST_NAME_PREFIX}Auto Identity`,
+      salePrice: 500,
+      openingStock: 2,
+    });
+
+    expect(product.productCode).toBeTruthy();
+    expect(product.barcode).toBeTruthy();
+    expect(product.productCode.length).toBeGreaterThan(2);
+    expect(/^\d+$/.test(product.barcode!)).toBe(true);
+
+    const row = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
+    expect(row.sku).toBe(product.productCode);
+    expect(row.barcode).toBe(product.barcode);
+  });
+
+  it('never collides when two products are created back-to-back without codes', async () => {
+    const first = await createProduct({
+      name: `${TEST_NAME_PREFIX}Back To Back A`,
+      salePrice: 100,
+    });
+    const second = await createProduct({
+      name: `${TEST_NAME_PREFIX}Back To Back B`,
+      salePrice: 120,
+    });
+
+    expect(first.productCode).not.toBe(second.productCode);
+    expect(first.barcode).not.toBe(second.barcode);
+  });
+
   it('adjustStock never goes negative', async () => {
     const product = await createProduct({
-      name: 'Test Shirt',
-      sku: 'TEST-P4-SHIRT',
-      purchasePrice: 100,
+      name: `${TEST_NAME_PREFIX}Shirt`,
       salePrice: 200,
       openingStock: 5,
     });
@@ -50,30 +98,27 @@ describe('products inventory foundation', () => {
     expect(unchanged.currentStock).toBe(2);
   });
 
-  it('rejects duplicate SKU and barcode with clear messages', async () => {
+  it('rejects duplicate product code and barcode with clear messages', async () => {
     await createProduct({
-      name: 'First',
-      sku: 'TEST-P4-DUP-SKU',
-      barcode: 'TEST-P4-BC-001',
-      purchasePrice: 10,
+      name: `${TEST_NAME_PREFIX}First`,
+      sku: 'TEST-P4-DUP-CODE',
+      barcode: '890123456789',
       salePrice: 20,
     });
 
     await expect(
       createProduct({
-        name: 'Second',
-        sku: 'TEST-P4-DUP-SKU',
-        purchasePrice: 10,
+        name: `${TEST_NAME_PREFIX}Second`,
+        sku: 'TEST-P4-DUP-CODE',
         salePrice: 20,
       }),
-    ).rejects.toThrow(/SKU.*already in use/i);
+    ).rejects.toThrow(/Product code is already in use/i);
 
     await expect(
       createProduct({
-        name: 'Third',
-        sku: 'TEST-P4-DUP-SKU-2',
-        barcode: 'TEST-P4-BC-001',
-        purchasePrice: 10,
+        name: `${TEST_NAME_PREFIX}Third`,
+        sku: 'TEST-P4-DUP-CODE-2',
+        barcode: '890123456789',
         salePrice: 20,
       }),
     ).rejects.toThrow(/Barcode is already in use/i);
@@ -81,9 +126,7 @@ describe('products inventory foundation', () => {
 
   it('soft-deactivate does not hard-delete and hides from default list', async () => {
     const product = await createProduct({
-      name: 'Deactivate Me',
-      sku: 'TEST-P4-DEACT',
-      purchasePrice: 50,
+      name: `${TEST_NAME_PREFIX}Deactivate Me`,
       salePrice: 80,
       openingStock: 1,
     });
@@ -103,9 +146,7 @@ describe('products inventory foundation', () => {
 
   it('creates a stock movement on every adjustment', async () => {
     const product = await createProduct({
-      name: 'Movement Test',
-      sku: 'TEST-P4-MOV',
-      purchasePrice: 30,
+      name: `${TEST_NAME_PREFIX}Movement Test`,
       salePrice: 60,
     });
 
@@ -139,19 +180,19 @@ describe('products inventory foundation', () => {
 
   it('adjusts variant stock and keeps product total in sync', async () => {
     const product = await createProduct({
-      name: 'Variant Product',
-      sku: 'TEST-P4-VAR-PARENT',
-      purchasePrice: 100,
+      name: `${TEST_NAME_PREFIX}Variant Product`,
       salePrice: 150,
       variants: [
-        { sku: 'TEST-P4-VAR-S', size: 'S', currentStock: 2 },
-        { sku: 'TEST-P4-VAR-M', size: 'M', currentStock: 3 },
+        { size: 'S', currentStock: 2 },
+        { size: 'M', currentStock: 3 },
       ],
     });
 
     const variants = await prisma.productVariant.findMany({ where: { productId: product.id } });
     const small = variants.find((v) => v.size === 'S');
     expect(small).toBeDefined();
+    expect(small!.sku).toBeTruthy();
+    expect(small!.barcode).toBeTruthy();
 
     await manualStockAdjustment(product.id, {
       variantId: small!.id,
@@ -165,5 +206,22 @@ describe('products inventory foundation', () => {
     await expect(
       manualStockAdjustment(product.id, { quantity: 1, direction: 'reduce' }),
     ).rejects.toBeInstanceOf(AppError);
+  });
+
+  it('looks up product or variant by barcode', async () => {
+    const product = await createProduct({
+      name: `${TEST_NAME_PREFIX}Barcode Lookup`,
+      salePrice: 300,
+      variants: [{ size: 'L', currentStock: 1 }],
+    });
+
+    const variant = product.variants![0]!;
+    const byVariant = await getProductByBarcode(variant.barcode!);
+    expect(byVariant.matchType).toBe('variant');
+    expect(byVariant.variant?.id).toBe(variant.id);
+
+    const byProduct = await getProductByBarcode(product.barcode!);
+    expect(byProduct.matchType).toBe('product');
+    expect(byProduct.product.id).toBe(product.id);
   });
 });

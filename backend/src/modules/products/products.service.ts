@@ -2,6 +2,7 @@ import { Prisma, StockMovementType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/helpers';
 import { ensureBusinessSettings } from '../settings/settings.service';
+import { generateUniqueBarcode, generateUniqueProductCode } from './product-identity';
 
 const STOCK_IN_TYPES: StockMovementType[] = [
   StockMovementType.OPENING,
@@ -184,17 +185,24 @@ function serializeProduct(row: {
   }>;
 }, defaultLowStockLimit: number) {
   const effectiveLow = row.lowStockLimit ?? defaultLowStockLimit;
+  const { sku, variants, ...rest } = row;
   return {
-    ...row,
+    ...rest,
+    productCode: sku,
     purchasePrice: Number(row.purchasePrice),
     salePrice: Number(row.salePrice),
+    costNotSet: Number(row.purchasePrice) === 0,
     effectiveLowStockLimit: effectiveLow,
     isLowStock: row.currentStock <= effectiveLow,
-    variants: row.variants?.map((v) => ({
-      ...v,
-      purchasePrice: v.purchasePrice != null ? Number(v.purchasePrice) : null,
-      salePrice: v.salePrice != null ? Number(v.salePrice) : null,
-    })),
+    variants: variants?.map((v) => {
+      const { sku: variantSku, ...variantRest } = v;
+      return {
+        ...variantRest,
+        productCode: variantSku,
+        purchasePrice: v.purchasePrice != null ? Number(v.purchasePrice) : null,
+        salePrice: v.salePrice != null ? Number(v.salePrice) : null,
+      };
+    }),
   };
 }
 
@@ -285,11 +293,11 @@ export async function getProduct(id: number) {
 
 export type CreateProductInput = {
   name: string;
-  sku: string;
+  sku?: string;
   barcode?: string | null;
   categoryId?: number | null;
   brand?: string | null;
-  purchasePrice: number;
+  purchasePrice?: number;
   salePrice: number;
   lowStockLimit?: number | null;
   supplierId?: number | null;
@@ -298,7 +306,7 @@ export type CreateProductInput = {
   variants?: Array<{
     size?: string | null;
     colour?: string | null;
-    sku: string;
+    sku?: string;
     barcode?: string | null;
     purchasePrice?: number | null;
     salePrice?: number | null;
@@ -309,24 +317,30 @@ export type CreateProductInput = {
 
 export async function createProduct(input: CreateProductInput) {
   const name = input.name.trim();
-  const sku = input.sku.trim();
   if (!name) throw new AppError(400, 'Product name is required');
-  if (!sku) throw new AppError(400, 'SKU is required');
-  if (input.purchasePrice < 0 || input.salePrice < 0) {
+
+  const salePrice = input.salePrice;
+  const purchasePrice = input.purchasePrice ?? 0;
+  if (purchasePrice < 0 || salePrice < 0) {
     throw new AppError(400, 'Prices must be zero or greater');
   }
 
   try {
     const productId = await prisma.$transaction(async (tx) => {
+      const productCode =
+        input.sku?.trim() || (await generateUniqueProductCode(tx, name));
+      const productBarcode =
+        input.barcode?.trim() || (await generateUniqueBarcode(tx));
+
       const product = await tx.product.create({
         data: {
           name,
-          sku,
-          barcode: input.barcode?.trim() || null,
+          sku: productCode,
+          barcode: productBarcode,
           categoryId: input.categoryId ?? null,
           brand: input.brand?.trim() || null,
-          purchasePrice: input.purchasePrice,
-          salePrice: input.salePrice,
+          purchasePrice,
+          salePrice,
           lowStockLimit: input.lowStockLimit ?? null,
           supplierId: input.supplierId ?? null,
           imagePath: input.imagePath?.trim() || null,
@@ -336,16 +350,22 @@ export async function createProduct(input: CreateProductInput) {
 
       const variants = input.variants ?? [];
       for (const v of variants) {
-        const variantSku = v.sku.trim();
-        if (!variantSku) throw new AppError(400, 'Each variant must have a SKU');
+        const variantCode =
+          v.sku?.trim() ||
+          (await generateUniqueProductCode(tx, name, {
+            parentCode: productCode,
+            size: v.size,
+            colour: v.colour,
+          }));
+        const variantBarcode = v.barcode?.trim() || (await generateUniqueBarcode(tx));
 
         const created = await tx.productVariant.create({
           data: {
             productId: product.id,
             size: v.size?.trim() || null,
             colour: v.colour?.trim() || null,
-            sku: variantSku,
-            barcode: v.barcode?.trim() || null,
+            sku: variantCode,
+            barcode: variantBarcode,
             purchasePrice: v.purchasePrice ?? null,
             salePrice: v.salePrice ?? null,
             currentStock: 0,
@@ -382,9 +402,9 @@ export async function createProduct(input: CreateProductInput) {
     if (err instanceof AppError) throw err;
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
       const target = String(err.meta?.target ?? '');
-      if (target.includes('sku')) throw new AppError(409, `SKU "${sku}" is already in use`);
+      if (target.includes('sku')) throw new AppError(409, 'Product code is already in use');
       if (target.includes('barcode')) throw new AppError(409, 'Barcode is already in use');
-      throw new AppError(409, 'Duplicate SKU or barcode');
+      throw new AppError(409, 'Duplicate product code or barcode');
     }
     throw err;
   }
@@ -402,12 +422,6 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
     if (!name) throw new AppError(400, 'Product name is required');
     data.name = name;
   }
-  if (input.sku !== undefined) {
-    const sku = input.sku.trim();
-    if (!sku) throw new AppError(400, 'SKU is required');
-    data.sku = sku;
-  }
-  if (input.barcode !== undefined) data.barcode = input.barcode?.trim() || null;
   if (input.categoryId !== undefined) data.category = input.categoryId ? { connect: { id: input.categoryId } } : { disconnect: true };
   if (input.brand !== undefined) data.brand = input.brand?.trim() || null;
   if (input.purchasePrice !== undefined) {
@@ -428,7 +442,7 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
     return getProduct(id);
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new AppError(409, 'Duplicate SKU or barcode');
+      throw new AppError(409, 'Duplicate product code or barcode');
     }
     throw err;
   }
@@ -448,7 +462,7 @@ export async function deactivateProduct(id: number) {
 export type CreateVariantInput = {
   size?: string | null;
   colour?: string | null;
-  sku: string;
+  sku?: string;
   barcode?: string | null;
   purchasePrice?: number | null;
   salePrice?: number | null;
@@ -463,18 +477,24 @@ export async function createProductVariant(productId: number, input: CreateVaria
   if (!product) throw new AppError(404, 'Product not found');
   if (!product.isActive) throw new AppError(400, 'Cannot add variants to an inactive product');
 
-  const sku = input.sku.trim();
-  if (!sku) throw new AppError(400, 'Variant SKU is required');
-
   try {
     return await prisma.$transaction(async (tx) => {
+      const variantCode =
+        input.sku?.trim() ||
+        (await generateUniqueProductCode(tx, product.name, {
+          parentCode: product.sku,
+          size: input.size,
+          colour: input.colour,
+        }));
+      const variantBarcode = input.barcode?.trim() || (await generateUniqueBarcode(tx));
+
       const variant = await tx.productVariant.create({
         data: {
           productId,
           size: input.size?.trim() || null,
           colour: input.colour?.trim() || null,
-          sku,
-          barcode: input.barcode?.trim() || null,
+          sku: variantCode,
+          barcode: variantBarcode,
           purchasePrice: input.purchasePrice ?? null,
           salePrice: input.salePrice ?? null,
           currentStock: 0,
@@ -494,12 +514,13 @@ export async function createProductVariant(productId: number, input: CreateVaria
         await syncProductStockFromVariants(tx, productId);
       }
 
-      return variant;
+      const { sku, ...rest } = variant;
+      return { ...rest, productCode: sku };
     });
   } catch (err) {
     if (err instanceof AppError) throw err;
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new AppError(409, `Variant SKU "${sku}" is already in use`);
+      throw new AppError(409, 'Product code or barcode is already in use');
     }
     throw err;
   }
@@ -516,20 +537,16 @@ export async function updateProductVariant(productId: number, variantId: number,
   const data: Prisma.ProductVariantUpdateInput = {};
   if (input.size !== undefined) data.size = input.size?.trim() || null;
   if (input.colour !== undefined) data.colour = input.colour?.trim() || null;
-  if (input.sku !== undefined) {
-    const sku = input.sku.trim();
-    if (!sku) throw new AppError(400, 'Variant SKU is required');
-    data.sku = sku;
-  }
-  if (input.barcode !== undefined) data.barcode = input.barcode?.trim() || null;
   if (input.purchasePrice !== undefined) data.purchasePrice = input.purchasePrice;
   if (input.salePrice !== undefined) data.salePrice = input.salePrice;
 
   try {
-    return await prisma.productVariant.update({ where: { id: variantId }, data });
+    const updated = await prisma.productVariant.update({ where: { id: variantId }, data });
+    const { sku, ...rest } = updated;
+    return { ...rest, productCode: sku };
   } catch (err) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
-      throw new AppError(409, 'Duplicate variant SKU or barcode');
+      throw new AppError(409, 'Duplicate product code or barcode');
     }
     throw err;
   }
@@ -582,5 +599,66 @@ export async function listStockMovements(
     }),
   ]);
 
-  return { items, total, page, pageSize, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  return {
+    items: items.map((row) => ({
+      ...row,
+      variant: row.variant
+        ? {
+            id: row.variant.id,
+            size: row.variant.size,
+            colour: row.variant.colour,
+            productCode: row.variant.sku,
+          }
+        : null,
+    })),
+    total,
+    page,
+    pageSize,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
+
+export async function getProductByBarcode(barcode: string) {
+  const trimmed = barcode.trim();
+  if (!trimmed) throw new AppError(400, 'Barcode is required');
+
+  const settings = await ensureBusinessSettings();
+
+  const variantRow = await prisma.productVariant.findFirst({
+    where: { barcode: trimmed },
+    include: {
+      product: {
+        include: {
+          category: { select: { id: true, name: true } },
+          variants: { orderBy: [{ size: 'asc' }, { colour: 'asc' }] },
+        },
+      },
+    },
+  });
+
+  if (variantRow) {
+    const product = serializeProduct(variantRow.product, settings.lowStockLimit);
+    const variant = product.variants?.find((v) => v.id === variantRow.id) ?? null;
+    return {
+      matchType: 'variant' as const,
+      product,
+      variant,
+    };
+  }
+
+  const productRow = await prisma.product.findFirst({
+    where: { barcode: trimmed },
+    include: {
+      category: { select: { id: true, name: true } },
+      variants: { orderBy: [{ size: 'asc' }, { colour: 'asc' }] },
+    },
+  });
+
+  if (!productRow) throw new AppError(404, 'No product found for this barcode');
+
+  return {
+    matchType: 'product' as const,
+    product: serializeProduct(productRow, settings.lowStockLimit),
+    variant: null,
+  };
 }

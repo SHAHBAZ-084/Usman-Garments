@@ -314,6 +314,9 @@ export const api = {
   getProduct(id: number) {
     return request<Product>(`/api/products/${id}`);
   },
+  getProductByBarcode(barcode: string) {
+    return request<BarcodeLookupResult>(`/api/products/by-barcode/${encodeURIComponent(barcode)}`);
+  },
   createProduct(data: CreateProductInput) {
     return request<Product>('/api/products', { method: 'POST', body: JSON.stringify(data) });
   },
@@ -367,7 +370,7 @@ export type ProductVariant = {
   id: number;
   size: string | null;
   colour: string | null;
-  sku: string;
+  productCode: string;
   barcode: string | null;
   purchasePrice: number | null;
   salePrice: number | null;
@@ -377,12 +380,13 @@ export type ProductVariant = {
 export type Product = {
   id: number;
   name: string;
-  sku: string;
+  productCode: string;
   barcode: string | null;
   categoryId: number | null;
   brand: string | null;
   purchasePrice: number;
   salePrice: number;
+  costNotSet: boolean;
   currentStock: number;
   lowStockLimit: number | null;
   effectiveLowStockLimit: number;
@@ -407,8 +411,6 @@ export type ProductListResult = {
 export type ProductVariantInput = {
   size?: string | null;
   colour?: string | null;
-  sku: string;
-  barcode?: string | null;
   purchasePrice?: number | null;
   salePrice?: number | null;
   currentStock?: number;
@@ -417,11 +419,9 @@ export type ProductVariantInput = {
 
 export type CreateProductInput = {
   name: string;
-  sku: string;
-  barcode?: string | null;
   categoryId?: number | null;
   brand?: string | null;
-  purchasePrice: number;
+  purchasePrice?: number;
   salePrice: number;
   lowStockLimit?: number | null;
   supplierId?: number | null;
@@ -441,7 +441,13 @@ export type StockMovement = {
   sourceType: string | null;
   sourceRef: string | null;
   createdAt: string;
-  variant?: { id: number; size: string | null; colour: string | null; sku: string } | null;
+  variant?: { id: number; size: string | null; colour: string | null; productCode: string } | null;
+};
+
+export type BarcodeLookupResult = {
+  matchType: 'product' | 'variant';
+  product: Product;
+  variant: ProductVariant | null;
 };
 
 export type StockMovementListResult = {

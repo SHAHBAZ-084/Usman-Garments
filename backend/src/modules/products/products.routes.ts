@@ -11,7 +11,7 @@ productsRouter.use(requireAuth);
 const variantSchema = z.object({
   size: z.string().max(40).nullable().optional(),
   colour: z.string().max(40).nullable().optional(),
-  sku: z.string().min(1).max(80),
+  sku: z.string().min(1).max(80).optional(),
   barcode: z.string().max(80).nullable().optional(),
   purchasePrice: z.number().min(0).nullable().optional(),
   salePrice: z.number().min(0).nullable().optional(),
@@ -20,11 +20,11 @@ const variantSchema = z.object({
 
 const createProductSchema = z.object({
   name: z.string().min(1).max(200),
-  sku: z.string().min(1).max(80),
+  sku: z.string().min(1).max(80).optional(),
   barcode: z.string().max(80).nullable().optional(),
   categoryId: z.number().int().nullable().optional(),
   brand: z.string().max(120).nullable().optional(),
-  purchasePrice: z.number().min(0),
+  purchasePrice: z.number().min(0).optional(),
   salePrice: z.number().min(0),
   lowStockLimit: z.number().int().positive().nullable().optional(),
   supplierId: z.number().int().nullable().optional(),
@@ -86,6 +86,14 @@ productsRouter.post(
   asyncHandler(async (req, res) => {
     const product = await productsService.createProduct(req.body);
     res.status(201).json(product);
+  }),
+);
+
+productsRouter.get(
+  '/by-barcode/:barcode',
+  asyncHandler(async (req, res) => {
+    const result = await productsService.getProductByBarcode(param(req.params.barcode));
+    res.json(result);
   }),
 );
 

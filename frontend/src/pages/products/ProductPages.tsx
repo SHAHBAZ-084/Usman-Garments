@@ -1,5 +1,11 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  BarcodeLabelModal,
+  ProductIdentityPanel,
+  printBarcodeLabels,
+  type LabelItem,
+} from '../../components/products/BarcodeLabel';
 import {
   api,
   type CreateProductInput,
@@ -20,10 +26,45 @@ import {
   TextInput,
 } from '../../components/ui/PageShell';
 
-type VariantDraft = ProductVariantInput & { key: string; existingId?: number };
+type VariantDraft = ProductVariantInput & {
+  key: string;
+  existingId?: number;
+  productCode?: string;
+  barcode?: string | null;
+};
 
 function emptyVariant(): VariantDraft {
-  return { key: crypto.randomUUID(), size: '', colour: '', sku: '', barcode: '', currentStock: 0 };
+  return { key: crypto.randomUUID(), size: '', colour: '', currentStock: 0 };
+}
+
+function variantLabel(v: { size?: string | null; colour?: string | null; productCode?: string }) {
+  return [v.size, v.colour].filter(Boolean).join(' / ') || v.productCode || 'Variant';
+}
+
+function labelItemsFromProduct(product: Product, businessName: string): LabelItem[] {
+  if (product.variants && product.variants.length > 0) {
+    return product.variants
+      .filter((v) => v.barcode)
+      .map((v) => ({
+        key: `v-${v.id}`,
+        businessName,
+        productName: product.name,
+        size: v.size,
+        colour: v.colour,
+        price: v.salePrice ?? product.salePrice,
+        barcode: v.barcode!,
+        productCode: v.productCode,
+      }));
+  }
+  if (!product.barcode) return [];
+  return [{
+    key: `p-${product.id}`,
+    businessName,
+    productName: product.name,
+    price: product.salePrice,
+    barcode: product.barcode,
+    productCode: product.productCode,
+  }];
 }
 
 export function ProductsListPage() {
@@ -84,7 +125,7 @@ export function ProductsListPage() {
                 setPage(1);
                 setSearch(e.target.value);
               }}
-              placeholder="Name, SKU, or barcode"
+              placeholder="Name, product code, or barcode"
             />
           </div>
           <div>
@@ -133,7 +174,7 @@ export function ProductsListPage() {
             <thead>
               <tr className="border-b border-border text-left text-textSecondary">
                 <th className="px-2 py-2 font-medium">Name</th>
-                <th className="px-2 py-2 font-medium">SKU</th>
+                <th className="px-2 py-2 font-medium">Product Code</th>
                 <th className="px-2 py-2 font-medium">Category</th>
                 <th className="px-2 py-2 font-medium text-right">Stock</th>
                 <th className="px-2 py-2 font-medium text-right">Sale Price</th>
@@ -150,8 +191,11 @@ export function ProductsListPage() {
                     {product.isLowStock ? (
                       <span className="ml-2 rounded bg-bgDanger px-1.5 py-0.5 text-xs text-danger">Low stock</span>
                     ) : null}
+                    {product.costNotSet ? (
+                      <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-200">Cost not set</span>
+                    ) : null}
                   </td>
-                  <td className="px-2 py-2 font-mono text-xs">{product.sku}</td>
+                  <td className="px-2 py-2 font-mono text-xs">{product.productCode}</td>
                   <td className="px-2 py-2">{product.category?.name ?? '—'}</td>
                   <td className="px-2 py-2 text-right">{product.currentStock}</td>
                   <td className="px-2 py-2 text-right">{formatMoney(product.salePrice)}</td>
@@ -263,7 +307,7 @@ function StockAdjustModal({
                 <option value="">Select variant</option>
                 {product.variants!.map((v) => (
                   <option key={v.id} value={v.id}>
-                    {[v.size, v.colour].filter(Boolean).join(' / ') || v.sku} — stock {v.currentStock}
+                    {variantLabel(v)} — stock {v.currentStock}
                   </option>
                 ))}
               </select>
@@ -337,9 +381,7 @@ function StockHistoryPanel({ productId, refreshKey }: { productId: number; refre
                   <td className="px-2 py-2">{formatDate(m.createdAt)}</td>
                   <td className="px-2 py-2">{formatStockMovementType(m.type)}</td>
                   <td className="px-2 py-2">
-                    {m.variant
-                      ? [m.variant.size, m.variant.colour].filter(Boolean).join(' / ') || m.variant.sku
-                      : '—'}
+                    {m.variant ? variantLabel(m.variant) : '—'}
                   </td>
                   <td className="px-2 py-2 text-right">{m.quantity}</td>
                   <td className="px-2 py-2">{m.note ?? '—'}</td>
@@ -359,9 +401,8 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
   const productId = mode === 'edit' ? Number(params.id) : null;
 
   const [categories, setCategories] = useState<ProductCategory[]>([]);
+  const [businessName, setBusinessName] = useState('Usman Mall');
   const [name, setName] = useState('');
-  const [sku, setSku] = useState('');
-  const [barcode, setBarcode] = useState('');
   const [categoryId, setCategoryId] = useState<number | ''>('');
   const [newCategoryName, setNewCategoryName] = useState('');
   const [brand, setBrand] = useState('');
@@ -376,10 +417,19 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [showAdjust, setShowAdjust] = useState(false);
+  const [labelItems, setLabelItems] = useState<LabelItem[] | null>(null);
+  const [pendingProductId, setPendingProductId] = useState<number | null>(null);
   const [historyKey, setHistoryKey] = useState(0);
 
+  const hasVariantRows = variants.length > 0;
+
   useEffect(() => {
-    api.listProductCategories().then(setCategories).catch(() => setCategories([]));
+    Promise.all([api.listProductCategories(), api.getSettings()])
+      .then(([cats, settings]) => {
+        setCategories(cats);
+        setBusinessName(settings.businessName);
+      })
+      .catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {
@@ -389,11 +439,9 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       .then((p) => {
         setProduct(p);
         setName(p.name);
-        setSku(p.sku);
-        setBarcode(p.barcode ?? '');
         setCategoryId(p.categoryId ?? '');
         setBrand(p.brand ?? '');
-        setPurchasePrice(String(p.purchasePrice));
+        setPurchasePrice(p.purchasePrice > 0 ? String(p.purchasePrice) : '');
         setSalePrice(String(p.salePrice));
         setLowStockLimit(p.lowStockLimit != null ? String(p.lowStockLimit) : '');
         setNotes(p.notes ?? '');
@@ -403,8 +451,8 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
             existingId: v.id,
             size: v.size ?? '',
             colour: v.colour ?? '',
-            sku: v.sku,
-            barcode: v.barcode ?? '',
+            productCode: v.productCode,
+            barcode: v.barcode,
             purchasePrice: v.purchasePrice,
             salePrice: v.salePrice,
             currentStock: v.currentStock,
@@ -413,6 +461,11 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load product'));
   }, [mode, productId]);
+
+  const printableLabels = useMemo(
+    () => (product ? labelItemsFromProduct(product, businessName) : []),
+    [product, businessName],
+  );
 
   async function ensureCategoryId(): Promise<number | null> {
     if (categoryId) return Number(categoryId);
@@ -432,29 +485,22 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
     setSaving(true);
     try {
       const resolvedCategoryId = await ensureCategoryId();
+      const parsedPurchase = purchasePrice.trim() ? Number(purchasePrice) : undefined;
       const payload: CreateProductInput = {
         name,
-        sku,
-        barcode: barcode.trim() || null,
         categoryId: resolvedCategoryId,
-        brand: brand.trim() || null,
-        purchasePrice: Number(purchasePrice),
         salePrice: Number(salePrice),
-        lowStockLimit: lowStockLimit.trim() ? Number(lowStockLimit) : null,
-        notes: notes.trim() || null,
+        ...(parsedPurchase !== undefined ? { purchasePrice: parsedPurchase } : {}),
       };
 
       if (mode === 'add') {
         const variantPayload = variants
-          .filter((v) => v.sku.trim())
-          .map(({ key: _k, existingId: _e, ...v }) => ({
-            ...v,
-            size: v.size?.trim() || null,
-            colour: v.colour?.trim() || null,
-            sku: v.sku.trim(),
-            barcode: v.barcode?.trim() || null,
-            currentStock: Number(v.currentStock) || 0,
-          }));
+          .filter((v) => v.size?.trim() || v.colour?.trim())
+          .map(({ key: _k, existingId: _e, productCode: _pc, barcode: _bc, ...v }) => ({
+          size: v.size?.trim() || null,
+          colour: v.colour?.trim() || null,
+          currentStock: Number(v.currentStock) || 0,
+        }));
 
         const created = await api.createProduct({
           ...payload,
@@ -464,33 +510,54 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
               ? Number(openingStock)
               : undefined,
         });
-        setMessage('Product created.');
-        navigate(`/products/${created.id}`);
-      } else if (productId) {
-        await api.updateProduct(productId, payload);
 
-        for (const v of variants.filter((row) => row.sku.trim())) {
+        setPendingProductId(created.id);
+        setLabelItems(labelItemsFromProduct(created, businessName));
+        setMessage('Product saved. Print the barcode label below.');
+      } else if (productId) {
+        await api.updateProduct(productId, {
+          ...payload,
+          purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : 0,
+          brand: brand.trim() || null,
+          lowStockLimit: lowStockLimit.trim() ? Number(lowStockLimit) : null,
+          notes: notes.trim() || null,
+        });
+
+        const newVariantLabels: LabelItem[] = [];
+
+        for (const v of variants) {
           const data = {
             size: v.size?.trim() || null,
             colour: v.colour?.trim() || null,
-            sku: v.sku.trim(),
-            barcode: v.barcode?.trim() || null,
-            purchasePrice: v.purchasePrice ?? null,
-            salePrice: v.salePrice ?? null,
           };
           if (v.existingId) {
             await api.updateProductVariant(productId, v.existingId, data);
-          } else {
-            await api.createProductVariant(productId, {
+          } else if (v.size?.trim() || v.colour?.trim()) {
+            const createdVariant = await api.createProductVariant(productId, {
               ...data,
               openingStock: Number(v.currentStock) || 0,
             });
+            if (createdVariant.barcode) {
+              newVariantLabels.push({
+                key: `new-v-${createdVariant.id}`,
+                businessName,
+                productName: name,
+                size: createdVariant.size,
+                colour: createdVariant.colour,
+                price: createdVariant.salePrice ?? Number(salePrice),
+                barcode: createdVariant.barcode,
+                productCode: createdVariant.productCode,
+              });
+            }
           }
         }
 
         const refreshed = await api.getProduct(productId);
         setProduct(refreshed);
         setMessage('Product updated.');
+        if (newVariantLabels.length > 0) {
+          setLabelItems(newVariantLabels);
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed');
@@ -512,12 +579,19 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
     }
   }
 
+  function closeLabelModal() {
+    setLabelItems(null);
+    if (mode === 'add' && pendingProductId) {
+      navigate(`/products/${pendingProductId}`);
+    }
+  }
+
   const title = mode === 'add' ? 'Add Product' : product?.name ?? 'Edit Product';
 
   return (
     <PageShell
       title={title}
-      subtitle={mode === 'add' ? 'Create a new inventory item' : 'Update product details and variants'}
+      subtitle={mode === 'add' ? 'Enter name, category, price, and stock — codes are assigned automatically' : 'Update product details and variants'}
       actions={
         <div className="flex flex-wrap gap-2">
           <Link to="/products">
@@ -525,6 +599,11 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           </Link>
           {mode === 'edit' && product?.isActive ? (
             <>
+              {printableLabels.length > 0 ? (
+                <SecondaryButton type="button" onClick={() => printBarcodeLabels(printableLabels)}>
+                  Print Label{printableLabels.length > 1 ? 's' : ''}
+                </SecondaryButton>
+              ) : null}
               <PrimaryButton type="button" onClick={() => setShowAdjust(true)}>Adjust Stock</PrimaryButton>
               <DangerButton type="button" onClick={() => void onDeactivate()}>Deactivate</DangerButton>
             </>
@@ -536,19 +615,10 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
         <Panel>
           <form className="space-y-4" onSubmit={onSubmit}>
             <div>
-              <FieldLabel>Name</FieldLabel>
-              <TextInput value={name} onChange={(e) => setName(e.target.value)} required />
+              <FieldLabel>Product name</FieldLabel>
+              <TextInput value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <FieldLabel>SKU</FieldLabel>
-                <TextInput value={sku} onChange={(e) => setSku(e.target.value)} required />
-              </div>
-              <div>
-                <FieldLabel>Barcode (optional)</FieldLabel>
-                <TextInput value={barcode} onChange={(e) => setBarcode(e.target.value)} placeholder="Phase 6 will add generation" />
-              </div>
-            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
                 <FieldLabel>Category</FieldLabel>
@@ -573,58 +643,80 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                 />
               </div>
             </div>
-            <div>
-              <FieldLabel>Brand (optional)</FieldLabel>
-              <TextInput value={brand} onChange={(e) => setBrand(e.target.value)} />
-            </div>
+
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <FieldLabel>Purchase price</FieldLabel>
-                <TextInput type="number" min="0" step="0.01" value={purchasePrice} onChange={(e) => setPurchasePrice(e.target.value)} required />
+                <FieldLabel>Purchase price (optional)</FieldLabel>
+                <TextInput
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={purchasePrice}
+                  onChange={(e) => setPurchasePrice(e.target.value)}
+                  placeholder="Leave blank if unknown"
+                />
               </div>
               <div>
                 <FieldLabel>Sale price</FieldLabel>
                 <TextInput type="number" min="0" step="0.01" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} required />
               </div>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+
+            {mode === 'edit' && product?.costNotSet ? (
+              <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
+                Cost not set — profit reports may be inaccurate
+              </p>
+            ) : null}
+
+            {mode === 'add' && !hasVariantRows ? (
               <div>
-                <FieldLabel>Low stock limit (optional)</FieldLabel>
-                <TextInput
-                  type="number"
-                  min="1"
-                  step="1"
-                  value={lowStockLimit}
-                  onChange={(e) => setLowStockLimit(e.target.value)}
-                  placeholder="Uses shop default if blank"
-                />
+                <FieldLabel>Opening stock</FieldLabel>
+                <TextInput type="number" min="0" step="1" value={openingStock} onChange={(e) => setOpeningStock(e.target.value)} placeholder="0" />
               </div>
-              {mode === 'add' && variants.length === 0 ? (
-                <div>
-                  <FieldLabel>Opening stock</FieldLabel>
-                  <TextInput type="number" min="0" step="1" value={openingStock} onChange={(e) => setOpeningStock(e.target.value)} />
+            ) : null}
+
+            {mode === 'edit' && product ? (
+              <>
+                <ProductIdentityPanel product={product} />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel>Brand (optional)</FieldLabel>
+                    <TextInput value={brand} onChange={(e) => setBrand(e.target.value)} />
+                  </div>
+                  <div>
+                    <FieldLabel>Current stock</FieldLabel>
+                    <TextInput value={String(product.currentStock)} readOnly className="bg-surface1" />
+                  </div>
                 </div>
-              ) : mode === 'edit' && product ? (
-                <div>
-                  <FieldLabel>Current stock</FieldLabel>
-                  <TextInput value={String(product.currentStock)} readOnly className="bg-surface1" />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel>Low stock limit (optional)</FieldLabel>
+                    <TextInput
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={lowStockLimit}
+                      onChange={(e) => setLowStockLimit(e.target.value)}
+                      placeholder="Uses shop default if blank"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Notes (optional)</FieldLabel>
+                    <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
+                  </div>
                 </div>
-              ) : null}
-            </div>
-            <div>
-              <FieldLabel>Notes (optional)</FieldLabel>
-              <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
-            </div>
+              </>
+            ) : null}
 
             <div>
               <div className="mb-2 flex items-center justify-between">
-                <FieldLabel>Variants (size / colour)</FieldLabel>
+                <FieldLabel>Size / colour variants (optional)</FieldLabel>
                 <GhostButton type="button" onClick={() => setVariants((v) => [...v, emptyVariant()])}>
                   + Add row
                 </GhostButton>
               </div>
               {variants.length === 0 ? (
-                <p className="text-sm text-textSecondary">No variants — stock is tracked on the product directly.</p>
+                <p className="text-sm text-textSecondary">Leave empty for a single-size product.</p>
               ) : (
                 <div className="space-y-3">
                   {variants.map((v, idx) => (
@@ -641,17 +733,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                           setVariants(next);
                         }} />
                       </div>
-                      <div className="grid gap-2 sm:grid-cols-3">
-                        <TextInput placeholder="Variant SKU" value={v.sku} onChange={(e) => {
-                          const next = [...variants];
-                          next[idx] = { ...v, sku: e.target.value };
-                          setVariants(next);
-                        }} required={variants.length > 0} />
-                        <TextInput placeholder="Barcode" value={v.barcode ?? ''} onChange={(e) => {
-                          const next = [...variants];
-                          next[idx] = { ...v, barcode: e.target.value };
-                          setVariants(next);
-                        }} />
+                      <div className="grid gap-2 sm:grid-cols-2">
                         {mode === 'add' || !v.existingId ? (
                           <TextInput
                             type="number"
@@ -667,6 +749,9 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                         ) : (
                           <TextInput value={`Stock: ${v.currentStock ?? 0}`} readOnly className="bg-surface1" />
                         )}
+                        {v.existingId && v.productCode ? (
+                          <TextInput value={`Code: ${v.productCode}`} readOnly className="bg-surface1 font-mono text-xs" />
+                        ) : null}
                       </div>
                       <div className="mt-2 text-right">
                         <GhostButton
@@ -686,7 +771,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
             {error ? <p className="text-sm text-danger">{error}</p> : null}
 
             <PrimaryButton type="submit" disabled={saving}>
-              {saving ? 'Saving…' : mode === 'add' ? 'Create Product' : 'Save Changes'}
+              {saving ? 'Saving…' : mode === 'add' ? 'Save Product' : 'Save Changes'}
             </PrimaryButton>
           </form>
         </Panel>
@@ -706,6 +791,10 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
             setHistoryKey((k) => k + 1);
           }}
         />
+      ) : null}
+
+      {labelItems && labelItems.length > 0 ? (
+        <BarcodeLabelModal items={labelItems} onClose={closeLabelModal} />
       ) : null}
     </PageShell>
   );
