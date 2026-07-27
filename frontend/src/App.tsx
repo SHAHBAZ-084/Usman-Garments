@@ -11,6 +11,17 @@ import { AccountReportsPage, AccountBalancePage, TrialBalancePage, VouchersRepor
 import { SettingsPage } from './pages/system/SettingsPage';
 import { UserInfoPage } from './pages/user/UserInfoPage';
 import { ProductFormPage, ProductsListPage } from './pages/products/ProductPages';
+import {
+  PurchaseDetailPage,
+  PurchaseEntryPage,
+  PurchasesListPage,
+  SupplierPaymentPage,
+} from './pages/purchases/PurchasePages';
+import {
+  SupplierDetailPage,
+  SupplierFormPage,
+  SuppliersListPage,
+} from './pages/suppliers/SupplierPages';
 import { VoucherFormPage, VoucherListPage } from './pages/vouchers/VoucherPages';
 
 export default function App() {
@@ -27,6 +38,16 @@ export default function App() {
               <Route path="/products" element={<ProductsListPage />} />
               <Route path="/products/add" element={<ProductFormPage mode="add" />} />
               <Route path="/products/:id" element={<ProductFormPage mode="edit" />} />
+
+              <Route path="/suppliers" element={<SuppliersListPage />} />
+              <Route path="/suppliers/add" element={<SupplierFormPage mode="add" />} />
+              <Route path="/suppliers/:id/edit" element={<SupplierFormPage mode="edit" />} />
+              <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
+
+              <Route path="/purchases" element={<PurchasesListPage />} />
+              <Route path="/purchases/new" element={<PurchaseEntryPage />} />
+              <Route path="/purchases/pay" element={<SupplierPaymentPage />} />
+              <Route path="/purchases/:id" element={<PurchaseDetailPage />} />
 
               <Route path="/accounts/categories/add" element={<CategoryManagePage mode="add" />} />
               <Route path="/accounts/categories/edit" element={<CategoryManagePage mode="edit" />} />

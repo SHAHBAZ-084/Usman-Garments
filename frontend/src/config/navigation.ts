@@ -23,6 +23,16 @@ export const TOP_NAV: NavGroup[] = [
     ],
   },
   {
+    label: 'Suppliers',
+    children: [
+      { kind: 'link', label: 'Supplier List', to: '/suppliers' },
+      { kind: 'link', label: 'Add Supplier', to: '/suppliers/add' },
+      { kind: 'link', label: 'New Purchase', to: '/purchases/new' },
+      { kind: 'link', label: 'Purchases', to: '/purchases' },
+      { kind: 'link', label: 'Pay Supplier', to: '/purchases/pay' },
+    ],
+  },
+  {
     label: 'Accounts',
     children: [
       {

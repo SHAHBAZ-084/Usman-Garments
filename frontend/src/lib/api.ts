@@ -358,6 +358,81 @@ export const api = {
     const suffix = query.toString() ? `?${query}` : '';
     return request<StockMovementListResult>(`/api/products/${productId}/stock-movements${suffix}`);
   },
+
+  listSuppliers(params?: { activeOnly?: boolean; search?: string }) {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.activeOnly === false) query.set('activeOnly', 'false');
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<Supplier[]>(`/api/suppliers${suffix}`);
+  },
+  getSupplier(id: number) {
+    return request<SupplierDetail>(`/api/suppliers/${id}`);
+  },
+  createSupplier(data: {
+    name: string;
+    phone?: string;
+    address?: string | null;
+    openingBalance?: number;
+    notes?: string | null;
+  }) {
+    return request<Supplier>('/api/suppliers', { method: 'POST', body: JSON.stringify(data) });
+  },
+  updateSupplier(
+    id: number,
+    data: {
+      name?: string;
+      phone?: string;
+      address?: string | null;
+      notes?: string | null;
+      isActive?: boolean;
+    },
+  ) {
+    return request<Supplier>(`/api/suppliers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  deactivateSupplier(id: number) {
+    return request<Supplier>(`/api/suppliers/${id}`, { method: 'DELETE' });
+  },
+
+  listPurchases(params?: { supplierId?: number; page?: number; pageSize?: number }) {
+    const query = new URLSearchParams();
+    if (params?.supplierId != null) query.set('supplierId', String(params.supplierId));
+    if (params?.page != null) query.set('page', String(params.page));
+    if (params?.pageSize != null) query.set('pageSize', String(params.pageSize));
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<PurchaseListResult>(`/api/purchases${suffix}`);
+  },
+  getPurchase(id: number) {
+    return request<Purchase>(`/api/purchases/${id}`);
+  },
+  createPurchase(data: CreatePurchaseInput) {
+    return request<Purchase>('/api/purchases', { method: 'POST', body: JSON.stringify(data) });
+  },
+  createSupplierPayment(data: {
+    supplierId: number;
+    amount: number;
+    paymentMethod: PurchasePaymentMethod;
+    date: string;
+    note?: string | null;
+  }) {
+    return request<SupplierPaymentResult>('/api/purchases/payments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  createPurchaseReturn(data: {
+    purchaseId: number;
+    items: { purchaseItemId: number; quantity: number }[];
+    note?: string | null;
+    refundToCash?: boolean;
+  }) {
+    return request<{
+      id: number;
+      purchaseId: number;
+      totalAmount: number;
+      confirmation: { message: string };
+    }>('/api/purchases/returns', { method: 'POST', body: JSON.stringify(data) });
+  },
 };
 
 export type ProductCategory = {
@@ -457,3 +532,117 @@ export type StockMovementListResult = {
   pageSize: number;
   totalPages: number;
 };
+
+export type PurchasePaymentMethod = 'CASH' | 'CARD' | 'EASYPAISA' | 'JAZZCASH' | 'BANK_TRANSFER';
+
+export type Supplier = {
+  id: number;
+  name: string;
+  phone: string;
+  address: string | null;
+  openingBalance: number;
+  notes: string | null;
+  isActive: boolean;
+  accountId: number | null;
+  payable: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SupplierDetail = {
+  supplier: Supplier;
+  purchases: Array<{
+    id: number;
+    date: string;
+    totalAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    paymentMethod: PurchasePaymentMethod;
+    status: string;
+  }>;
+  payments: Array<{
+    id: number;
+    amount: number;
+    paymentMethod: PurchasePaymentMethod;
+    date: string;
+    note: string | null;
+  }>;
+};
+
+export type CreatePurchaseInput = {
+  supplierId: number;
+  date: string;
+  supplierInvoiceNumber?: string | null;
+  items: Array<{
+    productId: number;
+    variantId?: number | null;
+    quantity: number;
+    purchasePrice: number;
+    discount?: number;
+  }>;
+  paidAmount: number;
+  paymentMethod: PurchasePaymentMethod;
+  notes?: string | null;
+};
+
+export type Purchase = {
+  id: number;
+  supplierId: number;
+  supplier: { id: number; name: string; phone?: string };
+  date: string;
+  supplierInvoiceNumber: string | null;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentMethod: PurchasePaymentMethod;
+  notes: string | null;
+  status: string;
+  createdAt: string;
+  items: Array<{
+    id: number;
+    productId: number;
+    variantId: number | null;
+    quantity: number;
+    purchasePrice: number;
+    discount: number;
+    lineTotal: number;
+    product: { id: number; name: string; productCode: string };
+    variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
+  }>;
+  confirmation?: {
+    stockUpdated: boolean;
+    totalAmount: number;
+    paidAmount: number;
+    addedToSupplierBalance: number;
+    message: string;
+  };
+};
+
+export type PurchaseListResult = {
+  items: Array<{
+    id: number;
+    supplierId: number;
+    supplier: { id: number; name: string };
+    date: string;
+    totalAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    paymentMethod: PurchasePaymentMethod;
+    status: string;
+  }>;
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export type SupplierPaymentResult = {
+  id: number;
+  supplierId: number;
+  amount: number;
+  paymentMethod: PurchasePaymentMethod;
+  date: string;
+  note: string | null;
+  confirmation: { message: string; remainingPayable: number };
+};
+

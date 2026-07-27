@@ -433,7 +433,9 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
     data.salePrice = input.salePrice;
   }
   if (input.lowStockLimit !== undefined) data.lowStockLimit = input.lowStockLimit;
-  if (input.supplierId !== undefined) data.supplierId = input.supplierId;
+  if (input.supplierId !== undefined) {
+    data.supplier = input.supplierId ? { connect: { id: input.supplierId } } : { disconnect: true };
+  }
   if (input.imagePath !== undefined) data.imagePath = input.imagePath?.trim() || null;
   if (input.notes !== undefined) data.notes = input.notes?.trim() || null;
 
