@@ -4,6 +4,7 @@ import {
   bootstrapChartOfAccounts,
   fiscalYearLabelForDate,
 } from '../src/modules/accounting/accounting.service';
+import { ensureBusinessSettings } from '../src/modules/settings/settings.service';
 
 const prisma = new PrismaClient();
 
@@ -46,6 +47,9 @@ async function main() {
 
   await bootstrapChartOfAccounts();
   console.log('Chart of accounts bootstrapped.');
+
+  await ensureBusinessSettings();
+  console.log('Business settings ensured.');
 }
 
 main()

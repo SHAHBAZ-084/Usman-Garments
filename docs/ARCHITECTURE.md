@@ -1,6 +1,6 @@
 # USMAN MALL — Architecture
 
-Offline Windows desktop app for a single garment shop (Usman Mall). Stack today still uses the package name **Usman Garments**; branding rename is Phase 2.
+Offline Windows desktop app for a single garment shop (**Usman Mall**). Internal npm package names may still use the historical `usman-garments` identifier; user-facing brand text is Usman Mall.
 
 ## Current stack
 

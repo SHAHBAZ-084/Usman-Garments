@@ -8,6 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, type User } from '../lib/api';
+import { useTheme } from './ThemeContext';
 
 type AuthContextValue = {
   user: User | null;
@@ -21,19 +22,27 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const { refreshThemeFromServer } = useTheme();
 
   useEffect(() => {
     api
       .me()
-      .then(({ user: currentUser }) => setUser(currentUser))
+      .then(async ({ user: currentUser }) => {
+        setUser(currentUser);
+        await refreshThemeFromServer();
+      })
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshThemeFromServer]);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const { user: loggedInUser } = await api.login(username, password);
-    setUser(loggedInUser);
-  }, []);
+  const login = useCallback(
+    async (username: string, password: string) => {
+      const { user: loggedInUser } = await api.login(username, password);
+      setUser(loggedInUser);
+      await refreshThemeFromServer();
+    },
+    [refreshThemeFromServer],
+  );
 
   const logout = useCallback(async () => {
     await api.logout();

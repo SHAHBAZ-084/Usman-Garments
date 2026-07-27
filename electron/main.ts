@@ -25,9 +25,9 @@ function createWindow(): void {
     height: 800,
     minWidth: 1024,
     minHeight: 700,
-    title: 'Usman Garments',
+    title: 'Usman Mall',
     show: false,
-    backgroundColor: '#f4f5f7',
+    backgroundColor: '#F7F7F7',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,

@@ -38,6 +38,17 @@ enum FinancialYearStatus {
   CLOSED
 }
 
+enum ReceiptSize {
+  THERMAL_58
+  THERMAL_80
+  A4
+}
+
+enum ThemeMode {
+  LIGHT
+  DARK
+}
+
 model User {
   id           Int      @id @default(autoincrement())
   username     String   @unique
@@ -178,4 +189,29 @@ model TrialBalanceApproval {
   createdAt    DateTime @default(now())
 
   approvedBy User @relation(fields: [approvedById], references: [id])
+}
+
+/// Singleton shop settings (always id = 1). Never create a second row.
+model BusinessSettings {
+  id                Int         @id @default(1)
+  businessName      String      @default("Usman Mall")
+  tagline           String      @default("Quality Clothes, Your Style")
+  ownerName         String      @default("")
+  phone             String      @default("0300-6195469")
+  whatsapp          String      @default("0300-6195469")
+  address           String      @default("Al-Nisa Road, Chishtian")
+  invoiceFooter     String      @default("Thank you for shopping at Usman Mall")
+  returnPolicy      String      @default("Returns accepted within 7 days with original receipt. Items must be unused and in original condition.")
+  invoicePrefix     String      @default("UM-")
+  currency          String      @default("PKR")
+  receiptSize       ReceiptSize @default(THERMAL_80)
+  a4InvoiceEnabled  Boolean     @default(true)
+  printerName       String?
+  barcodeLabelSize  String      @default("50x30")
+  lowStockLimit     Int         @default(5)
+  backupFolderPath  String      @default("")
+  themeMode         ThemeMode   @default(LIGHT)
+  logoPath          String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 }

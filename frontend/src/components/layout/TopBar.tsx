@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { TOP_NAV, NavItem } from '../../config/navigation';
+import { api } from '../../lib/api';
 import { voucherTypeColorClass } from '../../lib/format';
 
 function voucherNavLabelClass(label: string) {
@@ -89,12 +90,35 @@ function NavDropdown({ label, children }: { label: string; children: NavItem[] }
 
 export function TopBar() {
   const location = useLocation();
+  const [businessName, setBusinessName] = useState('Usman Mall');
+
+  useEffect(() => {
+    let cancelled = false;
+    function loadName() {
+      api
+        .getSettings()
+        .then((settings) => {
+          if (!cancelled && settings.businessName?.trim()) {
+            setBusinessName(settings.businessName.trim());
+          }
+        })
+        .catch(() => {
+          /* keep fallback */
+        });
+    }
+    loadName();
+    window.addEventListener('usman-mall-settings-updated', loadName);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('usman-mall-settings-updated', loadName);
+    };
+  }, []);
 
   return (
     <header className="app-topnav sticky top-0 isolate shadow-md">
       <div className="flex min-h-12 items-center gap-1 px-4">
         <Link to="/" className="app-topnav-brand mr-2 shrink-0 pr-2 text-sm">
-          Usman Garments
+          {businessName}
         </Link>
         <nav className="flex flex-1 flex-wrap items-center gap-1">
           {TOP_NAV.map((group) =>

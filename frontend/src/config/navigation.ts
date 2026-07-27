@@ -64,7 +64,7 @@ export const TOP_NAV: NavGroup[] = [
   },
   {
     label: 'System',
-    children: [{ kind: 'link', label: 'System Preference', to: '/system/preferences' }],
+    children: [{ kind: 'link', label: 'Settings', to: '/system/settings' }],
   },
   {
     label: 'User',

@@ -6,15 +6,15 @@
 
 @layer base {
   html {
-    background-color: var(--surface-3, #f4f5f7);
-    color: var(--text-primary, #1c2838);
+    background-color: var(--surface-3, #f7f7f7);
+    color: var(--text-primary, #111111);
   }
 
   body {
     margin: 0;
     min-height: 100vh;
-    background-color: var(--surface-3, #f4f5f7);
-    color: var(--text-primary, #1c2838);
+    background-color: var(--surface-3, #f7f7f7);
+    color: var(--text-primary, #111111);
     font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
@@ -27,9 +27,9 @@
   .app-topnav {
     position: relative;
     z-index: 100;
-    background-color: var(--nav-bg, #0c2340);
-    border-bottom: 1px solid var(--nav-border, #071829);
-    color: var(--nav-text, #e8edf4);
+    background-color: var(--nav-bg, #111111);
+    border-bottom: 1px solid var(--nav-border, #000000);
+    color: var(--nav-text, #f0f0f0);
   }
 
   .app-dropdown {
@@ -52,8 +52,8 @@
   }
 
   .app-dropdown-item:hover {
-    background-color: var(--bg-accent, #e6f1fb);
-    color: var(--text-accent, #0c447c);
+    background-color: var(--bg-accent, #f8f1dc);
+    color: var(--text-accent, #8a6a10);
   }
 
   .app-topnav-brand {
@@ -82,22 +82,22 @@
     transition: background-color 0.15s, color 0.15s;
   }
 
-  .app-topnav-link:hover,
-  .app-topnav-link.is-active {
-    background-color: var(--nav-hover-bg, rgba(255, 255, 255, 0.12));
+  .app-topnav-link:hover {
+    background-color: var(--nav-hover-bg, rgba(201, 150, 24, 0.18));
     color: var(--nav-text-hover, #ffffff);
   }
 
+  .app-topnav-link.is-active,
   .app-topnav-link.is-open {
-    background-color: var(--nav-active-bg, rgba(255, 255, 255, 0.18));
-    color: var(--nav-text-hover, #ffffff);
+    background-color: var(--nav-active-bg, #c99618);
+    color: var(--nav-active-text, #111111);
   }
 
-  /* Informational / general actions — not voucher-invoice post */
+  /* Primary actions — gold */
   .btn-primary {
     border-radius: 0.5rem;
-    background-color: var(--fill-accent, #378add);
-    color: var(--on-accent, #ffffff);
+    background-color: var(--fill-accent, #c99618);
+    color: var(--on-accent, #111111);
     padding: 0.5rem 1rem;
     font-size: 0.875rem;
     font-weight: 500;

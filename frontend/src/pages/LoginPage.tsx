@@ -31,11 +31,11 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface3 px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface2 p-8 shadow-xl">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full app-topnav text-2xl text-white">
-            U
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full app-topnav text-xl font-semibold text-white">
+            UM
           </div>
-          <h1 className="text-2xl font-semibold text-textPrimary">Usman Garments</h1>
-          <p className="mt-2 text-sm text-textMuted">Sign in to continue</p>
+          <h1 className="text-2xl font-semibold text-textPrimary">Usman Mall</h1>
+          <p className="mt-2 text-sm text-textMuted">Quality Clothes, Your Style</p>
         </div>
 
         <form className="space-y-4" onSubmit={handleSubmit}>

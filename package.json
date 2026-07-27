@@ -2,7 +2,7 @@
   "name": "usman-garments",
   "version": "0.1.0",
   "private": true,
-  "description": "Offline desktop accounting for Usman Garments — Electron + React + Express + SQLite",
+  "description": "Offline desktop app for Usman Mall — Electron + React + Express + SQLite",
   "main": "dist-electron/main.js",
   "scripts": {
     "setup": "node scripts/setup.js",

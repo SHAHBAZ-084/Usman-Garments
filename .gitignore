@@ -3,7 +3,9 @@ dist/
 dist-electron/
 *.db
 *.db-journal
+*.backup-*.db
 .env
 .env.local
 .DS_Store
 Thumbs.db
+backend/prisma/data/uploads/

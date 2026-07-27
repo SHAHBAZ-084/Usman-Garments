@@ -1,6 +1,6 @@
-# Usman Garments
+# Usman Mall
 
-Offline desktop accounting app for Usman Garments.
+Offline desktop accounting and shop management app for **Usman Mall**.
 
 ## Stack
 
@@ -19,7 +19,7 @@ npm run setup
 npm run dev
 ```
 
-`npm run setup` copies `backend/.env.example` → `backend/.env` if missing, creates the SQLite data directory, applies Prisma migrations, and seeds the default admin user. Do not commit `backend/.env`.
+`npm run setup` copies `backend/.env.example` → `backend/.env` if missing, creates the SQLite data directory, applies Prisma migrations, and seeds the default admin user plus business settings. Do not commit `backend/.env`.
 
 Default login (change after first use):
 
@@ -56,3 +56,5 @@ Double-entry accounting under `/api/accounting/*`:
 - Payment, receipt, and journal vouchers
 - Ledger, trial balance, and financial years
 - Default categories on first run: **Bank** and **Cash** (with Cash in Hand account)
+
+Business settings (name, logo, invoice options, theme) live under `/api/settings`.

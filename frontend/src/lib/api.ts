@@ -4,6 +4,31 @@ export type User = {
   displayName: string;
 };
 
+export type BusinessSettings = {
+  id: number;
+  businessName: string;
+  tagline: string;
+  ownerName: string;
+  phone: string;
+  whatsapp: string;
+  address: string;
+  invoiceFooter: string;
+  returnPolicy: string;
+  invoicePrefix: string;
+  currency: string;
+  receiptSize: 'THERMAL_58' | 'THERMAL_80' | 'A4';
+  a4InvoiceEnabled: boolean;
+  printerName: string | null;
+  barcodeLabelSize: string;
+  lowStockLimit: number;
+  backupFolderPath: string;
+  themeMode: 'light' | 'dark';
+  logoPath: string | null;
+  logoUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type AccountCategory = {
   id: number;
   name: string;
@@ -80,6 +105,29 @@ export const api = {
   },
   me() {
     return request<{ user: User }>('/api/auth/me');
+  },
+
+  getSettings() {
+    return request<BusinessSettings>('/api/settings');
+  },
+  updateSettings(data: Partial<BusinessSettings> & { themeMode?: 'light' | 'dark' }) {
+    return request<BusinessSettings>('/api/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  uploadLogo(file: File) {
+    const body = new FormData();
+    body.append('logo', file);
+    return fetch('/api/settings/logo', {
+      method: 'POST',
+      body,
+      credentials: 'include',
+    }).then(async (response) => {
+      const data = (await response.json().catch(() => ({}))) as BusinessSettings & { error?: string };
+      if (!response.ok) throw new Error(data.error ?? 'Logo upload failed');
+      return data as BusinessSettings;
+    });
   },
 
   listCategories() {

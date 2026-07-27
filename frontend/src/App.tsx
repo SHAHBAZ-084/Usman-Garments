@@ -8,7 +8,7 @@ import { CategoryManagePage } from './pages/accounts/CategoryManagePage';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { AccountReportsPage, AccountBalancePage, TrialBalancePage, VouchersReportPage } from './pages/reports/ReportPages';
-import { SystemPreferencesPage } from './pages/system/SystemPreferencesPage';
+import { SettingsPage } from './pages/system/SettingsPage';
 import { UserInfoPage } from './pages/user/UserInfoPage';
 import { VoucherFormPage, VoucherListPage } from './pages/vouchers/VoucherPages';
 
@@ -40,7 +40,8 @@ export default function App() {
               <Route path="/reports/vouchers" element={<VouchersReportPage />} />
               <Route path="/reports/trial-balance" element={<TrialBalancePage />} />
 
-              <Route path="/system/preferences" element={<SystemPreferencesPage />} />
+              <Route path="/system/settings" element={<SettingsPage />} />
+              <Route path="/system/preferences" element={<Navigate to="/system/settings" replace />} />
               <Route path="/user" element={<UserInfoPage />} />
             </Route>
           </Route>
