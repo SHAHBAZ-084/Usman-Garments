@@ -20,6 +20,16 @@ const VOUCHER_TYPE_LABELS: Record<string, string> = {
   JOURNAL: 'Journal',
   KACHI: 'Kachi',
   PURCHASE_MAAL: 'Purchase Maal',
+  SALE: 'Sale',
+  SALE_RETURN: 'Sale Return',
+  PURCHASE: 'Purchase',
+  PURCHASE_RETURN: 'Purchase Return',
+  EXCHANGE: 'Exchange',
+  CUSTOMER_PAYMENT: 'Customer Payment',
+  SUPPLIER_PAYMENT: 'Supplier Payment',
+  EXPENSE: 'Expense',
+  OTHER_INCOME: 'Other Income',
+  ADJUSTMENT: 'Adjustment',
 };
 
 export function formatVoucherTypeLabel(type: string) {

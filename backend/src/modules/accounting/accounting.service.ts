@@ -251,7 +251,7 @@ async function validateVoucherCreate(
     throw new AppError(400, 'Amount must be greater than zero');
   }
 
-  if (data.type === 'KACHI' || data.type === 'PURCHASE_MAAL') {
+  if (isMultiLegVoucherType(data.type)) {
     throw new AppError(400, 'Invoice vouchers are created via invoice posting');
   }
 
@@ -329,6 +329,30 @@ export const SERVICE_REVENUE_ACCOUNT_NAME = 'Service Revenue';
 export const INVENTORY_CATEGORY_NAME = 'Inventory';
 export const INVENTORY_ACCOUNT_NAME = 'Inventory';
 export const CASH_IN_HAND_ACCOUNT_NAME = 'Cash in Hand';
+export const COGS_ACCOUNT_NAME = 'Cost of Goods Sold';
+export const SALES_RETURN_ACCOUNT_NAME = 'Sales Return';
+export const PURCHASE_RETURN_ACCOUNT_NAME = 'Purchase Return';
+export const EXPENSES_CATEGORY_NAME = 'Expenses';
+
+/** Voucher types that use multi-leg posting (not the standard debit/credit pair API). */
+export const MULTI_LEG_VOUCHER_TYPES: VoucherType[] = [
+  VoucherType.KACHI,
+  VoucherType.PURCHASE_MAAL,
+  VoucherType.SALE,
+  VoucherType.SALE_RETURN,
+  VoucherType.PURCHASE,
+  VoucherType.PURCHASE_RETURN,
+  VoucherType.EXCHANGE,
+  VoucherType.CUSTOMER_PAYMENT,
+  VoucherType.SUPPLIER_PAYMENT,
+  VoucherType.EXPENSE,
+  VoucherType.OTHER_INCOME,
+  VoucherType.ADJUSTMENT,
+];
+
+export function isMultiLegVoucherType(type: VoucherType): boolean {
+  return MULTI_LEG_VOUCHER_TYPES.includes(type);
+}
 
 export const DEFAULT_CATEGORY_NAMES = ['Bank', 'Cash'] as const;
 
@@ -780,6 +804,16 @@ function voucherTypeLabel(
       : type === 'RECEIPT' ? 'Receipt'
         : type === 'KACHI' ? 'Kachi'
           : type === 'PURCHASE_MAAL' ? 'Purchase Maal'
+          : type === 'SALE' ? 'Sale'
+          : type === 'SALE_RETURN' ? 'Sale Return'
+          : type === 'PURCHASE' ? 'Purchase'
+          : type === 'PURCHASE_RETURN' ? 'Purchase Return'
+          : type === 'EXCHANGE' ? 'Exchange'
+          : type === 'CUSTOMER_PAYMENT' ? 'Customer Payment'
+          : type === 'SUPPLIER_PAYMENT' ? 'Supplier Payment'
+          : type === 'EXPENSE' ? 'Expense'
+          : type === 'OTHER_INCOME' ? 'Other Income'
+          : type === 'ADJUSTMENT' ? 'Adjustment'
           : 'Journal';
   return isReversal ? `${base} (Reversal)` : base;
 }
@@ -867,7 +901,7 @@ async function nextVoucherNumber(
 async function nextMultiLegVoucherNumber(
   tx: Prisma.TransactionClient,
   financialYearId: number,
-  type: Extract<VoucherType, 'KACHI' | 'PURCHASE_MAAL'>,
+  type: VoucherType,
 ): Promise<number> {
   const { _max } = await tx.voucher.aggregate({
     where: { financialYearId, type },
@@ -1211,6 +1245,79 @@ async function ensureDefaultAccountInTx(
   return account;
 }
 
+/**
+ * Idempotent ensure for a named account under a named category.
+ * Reuses existing account by name when present; creates category + ledger as needed.
+ */
+export async function ensureSystemAccount(
+  tx: Prisma.TransactionClient,
+  categoryName: string,
+  accountName: string,
+  type: AccountType,
+  preferredCode?: string,
+) {
+  const category = await ensureCategoryInTx(tx, categoryName);
+  return ensureDefaultAccountInTx(tx, category.id, accountName, type, preferredCode);
+}
+
+/**
+ * Bootstrap retail chart accounts used by future POS/purchase/return posting.
+ * Idempotent — safe to call repeatedly. Does not create per-customer/supplier ledgers.
+ */
+export async function ensureRetailSystemAccounts(tx: Prisma.TransactionClient) {
+  await ensureCustomersCategoryInTx(tx);
+  await ensureSuppliersCategoryInTx(tx);
+
+  const saleRevenue = await ensureSaleRevenueAccount(tx);
+  const inventory = await ensureInventoryAccount(tx);
+  const cashCategory = await ensureCategoryInTx(tx, 'Cash');
+  const cashInHand = await ensureDefaultAccountInTx(
+    tx,
+    cashCategory.id,
+    CASH_IN_HAND_ACCOUNT_NAME,
+    AccountType.ASSET,
+    '1',
+  );
+  const cogs = await ensureSystemAccount(
+    tx,
+    EXPENSES_CATEGORY_NAME,
+    COGS_ACCOUNT_NAME,
+    AccountType.EXPENSE,
+    'COGS',
+  );
+  const salesReturn = await ensureSystemAccount(
+    tx,
+    INCOME_CATEGORY_NAME,
+    SALES_RETURN_ACCOUNT_NAME,
+    AccountType.REVENUE,
+    'SRET',
+  );
+  const purchaseReturn = await ensureSystemAccount(
+    tx,
+    EXPENSES_CATEGORY_NAME,
+    PURCHASE_RETURN_ACCOUNT_NAME,
+    AccountType.EXPENSE,
+    'PRET',
+  );
+
+  return {
+    saleRevenue,
+    inventory,
+    cashInHand,
+    cogs,
+    salesReturn,
+    purchaseReturn,
+  };
+}
+
+async function ensureCustomersCategoryInTx(tx: Prisma.TransactionClient) {
+  return ensureCategoryInTx(tx, CUSTOMERS_CATEGORY_NAME);
+}
+
+async function ensureSuppliersCategoryInTx(tx: Prisma.TransactionClient) {
+  return ensureCategoryInTx(tx, SUPPLIERS_CATEGORY_NAME);
+}
+
 async function consolidateDuplicateInventoryCategories(tx: Prisma.TransactionClient) {
   const categories = await tx.accountCategory.findMany({
     where: { isActive: true,
@@ -1423,17 +1530,32 @@ async function postMultiLegVoucherEntries(
 export async function createMultiLegVoucherInTx(
   tx: Prisma.TransactionClient,
   data: {
-    type: Extract<VoucherType, 'KACHI' | 'PURCHASE_MAAL'>;
+    type: VoucherType;
     legs: VoucherLeg[];
     amount: number;
     date: Date | string;
     description: string;
-    reference: string;
+    /** Legacy reference string; if omitted and sourceRef is set, sourceRef is copied here. */
+    reference?: string;
+    /** Business document kind, e.g. SALE / PURCHASE — required with sourceRef for idempotent posting. */
+    sourceType?: string;
+    /** Business document key within sourceType. */
+    sourceRef?: string;
     createdById: number;
   },
 ) {
+  if (!isMultiLegVoucherType(data.type)) {
+    throw new AppError(400, `Voucher type ${data.type} is not a multi-leg posting type`);
+  }
+
   if (data.legs.length < 2) {
     throw new AppError(400, 'Multi-leg voucher requires at least two ledger legs');
+  }
+
+  for (const leg of data.legs) {
+    if (!(leg.amount > 0)) {
+      throw new AppError(400, 'Each voucher leg amount must be greater than zero');
+    }
   }
 
   const totalDebits = roundMoney(
@@ -1448,12 +1570,36 @@ export async function createMultiLegVoucherInTx(
   );
 
   if (Math.abs(totalDebits - totalCredits) > 0.01) {
-    throw new AppError(500, 'Multi-leg voucher debits and credits do not balance');
+    throw new AppError(400, 'Multi-leg voucher debits and credits do not balance');
   }
 
-  const trimmedReference = data.reference.trim();
+  const sourceType = data.sourceType?.trim() || null;
+  const sourceRef = data.sourceRef?.trim() || null;
+  if ((sourceType && !sourceRef) || (!sourceType && sourceRef)) {
+    throw new AppError(400, 'sourceType and sourceRef must be provided together');
+  }
+
+  const trimmedReference = (data.reference?.trim() || sourceRef || '').trim();
   if (!trimmedReference) {
     throw new AppError(400, 'Reference is required');
+  }
+
+  if (sourceType && sourceRef) {
+    const existing = await tx.voucher.findFirst({
+      where: {
+        sourceType,
+        sourceRef,
+        type: data.type,
+        status: VoucherStatus.ACTIVE,
+      },
+      select: { id: true, number: true },
+    });
+    if (existing) {
+      throw new AppError(
+        409,
+        `Duplicate posting blocked: active ${data.type} already exists for ${sourceType}/${sourceRef}`,
+      );
+    }
   }
 
   let voucherDate: Date;
@@ -1476,6 +1622,8 @@ export async function createMultiLegVoucherInTx(
       amount: data.amount,
       description: data.description,
       reference: trimmedReference,
+      sourceType,
+      sourceRef,
       createdById: data.createdById,
       financialYearId,
       status: VoucherStatus.ACTIVE,
@@ -1833,13 +1981,48 @@ export async function cancelActiveVouchersByReferenceInTx(
   if (!trimmed) return;
 
   const vouchers = await tx.voucher.findMany({
-    where: { reference: trimmed, status: VoucherStatus.ACTIVE },
+    where: {
+      status: VoucherStatus.ACTIVE,
+      OR: [{ reference: trimmed }, { sourceRef: trimmed }],
+    },
     orderBy: { id: 'asc' },
   });
 
   for (const voucher of vouchers) {
     await cancelVoucherInTx(tx, voucher.id, userId);
   }
+}
+
+/**
+ * Cancel all ACTIVE vouchers linked to one business posting group.
+ * Prefer this over reference-only cancel for retail modules.
+ */
+export async function cancelActiveVouchersBySourceInTx(
+  tx: Prisma.TransactionClient,
+  sourceType: string,
+  sourceRef: string,
+  userId: number,
+) {
+  const type = sourceType.trim();
+  const ref = sourceRef.trim();
+  if (!type || !ref) {
+    throw new AppError(400, 'sourceType and sourceRef are required to cancel by source');
+  }
+
+  const vouchers = await tx.voucher.findMany({
+    where: {
+      status: VoucherStatus.ACTIVE,
+      sourceType: type,
+      sourceRef: ref,
+    },
+    orderBy: { id: 'asc' },
+  });
+
+  for (const voucher of vouchers) {
+    await cancelVoucherInTx(tx, voucher.id, userId);
+  }
+
+  return vouchers.length;
 }
 
 /** @deprecated Use cancelVoucher — kept for route compatibility */

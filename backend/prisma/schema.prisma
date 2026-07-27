@@ -13,6 +13,16 @@ enum VoucherType {
   JOURNAL
   KACHI
   PURCHASE_MAAL
+  SALE
+  SALE_RETURN
+  PURCHASE
+  PURCHASE_RETURN
+  EXCHANGE
+  CUSTOMER_PAYMENT
+  SUPPLIER_PAYMENT
+  EXPENSE
+  OTHER_INCOME
+  ADJUSTMENT
 }
 
 enum VoucherStatus {
@@ -127,7 +137,12 @@ model Voucher {
   creditAccountId   Int?
   amount            Decimal
   description       String?
+  /// Legacy free-text reference (kept for Payment/Receipt/Journal and older multi-leg vouchers).
   reference         String?
+  /// Business document kind for linked posting groups, e.g. SALE, PURCHASE, CUSTOMER_PAYMENT.
+  sourceType        String?
+  /// Business document id/key within sourceType, e.g. invoice id or "TEST-SALE-1".
+  sourceRef         String?
   status            VoucherStatus @default(ACTIVE)
   createdById       Int
   modifiedById      Int?
@@ -150,6 +165,8 @@ model Voucher {
   @@index([date])
   @@index([createdAt])
   @@index([status])
+  @@index([sourceType, sourceRef])
+  @@index([reference])
 }
 
 model FinancialYear {
