@@ -208,6 +208,97 @@ model TrialBalanceApproval {
   approvedBy User @relation(fields: [approvedById], references: [id])
 }
 
+enum StockMovementType {
+  OPENING
+  PURCHASE
+  SALE
+  SALE_RETURN
+  PURCHASE_RETURN
+  EXCHANGE
+  MANUAL_ADD
+  MANUAL_REDUCE
+  DAMAGED
+  CORRECTION
+  CANCELLATION
+}
+
+/// Lightweight product grouping (separate from accounting AccountCategory).
+model ProductCategory {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  products Product[]
+}
+
+model Product {
+  id            Int      @id @default(autoincrement())
+  name          String
+  sku           String   @unique
+  barcode       String?  @unique
+  categoryId    Int?
+  brand         String?
+  purchasePrice Decimal
+  salePrice     Decimal
+  currentStock  Int      @default(0)
+  lowStockLimit Int?
+  /// Placeholder for Phase 5 Supplier FK — no relation yet.
+  supplierId    Int?
+  imagePath     String?
+  notes         String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  category       ProductCategory? @relation(fields: [categoryId], references: [id])
+  variants       ProductVariant[]
+  stockMovements StockMovement[]
+
+  @@index([name])
+  @@index([isActive])
+  @@index([categoryId])
+}
+
+model ProductVariant {
+  id            Int      @id @default(autoincrement())
+  productId     Int
+  size          String?
+  colour        String?
+  sku           String   @unique
+  barcode       String?  @unique
+  purchasePrice Decimal?
+  salePrice     Decimal?
+  currentStock  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stockMovements StockMovement[]
+
+  @@index([productId])
+}
+
+model StockMovement {
+  id         Int               @id @default(autoincrement())
+  productId  Int
+  variantId  Int?
+  type       StockMovementType
+  quantity   Int
+  note       String?
+  sourceType String?
+  sourceRef  String?
+  createdAt  DateTime          @default(now())
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([variantId])
+  @@index([createdAt])
+  @@index([sourceType, sourceRef])
+}
+
 /// Singleton shop settings (always id = 1). Never create a second row.
 model BusinessSettings {
   id                Int         @id @default(1)

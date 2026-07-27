@@ -10,6 +10,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { AccountReportsPage, AccountBalancePage, TrialBalancePage, VouchersReportPage } from './pages/reports/ReportPages';
 import { SettingsPage } from './pages/system/SettingsPage';
 import { UserInfoPage } from './pages/user/UserInfoPage';
+import { ProductFormPage, ProductsListPage } from './pages/products/ProductPages';
 import { VoucherFormPage, VoucherListPage } from './pages/vouchers/VoucherPages';
 
 export default function App() {
@@ -22,6 +23,10 @@ export default function App() {
           <Route element={<ProtectedRoute />}>
             <Route element={<AppShell />}>
               <Route path="/" element={<DashboardPage />} />
+
+              <Route path="/products" element={<ProductsListPage />} />
+              <Route path="/products/add" element={<ProductFormPage mode="add" />} />
+              <Route path="/products/:id" element={<ProductFormPage mode="edit" />} />
 
               <Route path="/accounts/categories/add" element={<CategoryManagePage mode="add" />} />
               <Route path="/accounts/categories/edit" element={<CategoryManagePage mode="edit" />} />

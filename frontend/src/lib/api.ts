@@ -285,4 +285,169 @@ export const api = {
       totalCredit: number;
     }>(`/api/accounting/reports/account-balance?${query.toString()}`);
   },
+
+  listProductCategories() {
+    return request<ProductCategory[]>('/api/products/categories');
+  },
+  createProductCategory(name: string) {
+    return request<ProductCategory>('/api/products/categories', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+  listProducts(params?: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    categoryId?: number;
+    activeOnly?: boolean;
+  }) {
+    const query = new URLSearchParams();
+    if (params?.page != null) query.set('page', String(params.page));
+    if (params?.pageSize != null) query.set('pageSize', String(params.pageSize));
+    if (params?.search) query.set('search', params.search);
+    if (params?.categoryId != null) query.set('categoryId', String(params.categoryId));
+    if (params?.activeOnly === false) query.set('activeOnly', 'false');
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<ProductListResult>(`/api/products${suffix}`);
+  },
+  getProduct(id: number) {
+    return request<Product>(`/api/products/${id}`);
+  },
+  createProduct(data: CreateProductInput) {
+    return request<Product>('/api/products', { method: 'POST', body: JSON.stringify(data) });
+  },
+  updateProduct(id: number, data: Partial<CreateProductInput>) {
+    return request<Product>(`/api/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  deactivateProduct(id: number) {
+    return request<{ id: number; isActive: boolean }>(`/api/products/${id}`, { method: 'DELETE' });
+  },
+  createProductVariant(productId: number, data: ProductVariantInput) {
+    return request<ProductVariant>(`/api/products/${productId}/variants`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  updateProductVariant(productId: number, variantId: number, data: Partial<ProductVariantInput>) {
+    return request<ProductVariant>(`/api/products/${productId}/variants/${variantId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  adjustProductStock(
+    productId: number,
+    data: { variantId?: number; quantity: number; direction: 'add' | 'reduce'; note?: string },
+  ) {
+    return request<{ movement: StockMovement; newStock: number }>(
+      `/api/products/${productId}/stock-adjust`,
+      { method: 'POST', body: JSON.stringify(data) },
+    );
+  },
+  listStockMovements(
+    productId: number,
+    params?: { variantId?: number; page?: number; pageSize?: number },
+  ) {
+    const query = new URLSearchParams();
+    if (params?.variantId != null) query.set('variantId', String(params.variantId));
+    if (params?.page != null) query.set('page', String(params.page));
+    if (params?.pageSize != null) query.set('pageSize', String(params.pageSize));
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<StockMovementListResult>(`/api/products/${productId}/stock-movements${suffix}`);
+  },
+};
+
+export type ProductCategory = {
+  id: number;
+  name: string;
+  isActive: boolean;
+};
+
+export type ProductVariant = {
+  id: number;
+  size: string | null;
+  colour: string | null;
+  sku: string;
+  barcode: string | null;
+  purchasePrice: number | null;
+  salePrice: number | null;
+  currentStock: number;
+};
+
+export type Product = {
+  id: number;
+  name: string;
+  sku: string;
+  barcode: string | null;
+  categoryId: number | null;
+  brand: string | null;
+  purchasePrice: number;
+  salePrice: number;
+  currentStock: number;
+  lowStockLimit: number | null;
+  effectiveLowStockLimit: number;
+  isLowStock: boolean;
+  supplierId: number | null;
+  imagePath: string | null;
+  notes: string | null;
+  isActive: boolean;
+  category?: ProductCategory | null;
+  variants?: ProductVariant[];
+};
+
+export type ProductListResult = {
+  items: Product[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  defaultLowStockLimit: number;
+};
+
+export type ProductVariantInput = {
+  size?: string | null;
+  colour?: string | null;
+  sku: string;
+  barcode?: string | null;
+  purchasePrice?: number | null;
+  salePrice?: number | null;
+  currentStock?: number;
+  openingStock?: number;
+};
+
+export type CreateProductInput = {
+  name: string;
+  sku: string;
+  barcode?: string | null;
+  categoryId?: number | null;
+  brand?: string | null;
+  purchasePrice: number;
+  salePrice: number;
+  lowStockLimit?: number | null;
+  supplierId?: number | null;
+  imagePath?: string | null;
+  notes?: string | null;
+  variants?: ProductVariantInput[];
+  openingStock?: number;
+};
+
+export type StockMovement = {
+  id: number;
+  productId: number;
+  variantId: number | null;
+  type: string;
+  quantity: number;
+  note: string | null;
+  sourceType: string | null;
+  sourceRef: string | null;
+  createdAt: string;
+  variant?: { id: number; size: string | null; colour: string | null; sku: string } | null;
+};
+
+export type StockMovementListResult = {
+  items: StockMovement[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
 };

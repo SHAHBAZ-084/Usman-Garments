@@ -59,3 +59,25 @@ export function voucherTypeColorClass(type: string) {
   if (key.includes('JOURNAL')) return 'text-voucherJournal';
   return 'text-textSecondary';
 }
+
+const STOCK_MOVEMENT_LABELS: Record<string, string> = {
+  OPENING: 'Opening',
+  PURCHASE: 'Purchase',
+  SALE: 'Sale',
+  SALE_RETURN: 'Sale Return',
+  PURCHASE_RETURN: 'Purchase Return',
+  EXCHANGE: 'Exchange',
+  MANUAL_ADD: 'Manual Add',
+  MANUAL_REDUCE: 'Manual Reduce',
+  DAMAGED: 'Damaged',
+  CORRECTION: 'Correction',
+  CANCELLATION: 'Cancellation',
+};
+
+export function formatStockMovementType(type: string) {
+  return STOCK_MOVEMENT_LABELS[type.toUpperCase()] ?? type;
+}
+
+export function formatMoney(amount: number | string) {
+  return Number(amount).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}

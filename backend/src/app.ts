@@ -8,6 +8,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './modules/auth/auth.routes';
 import { accountingRouter } from './modules/accounting/accounting.routes';
 import { settingsRouter } from './modules/settings/settings.routes';
+import { productsRouter } from './modules/products/products.routes';
 import { getUploadsDir } from './modules/settings/settings.service';
 
 declare module 'express-session' {
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/accounting', accountingRouter);
   app.use('/api/settings', settingsRouter);
+  app.use('/api/products', productsRouter);
 
   if (env.isProduction) {
     const frontendDist = path.resolve(__dirname, '../../frontend/dist');
