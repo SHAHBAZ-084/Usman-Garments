@@ -526,6 +526,19 @@ export const api = {
   cancelSale(id: number) {
     return request<Invoice>(`/api/sales/${id}/cancel`, { method: 'POST' });
   },
+
+  lookupInvoiceForReturn(invoiceNumber: string) {
+    return request<InvoiceForReturn>(`/api/sales/invoice-lookup/${encodeURIComponent(invoiceNumber)}`);
+  },
+  createSaleReturn(data: CreateSaleReturnInput) {
+    return request<SaleReturn>('/api/sales/returns', { method: 'POST', body: JSON.stringify(data) });
+  },
+  createExchange(data: CreateExchangeInput) {
+    return request<ExchangeResult>('/api/sales/exchanges', { method: 'POST', body: JSON.stringify(data) });
+  },
+  getSaleReturn(id: number) {
+    return request<SaleReturn>(`/api/sales/returns/${id}`);
+  },
 };
 
 export type ProductCategory = {
@@ -805,7 +818,7 @@ export type CustomerDetail = {
     date: string;
     note: string | null;
   }>;
-  returns: Array<{ id: number; date: string; amount: number; note: string | null }>;
+  returns: Array<{ id: number; date: string; amount: number; note: string | null; invoiceNumber: string }>;
 };
 
 export type CustomerPaymentResult = {
@@ -886,5 +899,111 @@ export type CreateSaleInput = {
   discount?: number;
   date?: string;
   notes?: string | null;
+};
+
+export type ReturnCondition = 'GOOD' | 'DAMAGED' | 'OTHER';
+
+export type InvoiceForReturn = {
+  id: number;
+  invoiceNumber: string;
+  date: string;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentMethod: SalePaymentMethod;
+  customer: { id: number; name: string; phone: string } | null;
+  items: Array<{
+    id: number;
+    productId: number;
+    variantId: number | null;
+    quantity: number;
+    returnedQty: number;
+    returnableQty: number;
+    rate: number;
+    total: number;
+    product: { id: number; name: string; productCode: string };
+    variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
+  }>;
+};
+
+export type SaleReturn = {
+  id: number;
+  invoiceId: number;
+  invoiceNumber: string;
+  date: string;
+  totalAmount: number;
+  refundAmount: number;
+  refundMethod: PurchasePaymentMethod;
+  note: string | null;
+  createdAt: string;
+  exchangeId: number | null;
+  items: Array<{
+    id: number;
+    invoiceItemId: number;
+    productId: number;
+    variantId: number | null;
+    quantity: number;
+    rate: number;
+    lineTotal: number;
+    costAtReturn: number;
+    condition: ReturnCondition;
+    product: { id: number; name: string; productCode: string };
+    variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
+  }>;
+};
+
+export type ExchangeResult = {
+  id: number;
+  invoiceId: number;
+  invoiceNumber: string;
+  saleReturnId: number;
+  date: string;
+  returnTotal: number;
+  newSaleTotal: number;
+  netAmount: number;
+  paidAmount: number;
+  refundedAmount: number;
+  paymentMethod: PurchasePaymentMethod;
+  note: string | null;
+  createdAt: string;
+  returnItems: Array<{
+    id: number;
+    productId: number;
+    quantity: number;
+    lineTotal: number;
+    condition: ReturnCondition;
+  }>;
+  newItems: Array<{
+    id: number;
+    productId: number;
+    variantId: number | null;
+    quantity: number;
+    rate: number;
+    lineTotal: number;
+  }>;
+};
+
+export type CreateSaleReturnInput = {
+  invoiceId: number;
+  items: Array<{ invoiceItemId: number; quantity: number; condition: ReturnCondition }>;
+  refundMethod?: PurchasePaymentMethod;
+  refundToCash?: boolean;
+  note?: string | null;
+};
+
+export type CreateExchangeInput = {
+  invoiceId: number;
+  returnItems: Array<{ invoiceItemId: number; quantity: number; condition: ReturnCondition }>;
+  newItems: Array<{
+    productId: number;
+    variantId?: number | null;
+    quantity: number;
+    rate?: number;
+    discount?: number;
+  }>;
+  paymentMethod?: PurchasePaymentMethod;
+  paidAmount?: number;
+  refundToCash?: boolean;
+  note?: string | null;
 };
 

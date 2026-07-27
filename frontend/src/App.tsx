@@ -19,6 +19,7 @@ import {
   SupplierPaymentPage,
 } from './pages/purchases/PurchasePages';
 import { InvoicesListPage, InvoiceDetailPage, NewSalePage } from './pages/sales/SalePages';
+import { ReturnExchangePage } from './pages/sales/ReturnExchangePage';
 import {
   CustomerDetailPage,
   CustomerFormPage,
@@ -60,6 +61,7 @@ export default function App() {
 
               <Route path="/sales" element={<InvoicesListPage />} />
               <Route path="/sales/new" element={<NewSalePage />} />
+              <Route path="/sales/return" element={<ReturnExchangePage />} />
               <Route path="/sales/:id" element={<InvoiceDetailPage />} />
 
               <Route path="/customers" element={<CustomersListPage />} />

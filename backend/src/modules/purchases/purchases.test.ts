@@ -44,6 +44,16 @@ async function cleanup() {
   await prisma.stockMovement.deleteMany({
     where: { product: { name: { startsWith: PREFIX } } },
   });
+  const testProducts = await prisma.product.findMany({
+    where: { name: { startsWith: PREFIX } },
+    select: { id: true },
+  });
+  const testProductIds = testProducts.map((p) => p.id);
+  if (testProductIds.length) {
+    await prisma.exchangeItem.deleteMany({ where: { productId: { in: testProductIds } } });
+    await prisma.saleReturnItem.deleteMany({ where: { productId: { in: testProductIds } } });
+    await prisma.invoiceItem.deleteMany({ where: { productId: { in: testProductIds } } });
+  }
   await prisma.productVariant.deleteMany({
     where: { product: { name: { startsWith: PREFIX } } },
   });

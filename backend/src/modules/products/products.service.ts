@@ -167,6 +167,58 @@ export async function adjustStockInTx(
   return { movement, newStock };
 }
 
+/** Record a damaged return without changing sellable stock (audit trail only). */
+export async function recordDamagedReturnInTx(
+  tx: Prisma.TransactionClient,
+  target: AdjustStockTarget,
+  quantity: number,
+  options: AdjustStockOptions = {},
+) {
+  if (!Number.isInteger(quantity) || quantity <= 0) {
+    throw new AppError(400, 'Quantity must be a positive integer');
+  }
+
+  const product = await tx.product.findUnique({
+    where: { id: target.productId },
+    include: { variants: { select: { id: true } } },
+  });
+  if (!product) throw new AppError(404, 'Product not found');
+  if (!product.isActive) throw new AppError(400, 'Cannot record return for an inactive product');
+
+  const hasVariants = product.variants.length > 0;
+  if (hasVariants && target.variantId == null) {
+    throw new AppError(400, 'Select a variant — this product has size/colour variants');
+  }
+  if (!hasVariants && target.variantId != null) {
+    throw new AppError(400, 'This product has no variants');
+  }
+  if (target.variantId != null) {
+    const variant = await tx.productVariant.findFirst({
+      where: { id: target.variantId, productId: target.productId },
+    });
+    if (!variant) throw new AppError(404, 'Variant not found for this product');
+  }
+
+  const movement = await tx.stockMovement.create({
+    data: {
+      productId: target.productId,
+      variantId: target.variantId ?? null,
+      type: StockMovementType.DAMAGED,
+      quantity,
+      note: options.note?.trim() || null,
+      sourceType: options.sourceType?.trim() || null,
+      sourceRef: options.sourceRef?.trim() || null,
+    },
+  });
+
+  const newStock =
+    target.variantId != null
+      ? (await tx.productVariant.findUniqueOrThrow({ where: { id: target.variantId } })).currentStock
+      : product.currentStock;
+
+  return { movement, newStock };
+}
+
 export async function adjustStock(
   target: AdjustStockTarget,
   quantity: number,

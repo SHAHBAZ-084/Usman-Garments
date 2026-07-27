@@ -407,11 +407,33 @@ export function CustomerDetailPage() {
 
       <Panel className="mt-6">
         <h2 className="mb-3 text-lg font-semibold">Return history</h2>
-        <p className="text-sm text-textSecondary">
-          {returns.length === 0
-            ? 'No returns yet — sale returns will appear here in a future update.'
-            : null}
-        </p>
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-textSecondary">
+              <th className="px-2 py-2">Date / Invoice</th>
+              <th className="px-2 py-2 text-right">Amount</th>
+              <th className="px-2 py-2">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {returns.map((r) => (
+              <tr key={r.id} className="border-b border-border/60">
+                <td className="px-2 py-2">
+                  {formatDate(r.date)} · {r.invoiceNumber}
+                </td>
+                <td className="px-2 py-2 text-right">{formatMoney(r.amount)}</td>
+                <td className="px-2 py-2">{r.note || '—'}</td>
+              </tr>
+            ))}
+            {returns.length === 0 ? (
+              <tr>
+                <td colSpan={3} className="px-2 py-6 text-center text-textSecondary">
+                  No returns yet.
+                </td>
+              </tr>
+            ) : null}
+          </tbody>
+        </table>
       </Panel>
     </PageShell>
   );

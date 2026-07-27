@@ -332,6 +332,7 @@ export const CASH_IN_HAND_ACCOUNT_NAME = 'Cash in Hand';
 export const COGS_ACCOUNT_NAME = 'Cost of Goods Sold';
 export const SALES_RETURN_ACCOUNT_NAME = 'Sales Return';
 export const PURCHASE_RETURN_ACCOUNT_NAME = 'Purchase Return';
+export const DAMAGED_STOCK_LOSS_ACCOUNT_NAME = 'Damaged Stock Loss';
 export const EXPENSES_CATEGORY_NAME = 'Expenses';
 
 /** Voucher types that use multi-leg posting (not the standard debit/credit pair API). */
@@ -1299,6 +1300,13 @@ export async function ensureRetailSystemAccounts(tx: Prisma.TransactionClient) {
     AccountType.EXPENSE,
     'PRET',
   );
+  const damagedLoss = await ensureSystemAccount(
+    tx,
+    EXPENSES_CATEGORY_NAME,
+    DAMAGED_STOCK_LOSS_ACCOUNT_NAME,
+    AccountType.EXPENSE,
+    'DMG',
+  );
 
   return {
     saleRevenue,
@@ -1307,6 +1315,7 @@ export async function ensureRetailSystemAccounts(tx: Prisma.TransactionClient) {
     cogs,
     salesReturn,
     purchaseReturn,
+    damagedLoss,
   };
 }
 

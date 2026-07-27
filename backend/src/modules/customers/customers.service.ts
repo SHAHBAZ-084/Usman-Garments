@@ -77,7 +77,7 @@ export async function getCustomer(id: number) {
 
 export async function getCustomerDetail(id: number) {
   const customer = await getCustomer(id);
-  const [invoices, payments] = await Promise.all([
+  const [invoices, payments, saleReturns] = await Promise.all([
     prisma.invoice.findMany({
       where: { customerId: id },
       orderBy: { date: 'desc' },
@@ -95,6 +95,12 @@ export async function getCustomerDetail(id: number) {
       where: { customerId: id },
       orderBy: { date: 'desc' },
       take: 50,
+    }),
+    prisma.saleReturn.findMany({
+      where: { invoice: { customerId: id } },
+      orderBy: { date: 'desc' },
+      take: 50,
+      select: { id: true, date: true, totalAmount: true, note: true, invoice: { select: { invoiceNumber: true } } },
     }),
   ]);
 
@@ -126,7 +132,13 @@ export async function getCustomerDetail(id: number) {
       note: p.note,
       createdAt: p.createdAt,
     })),
-    returns: [] as Array<{ id: number; date: string; amount: number; note: string | null }>,
+    returns: saleReturns.map((r) => ({
+      id: r.id,
+      date: r.date,
+      amount: Number(r.totalAmount),
+      note: r.note,
+      invoiceNumber: r.invoice.invoiceNumber,
+    })),
   };
 }
 

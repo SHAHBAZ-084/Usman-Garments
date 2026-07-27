@@ -20,6 +20,7 @@ export const TOP_NAV: NavGroup[] = [
     children: [
       { kind: 'link', label: 'New Sale', to: '/sales/new' },
       { kind: 'link', label: 'Recent Invoices', to: '/sales' },
+      { kind: 'link', label: 'Return / Exchange', to: '/sales/return' },
     ],
   },
   {
