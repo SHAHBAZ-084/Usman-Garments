@@ -27,6 +27,7 @@ async function cleanup() {
   });
   const ids = products.map((p) => p.id);
   if (ids.length) {
+    await prisma.invoiceItem.deleteMany({ where: { productId: { in: ids } } });
     await prisma.stockMovement.deleteMany({ where: { productId: { in: ids } } });
     await prisma.purchaseItem.deleteMany({ where: { productId: { in: ids } } });
     await prisma.productVariant.deleteMany({ where: { productId: { in: ids } } });

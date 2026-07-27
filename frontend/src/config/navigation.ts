@@ -23,6 +23,14 @@ export const TOP_NAV: NavGroup[] = [
     ],
   },
   {
+    label: 'Customers',
+    children: [
+      { kind: 'link', label: 'Customer List', to: '/customers' },
+      { kind: 'link', label: 'Add Customer', to: '/customers/add' },
+      { kind: 'link', label: 'Receive Payment', to: '/customers/pay' },
+    ],
+  },
+  {
     label: 'Products',
     children: [
       { kind: 'link', label: 'Product List', to: '/products' },

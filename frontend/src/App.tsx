@@ -20,6 +20,12 @@ import {
 } from './pages/purchases/PurchasePages';
 import { InvoicesListPage, InvoiceDetailPage, NewSalePage } from './pages/sales/SalePages';
 import {
+  CustomerDetailPage,
+  CustomerFormPage,
+  CustomerPaymentPage,
+  CustomersListPage,
+} from './pages/customers/CustomerPages';
+import {
   SupplierDetailPage,
   SupplierFormPage,
   SuppliersListPage,
@@ -55,6 +61,12 @@ export default function App() {
               <Route path="/sales" element={<InvoicesListPage />} />
               <Route path="/sales/new" element={<NewSalePage />} />
               <Route path="/sales/:id" element={<InvoiceDetailPage />} />
+
+              <Route path="/customers" element={<CustomersListPage />} />
+              <Route path="/customers/add" element={<CustomerFormPage mode="add" />} />
+              <Route path="/customers/pay" element={<CustomerPaymentPage />} />
+              <Route path="/customers/:id/edit" element={<CustomerFormPage mode="edit" />} />
+              <Route path="/customers/:id" element={<CustomerDetailPage />} />
 
               <Route path="/accounts/categories/add" element={<CategoryManagePage mode="add" />} />
               <Route path="/accounts/categories/edit" element={<CategoryManagePage mode="edit" />} />

@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { voucherDateInActiveYear } from '../../test-helpers/financial-year';
+import { syncInvoiceNumberCounter } from '../../test-helpers/invoice-counter';
 import {
   bootstrapChartOfAccounts,
   COGS_ACCOUNT_NAME,
@@ -81,6 +82,7 @@ describe('POS sales (Phase 7)', () => {
   beforeEach(async () => {
     runId = `${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     await cleanup(userId);
+    await syncInvoiceNumberCounter();
   });
 
   async function assertVoucherBalanced(invoiceId: number) {
@@ -230,6 +232,7 @@ describe('POS sales (Phase 7)', () => {
   });
 
   it('auto-increments invoice numbers with configured prefix', async () => {
+    const prior = await prisma.businessSettings.findUniqueOrThrow({ where: { id: 1 } });
     await prisma.businessSettings.update({
       where: { id: 1 },
       data: { invoicePrefix: 'TST-', nextInvoiceNumber: 100 },
@@ -259,8 +262,9 @@ describe('POS sales (Phase 7)', () => {
 
     await prisma.businessSettings.update({
       where: { id: 1 },
-      data: { invoicePrefix: 'UM-', nextInvoiceNumber: 1 },
+      data: { invoicePrefix: prior.invoicePrefix, nextInvoiceNumber: prior.nextInvoiceNumber },
     });
+    await syncInvoiceNumberCounter();
   });
 
   it('cancels sale reversing stock and voucher', async () => {

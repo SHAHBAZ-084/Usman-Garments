@@ -467,8 +467,46 @@ export const api = {
     const suffix = query.toString() ? `?${query}` : '';
     return request<Customer[]>(`/api/customers${suffix}`);
   },
-  createCustomer(data: { name: string; phone?: string }) {
+  getCustomer(id: number) {
+    return request<CustomerDetail>(`/api/customers/${id}`);
+  },
+  createCustomer(data: {
+    name: string;
+    phone?: string;
+    address?: string | null;
+    notes?: string | null;
+  }) {
     return request<Customer>('/api/customers', { method: 'POST', body: JSON.stringify(data) });
+  },
+  updateCustomer(
+    id: number,
+    data: {
+      name?: string;
+      phone?: string;
+      address?: string | null;
+      notes?: string | null;
+      isActive?: boolean;
+    },
+  ) {
+    return request<Customer>(`/api/customers/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  },
+  deactivateCustomer(id: number) {
+    return request<Customer>(`/api/customers/${id}`, { method: 'DELETE' });
+  },
+  createCustomerPayment(data: {
+    customerId: number;
+    amount: number;
+    paymentMethod: PurchasePaymentMethod;
+    date: string;
+    note?: string | null;
+  }) {
+    return request<CustomerPaymentResult>('/api/customers/payments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  getCustomerStatement(id: number) {
+    return request<CustomerStatement>(`/api/customers/${id}/statement`);
   },
 
   listInvoices(params?: { page?: number; pageSize?: number; status?: 'ACTIVE' | 'CANCELLED' }) {
@@ -737,10 +775,62 @@ export type Customer = {
   id: number;
   name: string;
   phone: string;
+  address: string | null;
+  notes: string | null;
   currentBalance: number;
   receivable: number;
   isActive: boolean;
   accountId: number | null;
+  accountName: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CustomerDetail = {
+  customer: Customer;
+  invoices: Array<{
+    id: number;
+    invoiceNumber: string;
+    date: string;
+    totalAmount: number;
+    paidAmount: number;
+    remainingAmount: number;
+    paymentMethod: SalePaymentMethod;
+    status: string;
+  }>;
+  payments: Array<{
+    id: number;
+    amount: number;
+    paymentMethod: PurchasePaymentMethod;
+    date: string;
+    note: string | null;
+  }>;
+  returns: Array<{ id: number; date: string; amount: number; note: string | null }>;
+};
+
+export type CustomerPaymentResult = {
+  id: number;
+  customerId: number;
+  customer: { id: number; name: string };
+  amount: number;
+  paymentMethod: PurchasePaymentMethod;
+  date: string;
+  note: string | null;
+  confirmation: { message: string; remainingReceivable: number };
+};
+
+export type CustomerStatement = {
+  customer: Customer;
+  lines: Array<{
+    date: string;
+    description: string;
+    debit: number;
+    credit: number;
+    balance: number;
+    kind: 'INVOICE' | 'PAYMENT';
+    refId: number;
+  }>;
+  closingBalance: number;
 };
 
 export type InvoiceItem = {

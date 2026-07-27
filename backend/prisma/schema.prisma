@@ -75,6 +75,7 @@ model User {
   purchasesCreated      Purchase[]
   purchaseReturnsCreated PurchaseReturn[]      @relation("PurchaseReturnCreatedBy")
   supplierPaymentsCreated SupplierPayment[]    @relation("SupplierPaymentCreatedBy")
+  customerPaymentsCreated CustomerPayment[]    @relation("CustomerPaymentCreatedBy")
   invoicesCreated         Invoice[]            @relation("InvoiceCreatedBy")
 }
 
@@ -441,7 +442,9 @@ model Customer {
   id             Int      @id @default(autoincrement())
   name           String
   phone          String   @default("")
-  /// Running udhaar balance (mirrors ledger receivable for quick display; Phase 8 expands).
+  address        String?
+  notes          String?
+  /// Running udhaar balance (mirrors ledger receivable for quick display).
   currentBalance Decimal  @default(0)
   /// Linked ledger account under Customers category.
   accountId      Int?     @unique
@@ -449,12 +452,30 @@ model Customer {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  account  Account?  @relation(fields: [accountId], references: [id])
+  account  Account?          @relation(fields: [accountId], references: [id])
   invoices Invoice[]
+  payments CustomerPayment[]
 
   @@index([name])
   @@index([phone])
   @@index([isActive])
+}
+
+model CustomerPayment {
+  id            Int                   @id @default(autoincrement())
+  customerId    Int
+  amount        Decimal
+  paymentMethod PurchasePaymentMethod
+  date          DateTime
+  note          String?
+  createdById   Int?
+  createdAt     DateTime              @default(now())
+
+  customer  Customer @relation(fields: [customerId], references: [id])
+  createdBy User?    @relation("CustomerPaymentCreatedBy", fields: [createdById], references: [id])
+
+  @@index([customerId])
+  @@index([date])
 }
 
 model Invoice {
