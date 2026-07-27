@@ -50,6 +50,15 @@ export const TOP_NAV: NavGroup[] = [
     ],
   },
   {
+    label: 'Finance',
+    children: [
+      { kind: 'link', label: 'Record Expense', to: '/finance/expenses/new' },
+      { kind: 'link', label: 'Expense History', to: '/finance/expenses' },
+      { kind: 'link', label: 'Record Other Income', to: '/finance/other-income/new' },
+      { kind: 'link', label: 'Other Income History', to: '/finance/other-income' },
+    ],
+  },
+  {
     label: 'Accounts',
     children: [
       {

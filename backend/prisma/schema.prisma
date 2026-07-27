@@ -79,6 +79,8 @@ model User {
   invoicesCreated         Invoice[]            @relation("InvoiceCreatedBy")
   saleReturnsCreated      SaleReturn[]         @relation("SaleReturnCreatedBy")
   exchangesCreated        Exchange[]           @relation("ExchangeCreatedBy")
+  expensesCreated         Expense[]            @relation("ExpenseCreatedBy")
+  otherIncomesCreated     OtherIncome[]        @relation("OtherIncomeCreatedBy")
 }
 
 model AccountCategory {
@@ -106,6 +108,8 @@ model Account {
   closingBalances FinancialYearClosingBalance[]
   supplier        Supplier?
   customer        Customer?
+  expenseCategory ExpenseCategory?
+  otherIncomeCategory OtherIncomeCategory?
 }
 
 model Ledger {
@@ -630,6 +634,69 @@ model SupplierPayment {
 
   @@index([supplierId])
   @@index([date])
+}
+
+/// Shop expense grouping — each row links to an EXPENSE ledger account (auto-created).
+model ExpenseCategory {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  accountId Int?     @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  account  Account?  @relation(fields: [accountId], references: [id])
+  expenses Expense[]
+}
+
+model Expense {
+  id            Int                   @id @default(autoincrement())
+  categoryId    Int
+  date          DateTime
+  amount        Decimal
+  paymentMethod PurchasePaymentMethod
+  description   String
+  paidTo        String?
+  note          String?
+  createdById   Int?
+  createdAt     DateTime              @default(now())
+
+  category  ExpenseCategory @relation(fields: [categoryId], references: [id])
+  createdBy User?           @relation("ExpenseCreatedBy", fields: [createdById], references: [id])
+
+  @@index([categoryId])
+  @@index([date])
+  @@index([createdAt])
+}
+
+/// Other income grouping — each row links to a REVENUE ledger account (auto-created).
+model OtherIncomeCategory {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  accountId Int?     @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  account Account?      @relation(fields: [accountId], references: [id])
+  entries OtherIncome[]
+}
+
+model OtherIncome {
+  id            Int                   @id @default(autoincrement())
+  categoryId    Int
+  date          DateTime
+  amount        Decimal
+  paymentMethod PurchasePaymentMethod
+  description   String
+  note          String?
+  createdById   Int?
+  createdAt     DateTime              @default(now())
+
+  category  OtherIncomeCategory @relation(fields: [categoryId], references: [id])
+  createdBy User?               @relation("OtherIncomeCreatedBy", fields: [createdById], references: [id])
+
+  @@index([categoryId])
+  @@index([date])
+  @@index([createdAt])
 }
 
 /// Singleton shop settings (always id = 1). Never create a second row.

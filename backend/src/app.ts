@@ -13,6 +13,7 @@ import { suppliersRouter } from './modules/suppliers/suppliers.routes';
 import { purchasesRouter } from './modules/purchases/purchases.routes';
 import { customersRouter } from './modules/customers/customers.routes';
 import { salesRouter } from './modules/sales/sales.routes';
+import { financeRouter } from './modules/finance/finance.routes';
 import { getUploadsDir } from './modules/settings/settings.service';
 
 declare module 'express-session' {
@@ -62,6 +63,7 @@ export function createApp() {
   app.use('/api/purchases', purchasesRouter);
   app.use('/api/customers', customersRouter);
   app.use('/api/sales', salesRouter);
+  app.use('/api/finance', financeRouter);
 
   if (env.isProduction) {
     const frontendDist = path.resolve(__dirname, '../../frontend/dist');

@@ -539,6 +539,66 @@ export const api = {
   getSaleReturn(id: number) {
     return request<SaleReturn>(`/api/sales/returns/${id}`);
   },
+
+  listExpenseCategories() {
+    return request<ExpenseCategory[]>('/api/finance/expense-categories');
+  },
+  createExpenseCategory(name: string) {
+    return request<ExpenseCategory>('/api/finance/expense-categories', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+  listExpenses(params?: { fromDate?: string; toDate?: string }) {
+    const query = new URLSearchParams();
+    if (params?.fromDate) query.set('fromDate', params.fromDate);
+    if (params?.toDate) query.set('toDate', params.toDate);
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<ExpenseRecord[]>(`/api/finance/expenses${suffix}`);
+  },
+  createExpense(data: {
+    categoryId: number;
+    date: string;
+    amount: number;
+    paymentMethod: PurchasePaymentMethod;
+    description: string;
+    paidTo?: string | null;
+    note?: string | null;
+  }) {
+    return request<ExpenseRecord & { confirmation: { message: string } }>('/api/finance/expenses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  listOtherIncomeCategories() {
+    return request<OtherIncomeCategory[]>('/api/finance/other-income-categories');
+  },
+  createOtherIncomeCategory(name: string) {
+    return request<OtherIncomeCategory>('/api/finance/other-income-categories', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  },
+  listOtherIncomes(params?: { fromDate?: string; toDate?: string }) {
+    const query = new URLSearchParams();
+    if (params?.fromDate) query.set('fromDate', params.fromDate);
+    if (params?.toDate) query.set('toDate', params.toDate);
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<OtherIncomeRecord[]>(`/api/finance/other-income${suffix}`);
+  },
+  createOtherIncome(data: {
+    categoryId: number;
+    date: string;
+    amount: number;
+    paymentMethod: PurchasePaymentMethod;
+    description: string;
+    note?: string | null;
+  }) {
+    return request<OtherIncomeRecord & { confirmation: { message: string } }>('/api/finance/other-income', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
 };
 
 export type ProductCategory = {
@@ -1005,5 +1065,33 @@ export type CreateExchangeInput = {
   paidAmount?: number;
   refundToCash?: boolean;
   note?: string | null;
+};
+
+export type ExpenseCategory = { id: number; name: string; isActive: boolean };
+export type OtherIncomeCategory = { id: number; name: string; isActive: boolean };
+
+export type ExpenseRecord = {
+  id: number;
+  categoryId: number;
+  category: { id: number; name: string };
+  date: string;
+  amount: number;
+  paymentMethod: PurchasePaymentMethod;
+  description: string;
+  paidTo: string | null;
+  note: string | null;
+  createdAt: string;
+};
+
+export type OtherIncomeRecord = {
+  id: number;
+  categoryId: number;
+  category: { id: number; name: string };
+  date: string;
+  amount: number;
+  paymentMethod: PurchasePaymentMethod;
+  description: string;
+  note: string | null;
+  createdAt: string;
 };
 

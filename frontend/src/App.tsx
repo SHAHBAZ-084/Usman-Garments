@@ -21,6 +21,12 @@ import {
 import { InvoicesListPage, InvoiceDetailPage, NewSalePage } from './pages/sales/SalePages';
 import { ReturnExchangePage } from './pages/sales/ReturnExchangePage';
 import {
+  ExpenseEntryPage,
+  ExpensesListPage,
+  OtherIncomeEntryPage,
+  OtherIncomeListPage,
+} from './pages/finance/FinancePages';
+import {
   CustomerDetailPage,
   CustomerFormPage,
   CustomerPaymentPage,
@@ -63,6 +69,11 @@ export default function App() {
               <Route path="/sales/new" element={<NewSalePage />} />
               <Route path="/sales/return" element={<ReturnExchangePage />} />
               <Route path="/sales/:id" element={<InvoiceDetailPage />} />
+
+              <Route path="/finance/expenses" element={<ExpensesListPage />} />
+              <Route path="/finance/expenses/new" element={<ExpenseEntryPage />} />
+              <Route path="/finance/other-income" element={<OtherIncomeListPage />} />
+              <Route path="/finance/other-income/new" element={<OtherIncomeEntryPage />} />
 
               <Route path="/customers" element={<CustomersListPage />} />
               <Route path="/customers/add" element={<CustomerFormPage mode="add" />} />
