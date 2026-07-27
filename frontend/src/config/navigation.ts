@@ -16,6 +16,13 @@ export type NavGroup = {
 
 export const TOP_NAV: NavGroup[] = [
   {
+    label: 'Sales',
+    children: [
+      { kind: 'link', label: 'New Sale', to: '/sales/new' },
+      { kind: 'link', label: 'Recent Invoices', to: '/sales' },
+    ],
+  },
+  {
     label: 'Products',
     children: [
       { kind: 'link', label: 'Product List', to: '/products' },

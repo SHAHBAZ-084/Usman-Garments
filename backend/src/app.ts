@@ -11,6 +11,8 @@ import { settingsRouter } from './modules/settings/settings.routes';
 import { productsRouter } from './modules/products/products.routes';
 import { suppliersRouter } from './modules/suppliers/suppliers.routes';
 import { purchasesRouter } from './modules/purchases/purchases.routes';
+import { customersRouter } from './modules/customers/customers.routes';
+import { salesRouter } from './modules/sales/sales.routes';
 import { getUploadsDir } from './modules/settings/settings.service';
 
 declare module 'express-session' {
@@ -58,6 +60,8 @@ export function createApp() {
   app.use('/api/products', productsRouter);
   app.use('/api/suppliers', suppliersRouter);
   app.use('/api/purchases', purchasesRouter);
+  app.use('/api/customers', customersRouter);
+  app.use('/api/sales', salesRouter);
 
   if (env.isProduction) {
     const frontendDist = path.resolve(__dirname, '../../frontend/dist');

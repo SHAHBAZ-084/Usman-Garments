@@ -39,6 +39,7 @@ const STOCK_IN_TYPES: StockMovementType[] = [
   StockMovementType.SALE_RETURN,
   StockMovementType.MANUAL_ADD,
   StockMovementType.CORRECTION,
+  StockMovementType.CANCELLATION,
 ];
 
 const STOCK_OUT_TYPES: StockMovementType[] = [
@@ -46,7 +47,6 @@ const STOCK_OUT_TYPES: StockMovementType[] = [
   StockMovementType.PURCHASE_RETURN,
   StockMovementType.MANUAL_REDUCE,
   StockMovementType.DAMAGED,
-  StockMovementType.CANCELLATION,
 ];
 
 export function isStockInType(type: StockMovementType): boolean {

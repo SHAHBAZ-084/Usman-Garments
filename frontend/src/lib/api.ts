@@ -459,6 +459,35 @@ export const api = {
       confirmation: { message: string };
     }>('/api/purchases/returns', { method: 'POST', body: JSON.stringify(data) });
   },
+
+  listCustomers(params?: { search?: string; activeOnly?: boolean }) {
+    const query = new URLSearchParams();
+    if (params?.search) query.set('search', params.search);
+    if (params?.activeOnly === false) query.set('activeOnly', 'false');
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<Customer[]>(`/api/customers${suffix}`);
+  },
+  createCustomer(data: { name: string; phone?: string }) {
+    return request<Customer>('/api/customers', { method: 'POST', body: JSON.stringify(data) });
+  },
+
+  listInvoices(params?: { page?: number; pageSize?: number; status?: 'ACTIVE' | 'CANCELLED' }) {
+    const query = new URLSearchParams();
+    if (params?.page != null) query.set('page', String(params.page));
+    if (params?.pageSize != null) query.set('pageSize', String(params.pageSize));
+    if (params?.status) query.set('status', params.status);
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<InvoiceListResult>(`/api/sales${suffix}`);
+  },
+  getInvoice(id: number) {
+    return request<Invoice>(`/api/sales/${id}`);
+  },
+  createSale(data: CreateSaleInput) {
+    return request<Invoice>('/api/sales', { method: 'POST', body: JSON.stringify(data) });
+  },
+  cancelSale(id: number) {
+    return request<Invoice>(`/api/sales/${id}/cancel`, { method: 'POST' });
+  },
 };
 
 export type ProductCategory = {
@@ -694,5 +723,78 @@ export type SupplierPaymentResult = {
   date: string;
   note: string | null;
   confirmation: { message: string; remainingPayable: number };
+};
+
+export type SalePaymentMethod =
+  | 'CASH'
+  | 'CARD'
+  | 'EASYPAISA'
+  | 'JAZZCASH'
+  | 'BANK_TRANSFER'
+  | 'UDHAAR';
+
+export type Customer = {
+  id: number;
+  name: string;
+  phone: string;
+  currentBalance: number;
+  receivable: number;
+  isActive: boolean;
+  accountId: number | null;
+};
+
+export type InvoiceItem = {
+  id: number;
+  productId: number;
+  variantId: number | null;
+  quantity: number;
+  rate: number;
+  discount: number;
+  total: number;
+  costAtSale: number;
+  product: { id: number; name: string; productCode: string };
+  variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
+};
+
+export type Invoice = {
+  id: number;
+  invoiceNumber: string;
+  customerId: number | null;
+  customer: { id: number; name: string; phone: string } | null;
+  date: string;
+  subtotal: number;
+  discount: number;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentMethod: SalePaymentMethod;
+  status: 'ACTIVE' | 'CANCELLED';
+  notes: string | null;
+  createdAt: string;
+  items: InvoiceItem[];
+};
+
+export type InvoiceListResult = {
+  items: Invoice[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export type CreateSaleInput = {
+  items: Array<{
+    productId: number;
+    variantId?: number | null;
+    quantity: number;
+    rate?: number;
+    discount?: number;
+  }>;
+  paymentMethod: SalePaymentMethod;
+  paidAmount: number;
+  customerId?: number | null;
+  discount?: number;
+  date?: string;
+  notes?: string | null;
 };
 

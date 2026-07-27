@@ -75,6 +75,7 @@ model User {
   purchasesCreated      Purchase[]
   purchaseReturnsCreated PurchaseReturn[]      @relation("PurchaseReturnCreatedBy")
   supplierPaymentsCreated SupplierPayment[]    @relation("SupplierPaymentCreatedBy")
+  invoicesCreated         Invoice[]            @relation("InvoiceCreatedBy")
 }
 
 model AccountCategory {
@@ -101,6 +102,7 @@ model Account {
   creditVouchers  Voucher[]                     @relation("CreditAccount")
   closingBalances FinancialYearClosingBalance[]
   supplier        Supplier?
+  customer        Customer?
 }
 
 model Ledger {
@@ -234,6 +236,20 @@ enum PurchasePaymentMethod {
   BANK_TRANSFER
 }
 
+enum SalePaymentMethod {
+  CASH
+  CARD
+  EASYPAISA
+  JAZZCASH
+  BANK_TRANSFER
+  UDHAAR
+}
+
+enum InvoiceStatus {
+  ACTIVE
+  CANCELLED
+}
+
 enum PurchaseStatus {
   ACTIVE
   RETURNED
@@ -298,6 +314,7 @@ model Product {
   variants       ProductVariant[]
   stockMovements StockMovement[]
   purchaseItems  PurchaseItem[]
+  invoiceItems   InvoiceItem[]
 
   @@index([name])
   @@index([isActive])
@@ -321,6 +338,7 @@ model ProductVariant {
   product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
   stockMovements StockMovement[]
   purchaseItems  PurchaseItem[]
+  invoiceItems   InvoiceItem[]
 
   @@index([productId])
 }
@@ -419,6 +437,72 @@ model PurchaseReturnItem {
   @@index([purchaseReturnId])
 }
 
+model Customer {
+  id             Int      @id @default(autoincrement())
+  name           String
+  phone          String   @default("")
+  /// Running udhaar balance (mirrors ledger receivable for quick display; Phase 8 expands).
+  currentBalance Decimal  @default(0)
+  /// Linked ledger account under Customers category.
+  accountId      Int?     @unique
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  account  Account?  @relation(fields: [accountId], references: [id])
+  invoices Invoice[]
+
+  @@index([name])
+  @@index([phone])
+  @@index([isActive])
+}
+
+model Invoice {
+  id              Int               @id @default(autoincrement())
+  invoiceNumber   String            @unique
+  customerId      Int?
+  date            DateTime
+  subtotal        Decimal
+  discount        Decimal           @default(0)
+  totalAmount     Decimal
+  paidAmount      Decimal           @default(0)
+  remainingAmount Decimal           @default(0)
+  paymentMethod   SalePaymentMethod
+  status          InvoiceStatus     @default(ACTIVE)
+  notes           String?
+  createdById     Int?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  customer  Customer?     @relation(fields: [customerId], references: [id])
+  createdBy User?         @relation("InvoiceCreatedBy", fields: [createdById], references: [id])
+  items     InvoiceItem[]
+
+  @@index([customerId])
+  @@index([date])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model InvoiceItem {
+  id         Int     @id @default(autoincrement())
+  invoiceId  Int
+  productId  Int
+  variantId  Int?
+  quantity   Int
+  rate       Decimal
+  discount   Decimal @default(0)
+  total      Decimal
+  costAtSale Decimal
+
+  invoice Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  product Product         @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([invoiceId])
+  @@index([productId])
+}
+
 model SupplierPayment {
   id            Int                   @id @default(autoincrement())
   supplierId    Int
@@ -448,6 +532,8 @@ model BusinessSettings {
   invoiceFooter     String      @default("Thank you for shopping at Usman Mall")
   returnPolicy      String      @default("Returns accepted within 7 days with original receipt. Items must be unused and in original condition.")
   invoicePrefix     String      @default("UM-")
+  /// Next sequential invoice number (combined with invoicePrefix for display).
+  nextInvoiceNumber Int         @default(1)
   currency          String      @default("PKR")
   receiptSize       ReceiptSize @default(THERMAL_80)
   a4InvoiceEnabled  Boolean     @default(true)

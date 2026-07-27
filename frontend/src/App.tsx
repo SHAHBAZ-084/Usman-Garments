@@ -18,6 +18,7 @@ import {
   PurchasesListPage,
   SupplierPaymentPage,
 } from './pages/purchases/PurchasePages';
+import { InvoicesListPage, InvoiceDetailPage, NewSalePage } from './pages/sales/SalePages';
 import {
   SupplierDetailPage,
   SupplierFormPage,
@@ -50,6 +51,10 @@ export default function App() {
               <Route path="/purchases/new" element={<PurchaseEntryPage />} />
               <Route path="/purchases/pay" element={<SupplierPaymentPage />} />
               <Route path="/purchases/:id" element={<PurchaseDetailPage />} />
+
+              <Route path="/sales" element={<InvoicesListPage />} />
+              <Route path="/sales/new" element={<NewSalePage />} />
+              <Route path="/sales/:id" element={<InvoiceDetailPage />} />
 
               <Route path="/accounts/categories/add" element={<CategoryManagePage mode="add" />} />
               <Route path="/accounts/categories/edit" element={<CategoryManagePage mode="edit" />} />
