@@ -359,6 +359,32 @@ export const api = {
     return request<StockMovementListResult>(`/api/products/${productId}/stock-movements${suffix}`);
   },
 
+  downloadProductImportTemplate() {
+    return fetch('/api/products/import/template', { credentials: 'include' }).then(async (res) => {
+      if (!res.ok) throw new Error('Failed to download template');
+      return res.blob();
+    });
+  },
+  previewProductImport(file: File) {
+    const body = new FormData();
+    body.append('file', file);
+    return fetch('/api/products/import/preview', {
+      method: 'POST',
+      body,
+      credentials: 'include',
+    }).then(async (response) => {
+      const data = (await response.json().catch(() => ({}))) as ProductImportPreview & { error?: string };
+      if (!response.ok) throw new Error(data.error ?? 'Import preview failed');
+      return data;
+    });
+  },
+  commitProductImport(products: ProductImportPreview['commitPayload']) {
+    return request<{ createdCount: number; products: Product[] }>('/api/products/import/commit', {
+      method: 'POST',
+      body: JSON.stringify({ products }),
+    });
+  },
+
   listSuppliers(params?: { activeOnly?: boolean; search?: string }) {
     const query = new URLSearchParams();
     if (params?.search) query.set('search', params.search);
@@ -438,6 +464,7 @@ export const api = {
 export type ProductCategory = {
   id: number;
   name: string;
+  code: string;
   isActive: boolean;
 };
 
@@ -531,6 +558,29 @@ export type StockMovementListResult = {
   page: number;
   pageSize: number;
   totalPages: number;
+};
+
+export type ProductImportPreview = {
+  validCount: number;
+  errorCount: number;
+  productsToCreate: number;
+  errors: Array<{ rowNumber: number; message: string }>;
+  products: Array<{
+    name: string;
+    category: string;
+    salePrice: number;
+    purchasePrice: number;
+    totalStock: number;
+    variants: Array<{ size: string | null; colour: string | null; stock: number }>;
+  }>;
+  commitPayload: Array<{
+    name: string;
+    category: string;
+    salePrice: number;
+    purchasePrice: number;
+    totalStock: number;
+    variants: Array<{ size: string | null; colour: string | null; stock: number }>;
+  }>;
 };
 
 export type PurchasePaymentMethod = 'CASH' | 'CARD' | 'EASYPAISA' | 'JAZZCASH' | 'BANK_TRANSFER';

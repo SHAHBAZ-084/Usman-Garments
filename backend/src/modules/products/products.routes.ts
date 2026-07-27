@@ -1,12 +1,19 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
-import { asyncHandler, param, validateBody } from '../../utils/helpers';
+import { asyncHandler, param, validateBody, AppError } from '../../utils/helpers';
 import * as productsService from './products.service';
+import * as productsImport from './products.import';
 
 export const productsRouter = Router();
 
 productsRouter.use(requireAuth);
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+});
 
 const variantSchema = z.object({
   size: z.string().max(40).nullable().optional(),
@@ -43,6 +50,25 @@ const stockAdjustSchema = z.object({
   note: z.string().max(500).optional(),
 });
 
+const commitImportSchema = z.object({
+  products: z.array(
+    z.object({
+      name: z.string().min(1),
+      category: z.string().min(1),
+      salePrice: z.number().min(0),
+      purchasePrice: z.number().min(0),
+      totalStock: z.number().int().min(0),
+      variants: z.array(
+        z.object({
+          size: z.string().nullable(),
+          colour: z.string().nullable(),
+          stock: z.number().int().min(0),
+        }),
+      ),
+    }),
+  ),
+});
+
 productsRouter.get(
   '/categories',
   asyncHandler(async (_req, res) => {
@@ -57,6 +83,43 @@ productsRouter.post(
   asyncHandler(async (req, res) => {
     const category = await productsService.createProductCategory(req.body.name);
     res.status(201).json(category);
+  }),
+);
+
+productsRouter.get(
+  '/import/template',
+  asyncHandler(async (_req, res) => {
+    const buffer = productsImport.buildImportTemplateBuffer();
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', 'attachment; filename="usman-mall-products-template.xlsx"');
+    res.send(buffer);
+  }),
+);
+
+productsRouter.post(
+  '/import/preview',
+  asyncHandler(async (req, res) => {
+    await new Promise<void>((resolve, reject) => {
+      upload.single('file')(req, res, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+    if (!req.file) throw new AppError(400, 'Upload an Excel or CSV file');
+    const preview = await productsImport.previewImportBuffer(req.file.buffer);
+    res.json(preview);
+  }),
+);
+
+productsRouter.post(
+  '/import/commit',
+  validateBody(commitImportSchema),
+  asyncHandler(async (req, res) => {
+    const result = await productsImport.commitImport(req.body.products);
+    res.status(201).json(result);
   }),
 );
 

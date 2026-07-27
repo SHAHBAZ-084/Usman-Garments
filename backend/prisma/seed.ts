@@ -50,6 +50,10 @@ async function main() {
 
   await ensureBusinessSettings();
   console.log('Business settings ensured.');
+
+  const { ensureDefaultProductCategories } = await import('../src/modules/products/products.service');
+  await ensureDefaultProductCategories();
+  console.log('Product categories ensured.');
 }
 
 main()

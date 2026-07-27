@@ -2,7 +2,36 @@ import { Prisma, StockMovementType } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/helpers';
 import { ensureBusinessSettings } from '../settings/settings.service';
-import { generateUniqueBarcode, generateUniqueProductCode } from './product-identity';
+import { generateUniqueBarcode, generateUniqueCategoryCode, generateUniqueProductCode } from './product-identity';
+
+export const DEFAULT_PRODUCT_CATEGORIES: { name: string; code: string }[] = [
+  { name: 'Men Shirts', code: 'MSH' },
+  { name: 'Men Pants', code: 'MPN' },
+  { name: 'Women Kurta', code: 'WKU' },
+  { name: 'Kids Wear', code: 'KDW' },
+  { name: 'Accessories', code: 'ACC' },
+  { name: 'Footwear', code: 'FTW' },
+];
+
+/** Idempotent seed of starting garment categories. */
+export async function ensureDefaultProductCategories() {
+  for (const row of DEFAULT_PRODUCT_CATEGORIES) {
+    const byName = await prisma.productCategory.findUnique({ where: { name: row.name } });
+    if (byName) {
+      if (!byName.code) {
+        // legacy safety — code is required in schema after migration
+      }
+      continue;
+    }
+    const codeTaken = await prisma.productCategory.findUnique({ where: { code: row.code } });
+    await prisma.productCategory.create({
+      data: {
+        name: row.name,
+        code: codeTaken ? `${row.code}X` : row.code,
+      },
+    });
+  }
+}
 
 const STOCK_IN_TYPES: StockMovementType[] = [
   StockMovementType.OPENING,
@@ -172,7 +201,7 @@ function serializeProduct(row: {
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
-  category?: { id: number; name: string } | null;
+  category?: { id: number; name: string; code?: string } | null;
   variants?: Array<{
     id: number;
     size: string | null;
@@ -194,6 +223,9 @@ function serializeProduct(row: {
     costNotSet: Number(row.purchasePrice) === 0,
     effectiveLowStockLimit: effectiveLow,
     isLowStock: row.currentStock <= effectiveLow,
+    category: row.category
+      ? { id: row.category.id, name: row.category.name, code: row.category.code ?? '' }
+      : null,
     variants: variants?.map((v) => {
       const { sku: variantSku, ...variantRest } = v;
       return {
@@ -207,6 +239,7 @@ function serializeProduct(row: {
 }
 
 export async function listProductCategories() {
+  await ensureDefaultProductCategories();
   return prisma.productCategory.findMany({
     where: { isActive: true },
     orderBy: { name: 'asc' },
@@ -217,7 +250,8 @@ export async function createProductCategory(name: string) {
   const trimmed = name.trim();
   if (!trimmed) throw new AppError(400, 'Category name is required');
   try {
-    return await prisma.productCategory.create({ data: { name: trimmed } });
+    const code = await generateUniqueCategoryCode(prisma, trimmed);
+    return await prisma.productCategory.create({ data: { name: trimmed, code } });
   } catch (err) {
     mapUniqueConstraint(err, 'name', `Product category "${trimmed}" already exists`);
   }
@@ -246,7 +280,7 @@ export async function listProducts(params: ProductListParams = {}) {
     prisma.product.findMany({
       where,
       include: {
-        category: { select: { id: true, name: true } },
+        category: { select: { id: true, name: true, code: true } },
         variants: {
           select: {
             id: true,
@@ -281,7 +315,7 @@ export async function getProduct(id: number) {
   const row = await prisma.product.findUnique({
     where: { id },
     include: {
-      category: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true, code: true } },
       variants: {
         orderBy: [{ size: 'asc' }, { colour: 'asc' }],
       },
@@ -325,12 +359,36 @@ export async function createProduct(input: CreateProductInput) {
     throw new AppError(400, 'Prices must be zero or greater');
   }
 
+  const variants = (input.variants ?? []).filter(
+    (v) => (v.size?.trim() || v.colour?.trim() || (v.currentStock ?? 0) > 0),
+  );
+  const declaredTotal = Math.max(0, Math.floor(input.openingStock ?? 0));
+  const variantSum = variants.reduce((s, v) => s + Math.max(0, Math.floor(v.currentStock ?? 0)), 0);
+
+  if (variants.length > 0 && variantSum > declaredTotal && declaredTotal > 0) {
+    throw new AppError(
+      400,
+      `Variant stock (${variantSum}) exceeds total stock (${declaredTotal})`,
+    );
+  }
+  // When variants exist but no declared total was given, treat sum as the total.
+  if (variants.length > 0 && declaredTotal === 0 && variantSum === 0) {
+    // allowed — empty opening stock
+  }
+
   try {
     const productId = await prisma.$transaction(async (tx) => {
+      let categoryCode: string | null = null;
+      if (input.categoryId) {
+        const cat = await tx.productCategory.findUnique({ where: { id: input.categoryId } });
+        categoryCode = cat?.code ?? null;
+      }
+
       const productCode =
-        input.sku?.trim() || (await generateUniqueProductCode(tx, name));
+        input.sku?.trim() ||
+        (await generateUniqueProductCode(tx, name, { categoryCode }));
       const productBarcode =
-        input.barcode?.trim() || (await generateUniqueBarcode(tx));
+        input.barcode?.trim() || (await generateUniqueBarcode(tx, { categoryCode }));
 
       const product = await tx.product.create({
         data: {
@@ -348,7 +406,6 @@ export async function createProduct(input: CreateProductInput) {
         },
       });
 
-      const variants = input.variants ?? [];
       for (const v of variants) {
         const variantCode =
           v.sku?.trim() ||
@@ -356,8 +413,10 @@ export async function createProduct(input: CreateProductInput) {
             parentCode: productCode,
             size: v.size,
             colour: v.colour,
+            categoryCode,
           }));
-        const variantBarcode = v.barcode?.trim() || (await generateUniqueBarcode(tx));
+        const variantBarcode =
+          v.barcode?.trim() || (await generateUniqueBarcode(tx, { categoryCode }));
 
         const created = await tx.productVariant.create({
           data: {
@@ -372,7 +431,7 @@ export async function createProduct(input: CreateProductInput) {
           },
         });
 
-        const openingQty = v.currentStock ?? 0;
+        const openingQty = Math.max(0, Math.floor(v.currentStock ?? 0));
         if (openingQty > 0) {
           await adjustStockInTx(
             tx,
@@ -384,11 +443,11 @@ export async function createProduct(input: CreateProductInput) {
         }
       }
 
-      if (variants.length === 0 && (input.openingStock ?? 0) > 0) {
+      if (variants.length === 0 && declaredTotal > 0) {
         await adjustStockInTx(
           tx,
           { productId: product.id },
-          input.openingStock!,
+          declaredTotal,
           StockMovementType.OPENING,
           { note: 'Opening stock on product create' },
         );
@@ -631,7 +690,7 @@ export async function getProductByBarcode(barcode: string) {
     include: {
       product: {
         include: {
-          category: { select: { id: true, name: true } },
+          category: { select: { id: true, name: true, code: true } },
           variants: { orderBy: [{ size: 'asc' }, { colour: 'asc' }] },
         },
       },
@@ -651,7 +710,7 @@ export async function getProductByBarcode(barcode: string) {
   const productRow = await prisma.product.findFirst({
     where: { barcode: trimmed },
     include: {
-      category: { select: { id: true, name: true } },
+      category: { select: { id: true, name: true, code: true } },
       variants: { orderBy: [{ size: 'asc' }, { colour: 'asc' }] },
     },
   });

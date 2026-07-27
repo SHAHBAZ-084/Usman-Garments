@@ -245,6 +245,8 @@ enum PurchaseStatus {
 model ProductCategory {
   id        Int      @id @default(autoincrement())
   name      String   @unique
+  /// Short prefix used in auto-generated product codes (e.g. MSH).
+  code      String   @unique
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
