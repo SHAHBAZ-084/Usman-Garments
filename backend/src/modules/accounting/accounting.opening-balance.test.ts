@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { prisma } from '../../lib/prisma';
 import {
   bootstrapChartOfAccounts,
   createAccount,
@@ -10,10 +11,12 @@ describe('opening balance ledger report (Part 8 regression)', () => {
   it('shows opening balance row and closing balance matches trial balance', async () => {
     await bootstrapChartOfAccounts();
 
-    const expenseCat = await import('../../lib/prisma').then(({ prisma }) =>
-      prisma.accountCategory.findFirst({ where: { name: 'Expenses' } }),
-    );
-    if (!expenseCat) throw new Error('Expenses category missing');
+    let expenseCat = await prisma.accountCategory.findFirst({
+      where: { isActive: true, name: 'Expenses' },
+    });
+    if (!expenseCat) {
+      expenseCat = await prisma.accountCategory.create({ data: { name: 'Expenses' } });
+    }
 
     const uniqueName = `OB Ledger Test ${Date.now()}`;
     const account = await createAccount({

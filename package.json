@@ -5,6 +5,7 @@
   "description": "Offline desktop accounting for Usman Garments — Electron + React + Express + SQLite",
   "main": "dist-electron/main.js",
   "scripts": {
+    "setup": "node scripts/setup.js",
     "dev": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run electron:dev\"",
     "dev:web": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "electron:dev": "npm run build:electron && wait-on http://127.0.0.1:5173 http://127.0.0.1:3847/api/health && cross-env NODE_ENV=development electron .",

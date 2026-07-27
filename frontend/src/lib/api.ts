@@ -91,6 +91,12 @@ export const api = {
       body: JSON.stringify({ name }),
     });
   },
+  updateCategory(id: number, name: string) {
+    return request<AccountCategory>(`/api/accounting/categories/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name }),
+    });
+  },
   deleteCategory(id: number) {
     return request<AccountCategory>(`/api/accounting/categories/${id}`, { method: 'DELETE' });
   },

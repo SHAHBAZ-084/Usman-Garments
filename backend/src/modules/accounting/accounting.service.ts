@@ -393,6 +393,23 @@ export async function createAccountCategory(name: string) {
   return prisma.accountCategory.create({ data: { name: trimmedName } });
 }
 
+export async function updateAccountCategory(id: number, name: string) {
+  const category = await prisma.accountCategory.findFirst({
+    where: { id, isActive: true },
+  });
+  if (!category) throw new AppError(404, 'Category not found');
+
+  if (isSystemAccountCategoryName(category.name)) {
+    throw new AppError(400, `The ${category.name} category cannot be renamed`);
+  }
+
+  const trimmedName = await assertUniqueCategoryName(name, id);
+  return prisma.accountCategory.update({
+    where: { id },
+    data: { name: trimmedName },
+  });
+}
+
 export async function softDeleteAccountCategory(id: number) {
   const category = await prisma.accountCategory.findFirst({
     where: { id, isActive: true },
@@ -639,17 +656,51 @@ function normalizeLabel(value: string) {
   return value.trim();
 }
 
-async function assertUniqueCategoryName(name: string) {
+async function assertUniqueCategoryName(name: string, excludeId?: number) {
   const trimmed = normalizeLabel(name);
   if (!trimmed) throw new AppError(400, 'Category name is required');
 
   const existing = await prisma.accountCategory.findFirst({
-    where: { isActive: true, name: { equals: trimmed } },
+    where: {
+      isActive: true,
+      name: { equals: trimmed },
+      ...(excludeId != null ? { id: { not: excludeId } } : {}),
+    },
   });
   if (existing) {
     throw new AppError(400, `Category "${existing.name}" already exists`);
   }
   return trimmed;
+}
+
+/**
+ * Outstanding customer balances (receivables).
+ * Ledger uses signed balance (debit − credit). Customer ASSET balances are typically positive.
+ */
+export function sumCustomerReceivables(
+  accounts: { categoryName: string; balance: number }[],
+): number {
+  let total = 0;
+  for (const account of accounts) {
+    if (!isCustomersCategoryName(account.categoryName)) continue;
+    total += Math.max(0, account.balance);
+  }
+  return total;
+}
+
+/**
+ * Outstanding supplier balances (payables).
+ * Supplier LIABILITY credit balances are negative in signed-ledger form.
+ */
+export function sumSupplierPayables(
+  accounts: { categoryName: string; balance: number }[],
+): number {
+  let total = 0;
+  for (const account of accounts) {
+    if (!isSuppliersCategoryName(account.categoryName)) continue;
+    total += Math.max(0, -account.balance);
+  }
+  return total;
 }
 
 async function assertUniqueAccountName(name: string) {
@@ -1532,14 +1583,18 @@ export async function getDashboardSummary() {
   });
 
   let cashBalance = 0;
+  const categoryBalances: { categoryName: string; balance: number }[] = [];
   for (const account of accounts) {
-    if (account.category && isBankOrCashCategory(account.category.name) && account.ledger) {
-      cashBalance += Number(account.ledger.balance);
+    if (!account.category || !account.ledger) continue;
+    const balance = Number(account.ledger.balance);
+    if (isBankOrCashCategory(account.category.name)) {
+      cashBalance += balance;
     }
+    categoryBalances.push({ categoryName: account.category.name, balance });
   }
 
-  const receivables = 0;
-  const payables = 0;
+  const receivables = sumCustomerReceivables(categoryBalances);
+  const payables = sumSupplierPayables(categoryBalances);
 
   const todayStart = startOfDay(new Date());
   const todayEnd = endOfDay(new Date());

@@ -26,6 +26,18 @@ accountingRouter.post(
   }),
 );
 
+accountingRouter.patch(
+  '/categories/:id',
+  validateBody(z.object({ name: z.string().min(1) })),
+  asyncHandler(async (req, res) => {
+    const category = await accountingService.updateAccountCategory(
+      parseInt(param(req.params.id), 10),
+      req.body.name,
+    );
+    res.json(category);
+  }),
+);
+
 accountingRouter.delete(
   '/categories/:id',
   asyncHandler(async (req, res) => {

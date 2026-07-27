@@ -6,7 +6,7 @@ type Mode = 'add' | 'edit' | 'remove';
 
 const copy: Record<Mode, { title: string; subtitle: string }> = {
   add: { title: 'Add Category', subtitle: 'Create a new chart-of-accounts category' },
-  edit: { title: 'Edit Category', subtitle: 'Rename a category (coming soon — delete & re-add for now)' },
+  edit: { title: 'Edit Category', subtitle: 'Rename an existing category' },
   remove: { title: 'Remove Category', subtitle: 'Soft-delete an empty category' },
 };
 
@@ -21,6 +21,12 @@ export function CategoryManagePage({ mode }: { mode: Mode }) {
     api.listCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
 
+  useEffect(() => {
+    if (mode !== 'edit' || !selectedId) return;
+    const selected = categories.find((c) => c.id === selectedId);
+    if (selected) setName(selected.name);
+  }, [mode, selectedId, categories]);
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError('');
@@ -30,13 +36,18 @@ export function CategoryManagePage({ mode }: { mode: Mode }) {
         await api.createCategory(name);
         setMessage('Category created.');
         setName('');
+      } else if (mode === 'edit') {
+        if (!selectedId) throw new Error('Select a category');
+        if (!name.trim()) throw new Error('Enter a new category name');
+        await api.updateCategory(Number(selectedId), name);
+        setMessage('Category renamed.');
+        setSelectedId('');
+        setName('');
       } else if (mode === 'remove') {
         if (!selectedId) throw new Error('Select a category');
         await api.deleteCategory(Number(selectedId));
         setMessage('Category removed.');
         setSelectedId('');
-      } else {
-        setMessage('Edit category will be wired when you confirm rename rules.');
       }
       setCategories(await api.listCategories());
     } catch (err) {
@@ -56,20 +67,28 @@ export function CategoryManagePage({ mode }: { mode: Mode }) {
               <TextInput value={name} onChange={(e) => setName(e.target.value)} required />
             </div>
           ) : (
-            <div>
-              <FieldLabel>Category</FieldLabel>
-              <select
-                className="w-full rounded-lg border border-border px-3 py-2 text-sm"
-                value={selectedId}
-                onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : '')}
-                required={mode === 'remove'}
-              >
-                <option value="">Select category</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div>
+                <FieldLabel>Category</FieldLabel>
+                <select
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
+                  value={selectedId}
+                  onChange={(e) => setSelectedId(e.target.value ? Number(e.target.value) : '')}
+                  required
+                >
+                  <option value="">Select category</option>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+              {mode === 'edit' ? (
+                <div>
+                  <FieldLabel>New name</FieldLabel>
+                  <TextInput value={name} onChange={(e) => setName(e.target.value)} required />
+                </div>
+              ) : null}
+            </>
           )}
           {error ? <p className="text-sm text-danger">{error}</p> : null}
           {message ? <p className="text-sm text-success">{message}</p> : null}

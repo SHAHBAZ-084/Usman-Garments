@@ -75,7 +75,7 @@ function ActionCard({
   );
 }
 
-export function PosHomePage() {
+export function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loadError, setLoadError] = useState('');
 
@@ -87,7 +87,7 @@ export function PosHomePage() {
   }, []);
 
   return (
-    <PageShell title="Dashboard" subtitle="Today at a glance">
+    <PageShell title="Dashboard" subtitle="Accounting dashboard">
       {loadError ? <p className="mb-4 text-sm text-danger">{loadError}</p> : null}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
