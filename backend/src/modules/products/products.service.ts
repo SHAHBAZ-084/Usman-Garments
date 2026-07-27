@@ -680,7 +680,8 @@ export async function listStockMovements(
 }
 
 export async function getProductByBarcode(barcode: string) {
-  const trimmed = barcode.trim();
+  // Scanners send plain text + Enter; trim and strip non-printable control chars.
+  const trimmed = barcode.replace(/[\u0000-\u001F\u007F]/g, '').trim();
   if (!trimmed) throw new AppError(400, 'Barcode is required');
 
   const settings = await ensureBusinessSettings();

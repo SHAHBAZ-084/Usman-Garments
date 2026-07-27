@@ -20,6 +20,7 @@ export const TOP_NAV: NavGroup[] = [
     children: [
       { kind: 'link', label: 'Product List', to: '/products' },
       { kind: 'link', label: 'Add Product', to: '/products/add' },
+      { kind: 'link', label: 'Scan barcode', to: '/products/scan' },
     ],
   },
   {

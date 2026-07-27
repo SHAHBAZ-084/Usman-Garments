@@ -3,6 +3,7 @@ import path from 'path';
 import { Prisma, ReceiptSize, ThemeMode } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/helpers';
+import { isValidBarcodeLabelSize, normalizeBarcodeLabelSize } from './label-size';
 
 export const BUSINESS_SETTINGS_ID = 1;
 
@@ -124,7 +125,16 @@ export async function updateBusinessSettings(input: BusinessSettingsUpdateInput)
   if (input.printerName !== undefined) {
     data.printerName = input.printerName?.trim() ? input.printerName.trim() : null;
   }
-  if (input.barcodeLabelSize !== undefined) data.barcodeLabelSize = input.barcodeLabelSize.trim();
+  if (input.barcodeLabelSize !== undefined) {
+    const normalized = normalizeBarcodeLabelSize(input.barcodeLabelSize);
+    if (!isValidBarcodeLabelSize(normalized)) {
+      throw new AppError(
+        400,
+        'Barcode label size must be a preset (40x30, 50x25, 50x30, a4) or custom WxH in mm',
+      );
+    }
+    data.barcodeLabelSize = normalized;
+  }
   if (input.lowStockLimit !== undefined) data.lowStockLimit = input.lowStockLimit;
   if (input.backupFolderPath !== undefined) data.backupFolderPath = input.backupFolderPath.trim();
   if (input.themeMode !== undefined) data.themeMode = input.themeMode;

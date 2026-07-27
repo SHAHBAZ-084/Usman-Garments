@@ -104,8 +104,9 @@ export async function generateUniqueProductCode(
 }
 
 /**
- * Numeric Code128-compatible barcode. When categoryCode is provided, embeds a
- * numeric fingerprint of the category into the middle digits for uniqueness grouping.
+ * Numeric-only Code128-compatible barcode (digits 0–9).
+ * Avoids letters/punctuation that some USB scanners mishandle in Code128 auto mode.
+ * When categoryCode is provided, embeds a numeric fingerprint of the category into the middle digits.
  */
 export async function generateUniqueBarcode(
   tx: Prisma.TransactionClient,

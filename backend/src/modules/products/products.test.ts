@@ -224,4 +224,9 @@ describe('products inventory foundation', () => {
     expect(byProduct.matchType).toBe('product');
     expect(byProduct.product.id).toBe(product.id);
   });
+
+  it('returns a clear not-found error for unknown barcodes', async () => {
+    await expect(getProductByBarcode('999999999999')).rejects.toThrow(/no product found/i);
+    await expect(getProductByBarcode('   ')).rejects.toThrow(/required/i);
+  });
 });

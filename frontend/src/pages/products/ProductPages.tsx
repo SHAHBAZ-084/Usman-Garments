@@ -61,6 +61,10 @@ export function ProductsListPage() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [preview, setPreview] = useState<ProductImportPreview | null>(null);
   const [labelItems, setLabelItems] = useState<LabelItem[] | null>(null);
+  const [labelSizeKey, setLabelSizeKey] = useState('50x30');
+  const [allowQtyEdit, setAllowQtyEdit] = useState(false);
+  const [selected, setSelected] = useState<Record<string, LabelItem>>({});
+  const [businessName, setBusinessName] = useState('Usman Mall');
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
@@ -77,8 +81,58 @@ export function ProductsListPage() {
     }
   }, [activeOnly, categoryId, page, search]);
 
-  useEffect(() => { api.listProductCategories().then(setCategories).catch(() => setCategories([])); }, []);
+  useEffect(() => {
+    Promise.all([api.listProductCategories(), api.getSettings()])
+      .then(([cats, settings]) => {
+        setCategories(cats);
+        setBusinessName(settings.businessName);
+        setLabelSizeKey(settings.barcodeLabelSize || '50x30');
+      })
+      .catch(() => setCategories([]));
+  }, []);
   useEffect(() => { void load(); }, [load]);
+
+  const visibleTargets = useMemo(() => {
+    const items: LabelItem[] = [];
+    for (const product of result?.items ?? []) {
+      items.push(...labelItemsFromProduct(product, businessName));
+    }
+    return items;
+  }, [result, businessName]);
+
+  const allVisibleSelected =
+    visibleTargets.length > 0 && visibleTargets.every((item) => selected[item.key]);
+
+  function toggleTarget(item: LabelItem, checked: boolean) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (checked) next[item.key] = item;
+      else delete next[item.key];
+      return next;
+    });
+  }
+
+  function toggleSelectAllVisible(checked: boolean) {
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const item of visibleTargets) {
+        if (checked) next[item.key] = item;
+        else delete next[item.key];
+      }
+      return next;
+    });
+  }
+
+  function openBulkPrint() {
+    const items = Object.values(selected);
+    if (!items.length) {
+      setError('Select at least one product or variant to print.');
+      return;
+    }
+    setError('');
+    setAllowQtyEdit(true);
+    setLabelItems(items);
+  }
 
   async function downloadTemplate() {
     setError('');
@@ -116,6 +170,8 @@ export function ProductsListPage() {
       const committed = await api.commitProductImport(preview.commitPayload);
       const settings = await api.getSettings();
       setPreview(null);
+      setAllowQtyEdit(false);
+      setLabelSizeKey(settings.barcodeLabelSize || '50x30');
       setLabelItems(committed.products.flatMap((product) => labelItemsFromProduct(product, settings.businessName)));
       await load();
     } catch (err) {
@@ -125,14 +181,20 @@ export function ProductsListPage() {
     }
   }
 
+  const selectedCount = Object.keys(selected).length;
+
   return (
     <PageShell title="Products" subtitle="Manage inventory items, variants, and stock levels" actions={<div className="flex flex-wrap gap-2">
+      <Link to="/products/scan"><SecondaryButton type="button">Scan barcode</SecondaryButton></Link>
       <SecondaryButton onClick={() => void downloadTemplate()}>Download Template</SecondaryButton>
       <label className="btn-secondary cursor-pointer">Import Stock<input className="hidden" type="file" accept=".xlsx,.xls" onChange={(event) => {
         const file = event.target.files?.[0];
         if (file) void previewImport(file);
         event.currentTarget.value = '';
       }} /></label>
+      <SecondaryButton type="button" onClick={openBulkPrint} disabled={selectedCount === 0}>
+        Print Labels{selectedCount ? ` (${selectedCount})` : ''}
+      </SecondaryButton>
       <Link to="/products/add"><PrimaryButton type="button">Add Product</PrimaryButton></Link>
     </div>}>
       <Panel className="mb-4"><div className="grid gap-4 md:grid-cols-4">
@@ -145,20 +207,157 @@ export function ProductsListPage() {
         {preview.errors.length ? <ul className="mt-3 list-disc pl-5 text-sm text-danger">{preview.errors.map((item) => <li key={`${item.rowNumber}-${item.message}`}>Row {item.rowNumber}: {item.message}</li>)}</ul> : null}
         <div className="mt-4 flex gap-2"><SecondaryButton onClick={() => setPreview(null)}>Cancel</SecondaryButton><PrimaryButton onClick={() => void commitImport()} disabled={importing || !preview.commitPayload.length}>{importing ? 'Importing…' : 'Confirm Import'}</PrimaryButton></div>
       </Panel> : null}
-      <Panel><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b border-border text-left text-textSecondary"><th className="w-10 px-2 py-2" /><th className="px-2 py-2 font-medium">Name</th><th className="px-2 py-2 font-medium">Category</th><th className="px-2 py-2 text-right font-medium">Total stock</th><th className="px-2 py-2 text-right font-medium">Sale price</th><th className="px-2 py-2 font-medium">Status</th></tr></thead><tbody>
-        {result?.items.map((product) => <ProductListRow key={product.id} product={product} expanded={expanded === product.id} onToggle={() => setExpanded((id) => id === product.id ? null : product.id)} />)}
-        {!loading && result?.items.length === 0 ? <tr><td colSpan={6} className="px-2 py-8 text-center text-textSecondary">No products found.</td></tr> : null}
+      <Panel><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b border-border text-left text-textSecondary">
+        <th className="w-10 px-2 py-2">
+          <input
+            type="checkbox"
+            aria-label="Select all visible labels"
+            checked={allVisibleSelected}
+            onChange={(event) => toggleSelectAllVisible(event.target.checked)}
+          />
+        </th>
+        <th className="w-10 px-2 py-2" />
+        <th className="px-2 py-2 font-medium">Name</th>
+        <th className="px-2 py-2 font-medium">Category</th>
+        <th className="px-2 py-2 text-right font-medium">Total stock</th>
+        <th className="px-2 py-2 text-right font-medium">Sale price</th>
+        <th className="px-2 py-2 font-medium">Status</th>
+      </tr></thead><tbody>
+        {result?.items.map((product) => (
+          <ProductListRow
+            key={product.id}
+            product={product}
+            businessName={businessName}
+            expanded={expanded === product.id}
+            onToggle={() => setExpanded((id) => (id === product.id ? null : product.id))}
+            selected={selected}
+            onToggleTarget={toggleTarget}
+          />
+        ))}
+        {!loading && result?.items.length === 0 ? <tr><td colSpan={7} className="px-2 py-8 text-center text-textSecondary">No products found.</td></tr> : null}
       </tbody></table></div>
-      {result ? <div className="mt-4 flex items-center justify-between"><p className="text-sm text-textSecondary">Page {result.page} of {result.totalPages} ({result.total} products)</p><div className="flex gap-2"><SecondaryButton disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</SecondaryButton><SecondaryButton disabled={page >= result.totalPages} onClick={() => setPage((value) => value + 1)}>Next</SecondaryButton></div></div> : null}
+      {result ? <div className="mt-4 flex items-center justify-between"><p className="text-sm text-textSecondary">Page {result.page} of {result.totalPages} ({result.total} products){selectedCount ? ` · ${selectedCount} selected for labels` : ''}</p><div className="flex gap-2"><SecondaryButton disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</SecondaryButton><SecondaryButton disabled={page >= result.totalPages} onClick={() => setPage((value) => value + 1)}>Next</SecondaryButton></div></div> : null}
       </Panel>
-      {labelItems?.length ? <BarcodeLabelModal items={labelItems} onClose={() => setLabelItems(null)} /> : null}
+      {labelItems?.length ? (
+        <BarcodeLabelModal
+          items={labelItems}
+          labelSizeKey={labelSizeKey}
+          allowQuantityEdit={allowQtyEdit}
+          title={allowQtyEdit ? 'Print barcode labels' : 'Imported barcode labels'}
+          onClose={() => {
+            setLabelItems(null);
+            setAllowQtyEdit(false);
+          }}
+        />
+      ) : null}
     </PageShell>
   );
 }
 
-function ProductListRow({ product, expanded, onToggle }: { product: Product; expanded: boolean; onToggle: () => void }) {
-  return <><tr className="border-b border-border/60 hover:bg-surface1"><td className="px-2 py-2"><GhostButton className="p-1" aria-label={`${expanded ? 'Hide' : 'Show'} variants`} onClick={onToggle}>{expanded ? '⌄' : '›'}</GhostButton></td><td className="px-2 py-2"><Link className="font-medium text-accent hover:underline" to={`/products/${product.id}`}>{product.name}</Link>{product.isLowStock ? <span className="ml-2 rounded bg-bgDanger px-1.5 py-0.5 text-xs text-danger">Low stock</span> : null}{product.costNotSet ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-200">Cost not set</span> : null}</td><td className="px-2 py-2">{product.category?.name ?? '—'}</td><td className="px-2 py-2 text-right">{product.currentStock}</td><td className="px-2 py-2 text-right">{formatMoney(product.salePrice)}</td><td className="px-2 py-2">{product.isActive ? 'Active' : <span className="text-danger">Inactive</span>}</td></tr>
-    {expanded ? <tr className="border-b border-border/60 bg-surface1"><td /><td colSpan={5} className="p-3">{product.variants?.length ? <table className="w-full text-sm"><thead><tr className="text-left text-textSecondary"><th>Size</th><th>Colour</th><th className="text-right">Price</th><th className="text-right">Stock</th><th>Barcode / Product Code</th></tr></thead><tbody>{product.variants.map((variant) => <tr key={variant.id}><td>{variant.size ?? '—'}</td><td>{variant.colour ?? '—'}</td><td className="text-right">{formatMoney(variant.salePrice ?? product.salePrice)}</td><td className="text-right">{variant.currentStock}</td><td className="font-mono text-xs">{variant.barcode ?? '—'} / {variant.productCode}</td></tr>)}</tbody></table> : <p className="text-sm text-textSecondary">No variants. Product Code: <span className="font-mono">{product.productCode}</span></p>}</td></tr> : null}</>;
+function ProductListRow({
+  product,
+  businessName,
+  expanded,
+  onToggle,
+  selected,
+  onToggleTarget,
+}: {
+  product: Product;
+  businessName: string;
+  expanded: boolean;
+  onToggle: () => void;
+  selected: Record<string, LabelItem>;
+  onToggleTarget: (item: LabelItem, checked: boolean) => void;
+}) {
+  const targets = labelItemsFromProduct(product, businessName);
+  const hasVariants = (product.variants?.length ?? 0) > 0;
+  const productTargetsSelected =
+    targets.length > 0 && targets.every((item) => selected[item.key]);
+
+  function toggleProductLevel(checked: boolean) {
+    for (const item of targets) onToggleTarget(item, checked);
+  }
+
+  return (
+    <>
+      <tr className="border-b border-border/60 hover:bg-surface1">
+        <td className="px-2 py-2">
+          {targets.length ? (
+            <input
+              type="checkbox"
+              aria-label={`Select labels for ${product.name}`}
+              checked={productTargetsSelected}
+              onChange={(event) => toggleProductLevel(event.target.checked)}
+            />
+          ) : null}
+        </td>
+        <td className="px-2 py-2">
+          <GhostButton className="p-1" aria-label={`${expanded ? 'Hide' : 'Show'} variants`} onClick={onToggle}>
+            {expanded ? '⌄' : '›'}
+          </GhostButton>
+        </td>
+        <td className="px-2 py-2">
+          <Link className="font-medium text-accent hover:underline" to={`/products/${product.id}`}>{product.name}</Link>
+          {product.isLowStock ? <span className="ml-2 rounded bg-bgDanger px-1.5 py-0.5 text-xs text-danger">Low stock</span> : null}
+          {product.costNotSet ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-200">Cost not set</span> : null}
+        </td>
+        <td className="px-2 py-2">{product.category?.name ?? '—'}</td>
+        <td className="px-2 py-2 text-right">{product.currentStock}</td>
+        <td className="px-2 py-2 text-right">{formatMoney(product.salePrice)}</td>
+        <td className="px-2 py-2">{product.isActive ? 'Active' : <span className="text-danger">Inactive</span>}</td>
+      </tr>
+      {expanded ? (
+        <tr className="border-b border-border/60 bg-surface1">
+          <td />
+          <td />
+          <td colSpan={5} className="p-3">
+            {hasVariants ? (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-textSecondary">
+                    <th className="w-10">Print</th>
+                    <th>Size</th>
+                    <th>Colour</th>
+                    <th className="text-right">Price</th>
+                    <th className="text-right">Stock</th>
+                    <th>Barcode / Product Code</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {product.variants!.map((variant) => {
+                    const item = targets.find((t) => t.key === `variant-${variant.id}`);
+                    return (
+                      <tr key={variant.id}>
+                        <td>
+                          {item ? (
+                            <input
+                              type="checkbox"
+                              checked={Boolean(selected[item.key])}
+                              onChange={(event) => onToggleTarget(item, event.target.checked)}
+                            />
+                          ) : null}
+                        </td>
+                        <td>{variant.size ?? '—'}</td>
+                        <td>{variant.colour ?? '—'}</td>
+                        <td className="text-right">{formatMoney(variant.salePrice ?? product.salePrice)}</td>
+                        <td className="text-right">{variant.currentStock}</td>
+                        <td className="font-mono text-xs">{variant.barcode ?? '—'} / {variant.productCode}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p className="text-sm text-textSecondary">
+                No variants. Product Code: <span className="font-mono">{product.productCode}</span>
+                {product.barcode ? <> · Barcode: <span className="font-mono">{product.barcode}</span></> : null}
+              </p>
+            )}
+          </td>
+        </tr>
+      ) : null}
+    </>
+  );
 }
 
 function StockAdjustModal({
@@ -319,6 +518,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
   const productId = mode === 'edit' ? Number(params.id) : null;
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [businessName, setBusinessName] = useState('Usman Mall');
+  const [labelSizeKey, setLabelSizeKey] = useState('50x30');
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -343,6 +543,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       .then(([cats, settings]) => {
         setCategories(cats);
         setBusinessName(settings.businessName);
+        setLabelSizeKey(settings.barcodeLabelSize || '50x30');
       })
       .catch(() => setCategories([]));
   }, []);
@@ -524,7 +725,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           {mode === 'edit' && product?.isActive ? (
             <>
               {printableLabels.length > 0 ? (
-                <SecondaryButton type="button" onClick={() => printBarcodeLabels(printableLabels)}>
+                <SecondaryButton type="button" onClick={() => printBarcodeLabels(printableLabels, labelSizeKey)}>
                   Print Label{printableLabels.length > 1 ? 's' : ''}
                 </SecondaryButton>
               ) : null}
@@ -732,7 +933,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       ) : null}
 
       {labelItems && labelItems.length > 0 ? (
-        <BarcodeLabelModal items={labelItems} onClose={closeLabelModal} />
+        <BarcodeLabelModal items={labelItems} labelSizeKey={labelSizeKey} onClose={closeLabelModal} />
       ) : null}
     </PageShell>
   );

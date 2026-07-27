@@ -69,6 +69,20 @@ describe('business settings', () => {
     expect(again.themeMode).toBe('dark');
   });
 
+  it('persists barcode label size presets and custom WxH', async () => {
+    const a4 = await updateBusinessSettings({ barcodeLabelSize: 'a4' });
+    expect(a4.barcodeLabelSize).toBe('a4');
+    expect((await getBusinessSettings()).barcodeLabelSize).toBe('a4');
+
+    const thermal = await updateBusinessSettings({ barcodeLabelSize: '40x30' });
+    expect(thermal.barcodeLabelSize).toBe('40x30');
+
+    const custom = await updateBusinessSettings({ barcodeLabelSize: '60x40' });
+    expect(custom.barcodeLabelSize).toBe('60x40');
+
+    await expect(updateBusinessSettings({ barcodeLabelSize: 'huge' })).rejects.toThrow(/label size/i);
+  });
+
   it('rejects invalid lowStockLimit', async () => {
     await expect(updateBusinessSettings({ lowStockLimit: 0 })).rejects.toThrow(
       /positive integer/i,

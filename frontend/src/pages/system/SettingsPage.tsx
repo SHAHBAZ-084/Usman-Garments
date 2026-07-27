@@ -267,7 +267,64 @@ export function SettingsPage() {
               </div>
               <div>
                 <FieldLabel>Barcode label size</FieldLabel>
-                <TextInput value={form.barcodeLabelSize} onChange={(e) => patchField('barcodeLabelSize', e.target.value)} />
+                <select
+                  className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
+                  value={
+                    ['40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize)
+                      ? form.barcodeLabelSize
+                      : 'custom'
+                  }
+                  onChange={(e) => {
+                    if (e.target.value === 'custom') {
+                      const current = form.barcodeLabelSize;
+                      const isPreset = ['40x30', '50x25', '50x30', 'a4'].includes(current);
+                      patchField('barcodeLabelSize', isPreset ? '60x40' : current);
+                    } else {
+                      patchField('barcodeLabelSize', e.target.value);
+                    }
+                  }}
+                >
+                  <option value="40x30">40 × 30 mm (thermal)</option>
+                  <option value="50x25">50 × 25 mm (thermal)</option>
+                  <option value="50x30">50 × 30 mm (thermal)</option>
+                  <option value="a4">A4 sheet (grid)</option>
+                  <option value="custom">Custom size…</option>
+                </select>
+                {!['40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize) ? (
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div>
+                      <FieldLabel>Width (mm)</FieldLabel>
+                      <TextInput
+                        type="number"
+                        min={20}
+                        max={200}
+                        value={String(Number(form.barcodeLabelSize.split('x')[0]) || 60)}
+                        onChange={(e) => {
+                          const w = Math.max(20, Math.min(200, Number(e.target.value) || 60));
+                          const h = Number(form.barcodeLabelSize.split('x')[1]) || 40;
+                          patchField('barcodeLabelSize', `${w}x${h}`);
+                        }}
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Height (mm)</FieldLabel>
+                      <TextInput
+                        type="number"
+                        min={15}
+                        max={200}
+                        value={String(Number(form.barcodeLabelSize.split('x')[1]) || 40)}
+                        onChange={(e) => {
+                          const h = Math.max(15, Math.min(200, Number(e.target.value) || 40));
+                          const w = Number(form.barcodeLabelSize.split('x')[0]) || 60;
+                          patchField('barcodeLabelSize', `${w}x${h}`);
+                        }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                <p className="mt-1 text-xs text-textMuted">
+                  Default size for bulk and single label printing. Override per print if needed.
+                </p>
               </div>
             </div>
           </Tile>
