@@ -2,7 +2,7 @@ import { forwardRef, ReactNode, RefObject } from 'react';
 import { Link } from 'react-router-dom';
 
 type PageShellProps = {
-  title: ReactNode;
+  title?: ReactNode;
   subtitle?: string;
   children?: ReactNode;
   actions?: ReactNode;
@@ -36,15 +36,19 @@ export function PageShell({
     );
   }
 
+  const showHeader = Boolean(title || subtitle || actions);
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-textPrimary">{title}</h1>
-          {subtitle ? <p className="mt-1 text-sm text-textSecondary">{subtitle}</p> : null}
+      {showHeader ? (
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            {title ? <h1 className="text-2xl font-semibold text-textPrimary">{title}</h1> : null}
+            {subtitle ? <p className={`text-sm text-textSecondary ${title ? 'mt-1' : ''}`}>{subtitle}</p> : null}
+          </div>
+          {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
         </div>
-        {actions ? <div className="flex flex-wrap gap-2">{actions}</div> : null}
-      </div>
+      ) : null}
       {children}
     </div>
   );

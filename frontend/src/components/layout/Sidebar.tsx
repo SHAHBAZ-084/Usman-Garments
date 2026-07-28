@@ -109,6 +109,7 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const [businessName, setBusinessName] = useState('Usman Mall');
+  const [tagline, setTagline] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -119,6 +120,7 @@ export function Sidebar() {
         .then((settings) => {
           if (cancelled) return;
           if (settings.businessName?.trim()) setBusinessName(settings.businessName.trim());
+          setTagline(settings.tagline?.trim() ?? '');
           setLogoUrl(settings.logoUrl);
         })
         .catch(() => undefined);
@@ -139,14 +141,19 @@ export function Sidebar() {
   return (
     <aside className="app-sidebar">
       <Link to="/" className="app-sidebar-brand">
-        {logoUrl ? (
-          <img src={logoUrl} alt="" className="app-sidebar-logo" />
-        ) : (
-          <span className="app-sidebar-logo-fallback" aria-hidden>
-            {(businessName.trim().charAt(0) || 'U').toUpperCase()}
-          </span>
-        )}
-        <span className="app-sidebar-brand-name">{businessName}</span>
+        <div className="app-sidebar-logo-badge">
+          {logoUrl ? (
+            <img src={logoUrl} alt="" className="app-sidebar-logo" />
+          ) : (
+            <span className="app-sidebar-logo-fallback" aria-hidden>
+              {(businessName.trim().charAt(0) || 'U').toUpperCase()}
+            </span>
+          )}
+        </div>
+        <div className="app-sidebar-brand-text">
+          <span className="app-sidebar-brand-name">{businessName}</span>
+          {tagline ? <span className="app-sidebar-brand-tagline">{tagline}</span> : null}
+        </div>
       </Link>
 
       <nav className="app-sidebar-nav">
@@ -177,8 +184,8 @@ export function Sidebar() {
       <div className="app-sidebar-footer">
         {user ? (
           <div className="app-sidebar-user">
-            <p className="truncate text-sm font-medium text-navTextHover">{user.displayName || user.username}</p>
-            <p className="truncate text-xs text-navText opacity-80">{user.username}</p>
+            <p className="app-sidebar-user-name truncate">{user.displayName || user.username}</p>
+            <p className="app-sidebar-user-role truncate">{user.username}</p>
           </div>
         ) : null}
         <button type="button" className="app-sidebar-signout" onClick={() => void onSignOut()}>

@@ -144,7 +144,25 @@ export function DashboardPage() {
   }, [dash?.paymentMethodBreakdown]);
 
   return (
-    <PageShell title="Dashboard" subtitle="Shop overview — tap any figure to open its report">
+    <PageShell>
+      <section className="dashboard-quick-actions mb-4" aria-label="Quick actions">
+        <div className="dashboard-quick-actions-header">
+          <h1 className="dashboard-quick-actions-title">Quick Actions</h1>
+          <p className="dashboard-quick-actions-subtitle">Shop overview — tap any figure to open its report</p>
+        </div>
+        <div className="dashboard-quick-actions-grid">
+          {QUICK_ACTIONS.map((a) => {
+            const Icon = a.icon;
+            return (
+              <Link key={a.to} to={a.to} className="dashboard-quick-action-btn">
+                <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                {a.label}
+              </Link>
+            );
+          })}
+        </div>
+      </section>
+
       {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
       {backupStatus ? (
         <Feedback variant={backupStatus.ok ? 'info' : 'warning'} className="mb-3">
@@ -154,25 +172,6 @@ export function DashboardPage() {
           </Link>
         </Feedback>
       ) : null}
-
-      <Panel className="mb-4">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-textMuted">Quick actions</p>
-        <div className="flex flex-wrap gap-2">
-          {QUICK_ACTIONS.map((a) => {
-            const Icon = a.icon;
-            return (
-              <Link
-                key={a.to}
-                to={a.to}
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2 text-sm font-medium text-textPrimary shadow-sm transition hover:border-accent hover:bg-bgAccent"
-              >
-                <Icon className="h-4 w-4 text-accent" aria-hidden />
-                {a.label}
-              </Link>
-            );
-          })}
-        </div>
-      </Panel>
 
       <Panel className="mb-4">
         <div className="flex flex-wrap items-end gap-3">
