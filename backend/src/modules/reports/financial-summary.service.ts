@@ -447,7 +447,10 @@ export async function getPurchasePeriodTotals(now: Date = new Date()): Promise<P
 }
 
 async function getLowStockThreshold(): Promise<number> {
-  const settings = await prisma.businessSettings.findUnique({ where: { id: 1 } });
+  const settings = await prisma.businessSettings.findUnique({
+    where: { id: 1 },
+    select: { lowStockLimit: true },
+  });
   return settings?.lowStockLimit ?? 5;
 }
 

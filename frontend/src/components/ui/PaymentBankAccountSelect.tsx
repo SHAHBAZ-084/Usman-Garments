@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FieldLabel } from './PageShell';
-import { api, type BankAccountOption } from '../lib/api';
+import { api, type BankAccountOption } from '../../lib/api';
 
 const SELECT_CLASS =
   'w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm text-textPrimary';

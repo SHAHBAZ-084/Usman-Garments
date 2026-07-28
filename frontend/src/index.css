@@ -93,20 +93,21 @@
     color: var(--nav-active-text, #111111);
   }
 
-  /* Left sidebar — single navigation shell */
+  /* Left sidebar — vertical stem of reverse-7 chrome */
   .app-sidebar {
     display: flex;
     flex-direction: column;
     width: 15.5rem;
     flex-shrink: 0;
     background-color: var(--nav-bg, #111111);
-    border-right: 1px solid var(--nav-border, #000000);
+    border-right: 1px solid rgba(201, 150, 24, 0.28);
     color: var(--nav-text, #f0f0f0);
     min-height: 100vh;
     position: sticky;
     top: 0;
     align-self: flex-start;
     max-height: 100vh;
+    z-index: 2;
   }
 
   .app-sidebar-brand {
@@ -321,23 +322,40 @@
     transform: translateY(-1px);
   }
 
-  /* Dashboard quick actions — gold/black brand strip */
+  /* Reverse-7 chrome: sidebar (stem) + Quick Actions (top bar) */
+  .dashboard-page {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+  }
+
   .dashboard-quick-actions {
-    border-radius: 0.625rem;
-    border: 1px solid rgba(201, 150, 24, 0.45);
-    background: linear-gradient(135deg, #111111 0%, #1a1608 55%, #111111 100%);
-    box-shadow: 0 8px 24px rgba(17, 17, 17, 0.18);
-    padding: 1rem 1.125rem 1.125rem;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin: 0;
+    padding: 0.875rem 1.25rem 1rem;
+    border-radius: 0;
+    border: none;
+    border-bottom: 1px solid rgba(201, 150, 24, 0.35);
+    background-color: var(--nav-bg, #111111);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+    /* Pull flush against sidebar so the two boxes read as one reverse-7 */
+    margin-left: -1px;
+  }
+
+  .dashboard-quick-actions-inner {
+    max-width: 72rem;
   }
 
   .dashboard-quick-actions-header {
-    margin-bottom: 0.875rem;
-    padding-bottom: 0.75rem;
-    border-bottom: 1px solid rgba(201, 150, 24, 0.28);
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.625rem;
+    border-bottom: 1px solid rgba(201, 150, 24, 0.22);
   }
 
   .dashboard-quick-actions-title {
-    font-size: 1.125rem;
+    font-size: 1.0625rem;
     font-weight: 700;
     letter-spacing: 0.02em;
     color: var(--fill-accent, #c99618);
@@ -345,7 +363,7 @@
   }
 
   .dashboard-quick-actions-subtitle {
-    margin-top: 0.25rem;
+    margin-top: 0.2rem;
     font-size: 0.75rem;
     color: rgba(240, 240, 240, 0.62);
     line-height: 1.35;

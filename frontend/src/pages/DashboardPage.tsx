@@ -144,25 +144,28 @@ export function DashboardPage() {
   }, [dash?.paymentMethodBreakdown]);
 
   return (
-    <PageShell>
-      <section className="dashboard-quick-actions mb-4" aria-label="Quick actions">
-        <div className="dashboard-quick-actions-header">
-          <h1 className="dashboard-quick-actions-title">Quick Actions</h1>
-          <p className="dashboard-quick-actions-subtitle">Shop overview — tap any figure to open its report</p>
-        </div>
-        <div className="dashboard-quick-actions-grid">
-          {QUICK_ACTIONS.map((a) => {
-            const Icon = a.icon;
-            return (
-              <Link key={a.to} to={a.to} className="dashboard-quick-action-btn">
-                <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                {a.label}
-              </Link>
-            );
-          })}
+    <div className="dashboard-page">
+      <section className="dashboard-quick-actions" aria-label="Quick actions">
+        <div className="dashboard-quick-actions-inner">
+          <div className="dashboard-quick-actions-header">
+            <h1 className="dashboard-quick-actions-title">Quick Actions</h1>
+            <p className="dashboard-quick-actions-subtitle">Shop overview — tap any figure to open its report</p>
+          </div>
+          <div className="dashboard-quick-actions-grid">
+            {QUICK_ACTIONS.map((a) => {
+              const Icon = a.icon;
+              return (
+                <Link key={a.to} to={a.to} className="dashboard-quick-action-btn">
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                  {a.label}
+                </Link>
+              );
+            })}
+          </div>
         </div>
       </section>
 
+      <PageShell>
       {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
       {backupStatus ? (
         <Feedback variant={backupStatus.ok ? 'info' : 'warning'} className="mb-3">
@@ -450,5 +453,6 @@ export function DashboardPage() {
         </Panel>
       </div>
     </PageShell>
+    </div>
   );
 }
