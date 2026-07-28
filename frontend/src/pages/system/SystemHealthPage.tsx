@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PageShell, Panel, PrimaryButton, SecondaryButton, Tile } from '../../components/ui/PageShell';
+import { PageShell, Panel, PrimaryButton, SecondaryButton, Feedback, Tile } from '../../components/ui/PageShell';
 import { api } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
 
@@ -117,8 +117,8 @@ export function SystemHealthPage() {
         </SecondaryButton>
       }
     >
-      {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
-      {message ? <p className="mb-3 text-sm text-textSecondary">{message}</p> : null}
+      {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
+      {message ? <Feedback variant={message.includes('fail') ? 'error' : 'success'} className="mb-3">{message}</Feedback> : null}
 
       {report ? (
         <>

@@ -11,7 +11,8 @@ import {
   type StockMovement,
 } from '../../lib/api';
 import { formatDate, formatMoney, formatStockMovementType } from '../../lib/format';
-import { DangerButton, FieldLabel, GhostButton, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput } from '../../components/ui/PageShell';
+import { Plus, Printer, ScanBarcode, Trash2 } from 'lucide-react';
+import { DangerButton, Feedback, FieldLabel, GhostButton, IconButton, LoadingState, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput } from '../../components/ui/PageShell';
 
 type VariantDraft = ProductVariantInput & {
   key: string;
@@ -185,29 +186,29 @@ export function ProductsListPage() {
 
   return (
     <PageShell title="Products" subtitle="Manage inventory items, variants, and stock levels" actions={<div className="flex flex-wrap gap-2">
-      <Link to="/products/scan"><SecondaryButton type="button">Scan barcode</SecondaryButton></Link>
+      <Link to="/products/scan"><SecondaryButton type="button"><ScanBarcode className="mr-1.5 inline h-4 w-4" aria-hidden />Scan barcode</SecondaryButton></Link>
       <SecondaryButton onClick={() => void downloadTemplate()}>Download Template</SecondaryButton>
       <label className="btn-secondary cursor-pointer">Import Stock<input className="hidden" type="file" accept=".xlsx,.xls" onChange={(event) => {
         const file = event.target.files?.[0];
         if (file) void previewImport(file);
         event.currentTarget.value = '';
       }} /></label>
-      <SecondaryButton type="button" onClick={openBulkPrint} disabled={selectedCount === 0}>
+      <IconButton icon={Printer} label="Print labels" variant="neutral" size="md" onClick={openBulkPrint} disabled={selectedCount === 0}>
         Print Labels{selectedCount ? ` (${selectedCount})` : ''}
-      </SecondaryButton>
-      <Link to="/products/add"><PrimaryButton type="button">Add Product</PrimaryButton></Link>
+      </IconButton>
+      <Link to="/products/add"><PrimaryButton type="button"><Plus className="mr-1.5 inline h-4 w-4" aria-hidden />Add Product</PrimaryButton></Link>
     </div>}>
       <Panel className="mb-4"><div className="grid gap-4 md:grid-cols-4">
         <div className="md:col-span-2"><FieldLabel>Search</FieldLabel><TextInput value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, product code, or barcode" /></div>
         <div><FieldLabel>Category</FieldLabel><select className={SELECT_CLASS} value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
         <div><FieldLabel>Status</FieldLabel><select className={SELECT_CLASS} value={activeOnly ? 'active' : 'all'} onChange={(event) => { setActiveOnly(event.target.value === 'active'); setPage(1); }}><option value="active">Active only</option><option value="all">Include inactive</option></select></div>
       </div></Panel>
-      {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
       {preview ? <Panel className="mb-4"><h2 className="text-lg font-semibold">Import preview</h2><p className="mt-2 text-sm text-textSecondary">{preview.productsToCreate} products ready to create · {preview.validCount} valid rows · {preview.errorCount} errors</p>
         {preview.errors.length ? <ul className="mt-3 list-disc pl-5 text-sm text-danger">{preview.errors.map((item) => <li key={`${item.rowNumber}-${item.message}`}>Row {item.rowNumber}: {item.message}</li>)}</ul> : null}
         <div className="mt-4 flex gap-2"><SecondaryButton onClick={() => setPreview(null)}>Cancel</SecondaryButton><PrimaryButton onClick={() => void commitImport()} disabled={importing || !preview.commitPayload.length}>{importing ? 'Importing…' : 'Confirm Import'}</PrimaryButton></div>
       </Panel> : null}
-      <Panel><div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b border-border text-left text-textSecondary">
+      <Panel><div className="overflow-x-auto">{loading ? <LoadingState className="py-6" /> : null}<table className="app-data-table min-w-full text-sm"><thead><tr className="text-left text-textSecondary">
         <th className="w-10 px-2 py-2">
           <input
             type="checkbox"
@@ -449,7 +450,7 @@ function StockAdjustModal({
             <FieldLabel>Note (optional)</FieldLabel>
             <TextInput value={note} onChange={(e) => setNote(e.target.value)} placeholder="Reason for adjustment" />
           </div>
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <div className="flex justify-end gap-2">
             <SecondaryButton type="button" onClick={onClose}>Cancel</SecondaryButton>
             <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : 'Apply'}</PrimaryButton>
@@ -726,6 +727,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
             <>
               {printableLabels.length > 0 ? (
                 <SecondaryButton type="button" onClick={() => printBarcodeLabels(printableLabels, labelSizeKey)}>
+                  <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
                   Print Label{printableLabels.length > 1 ? 's' : ''}
                 </SecondaryButton>
               ) : null}
@@ -890,12 +892,14 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                             ) : null}
                           </div>
                           <div className="mt-2 text-right">
-                            <GhostButton
-                              type="button"
+                            <IconButton
+                              icon={Trash2}
+                              label="Remove variant row"
+                              variant="danger"
                               onClick={() => setVariants((rows) => rows.filter((row) => row.key !== v.key))}
                             >
                               Remove row
-                            </GhostButton>
+                            </IconButton>
                           </div>
                         </div>
                       ))}
@@ -906,8 +910,8 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
             </details>
             {mode === 'edit' && product ? <ProductIdentityPanel product={product} /> : null}
 
-            {message ? <p className="text-sm text-accent">{message}</p> : null}
-            {error ? <p className="text-sm text-danger">{error}</p> : null}
+            {message ? <Feedback variant="success">{message}</Feedback> : null}
+            {error ? <Feedback variant="error">{error}</Feedback> : null}
 
             <PrimaryButton type="submit" disabled={saving}>
               {saving ? 'Saving…' : mode === 'add' ? 'Save Product' : 'Save Changes'}

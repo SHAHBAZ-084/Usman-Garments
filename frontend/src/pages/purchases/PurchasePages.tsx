@@ -8,9 +8,11 @@ import {
   type Supplier,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { Trash2 } from 'lucide-react';
 import {
+  Feedback,
   FieldLabel,
-  GhostButton,
+  IconButton,
   PageShell,
   Panel,
   PrimaryButton,
@@ -285,9 +287,12 @@ export function PurchaseEntryPage() {
                     />
                   </div>
                   <div className="flex items-end">
-                    <GhostButton type="button" onClick={() => setLines((rows) => rows.filter((r) => r.key !== line.key))}>
-                      Remove
-                    </GhostButton>
+                    <IconButton
+                      icon={Trash2}
+                      label="Remove line"
+                      variant="danger"
+                      onClick={() => setLines((rows) => rows.filter((r) => r.key !== line.key))}
+                    />
                   </div>
                 </div>
               </div>
@@ -341,7 +346,7 @@ export function PurchaseEntryPage() {
             <FieldLabel>Notes (optional)</FieldLabel>
             <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save Purchase'}
           </PrimaryButton>
@@ -369,9 +374,9 @@ export function PurchasesListPage() {
         </Link>
       }
     >
-      {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
       <Panel>
-        <table className="min-w-full text-sm">
+        <table className="app-data-table min-w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-textSecondary">
               <th className="px-2 py-2">Date</th>
@@ -470,8 +475,8 @@ export function PurchaseDetailPage() {
           {purchase.confirmation.message}
         </p>
       ) : null}
-      {returnMsg ? <p className="mb-4 text-sm text-accent">{returnMsg}</p> : null}
-      {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {returnMsg ? <Feedback variant="success" className="mb-4">{returnMsg}</Feedback> : null}
+      {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Panel>
@@ -490,7 +495,7 @@ export function PurchaseDetailPage() {
 
       <Panel className="mb-6">
         <h2 className="mb-3 text-lg font-semibold">Items</h2>
-        <table className="min-w-full text-sm">
+        <table className="app-data-table min-w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-textSecondary">
               <th className="px-2 py-2">Product</th>
@@ -639,8 +644,8 @@ export function SupplierPaymentPage() {
             <FieldLabel>Note (optional)</FieldLabel>
             <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
-          {message ? <p className="text-sm text-accent">{message}</p> : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {message ? <Feedback variant="success">{message}</Feedback> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Record Payment'}
           </PrimaryButton>

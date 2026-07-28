@@ -1,4 +1,5 @@
 import { forwardRef, ReactNode, RefObject } from 'react';
+import { Link } from 'react-router-dom';
 
 type PageShellProps = {
   title: ReactNode;
@@ -55,6 +56,34 @@ export function Tile({ children, className = '' }: { children: ReactNode; classN
     <div className={`rounded-lg border border-border bg-surface2 p-3 shadow-sm ${className}`}>
       {children}
     </div>
+  );
+}
+
+type ClickableMetricTileProps = {
+  label: string;
+  value: string;
+  sub?: string;
+  to: string;
+  accent?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+};
+
+const KPI_ACCENT: Record<NonNullable<ClickableMetricTileProps['accent']>, string> = {
+  default: 'border-l-accent',
+  success: 'border-l-success',
+  warning: 'border-l-warning',
+  danger: 'border-l-danger',
+  info: 'border-l-info',
+};
+
+/** Dashboard KPI card — navigates to a related report on click. */
+export function ClickableMetricTile({ label, value, sub, to, accent = 'default' }: ClickableMetricTileProps) {
+  return (
+    <Link to={to} className={`kpi-card block border-l-4 ${KPI_ACCENT[accent]}`}>
+      <p className="text-xs font-medium text-textSecondary">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-textPrimary">{value}</p>
+      {sub ? <p className="mt-0.5 text-[10px] text-textMuted">{sub}</p> : null}
+      <p className="mt-1 text-[10px] text-accent">View details →</p>
+    </Link>
   );
 }
 
@@ -135,7 +164,11 @@ export function DangerButton(props: React.ButtonHTMLAttributes<HTMLButtonElement
     <button
       type="button"
       {...props}
-      className={`rounded-lg border border-border bg-surface1 px-4 py-2 text-sm font-medium text-danger transition hover:bg-bgDanger disabled:cursor-not-allowed disabled:opacity-60 ${props.className ?? ''}`}
+      className={`rounded-lg border border-danger/30 bg-bgDanger px-4 py-2 text-sm font-medium text-danger transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 ${props.className ?? ''}`}
     />
   );
 }
+
+export { Feedback } from './Feedback';
+export { IconButton } from './IconButton';
+export { LoadingState, MetricSkeletonGrid } from './LoadingState';

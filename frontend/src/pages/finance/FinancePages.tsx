@@ -10,6 +10,7 @@ import {
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
 import {
+  Feedback,
   FieldLabel,
   PageShell,
   Panel,
@@ -192,8 +193,8 @@ export function ExpenseEntryPage() {
             <FieldLabel>Note (optional)</FieldLabel>
             <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
-          {message ? <p className="text-sm text-accent">{message}</p> : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {message ? <Feedback variant="success">{message}</Feedback> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save expense'}</PrimaryButton>
         </form>
       </Panel>
@@ -389,8 +390,8 @@ export function OtherIncomeEntryPage() {
             <FieldLabel>Note (optional)</FieldLabel>
             <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
-          {message ? <p className="text-sm text-accent">{message}</p> : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {message ? <Feedback variant="success">{message}</Feedback> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save income'}</PrimaryButton>
         </form>
       </Panel>

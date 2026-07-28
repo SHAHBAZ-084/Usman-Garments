@@ -2,8 +2,10 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, type Supplier, type SupplierDetail } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { Plus } from 'lucide-react';
 import {
   DangerButton,
+  Feedback,
   FieldLabel,
   PageShell,
   Panel,
@@ -41,7 +43,7 @@ export function SuppliersListPage() {
       subtitle="Who you buy from — balances show what you still owe"
       actions={
         <Link to="/suppliers/add">
-          <PrimaryButton type="button">Add Supplier</PrimaryButton>
+          <PrimaryButton type="button"><Plus className="mr-1.5 inline h-4 w-4" aria-hidden />Add Supplier</PrimaryButton>
         </Link>
       }
     >
@@ -74,10 +76,10 @@ export function SuppliersListPage() {
         </div>
       </Panel>
 
-      {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
 
       <Panel>
-        <table className="min-w-full text-sm">
+        <table className="app-data-table min-w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-textSecondary">
               <th className="px-2 py-2 font-medium">Name</th>
@@ -227,8 +229,8 @@ export function SupplierFormPage({ mode }: { mode: 'add' | 'edit' }) {
               Active
             </label>
           ) : null}
-          {message ? <p className="text-sm text-accent">{message}</p> : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {message ? <Feedback variant="success">{message}</Feedback> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>
             {saving ? 'Saving…' : mode === 'add' ? 'Create Supplier' : 'Save Changes'}
           </PrimaryButton>
@@ -277,7 +279,7 @@ export function SupplierDetailPage() {
   if (!detail) {
     return (
       <PageShell title="Supplier">
-        <p className="text-sm text-danger">{error}</p>
+        <Feedback variant="error">{error}</Feedback>
       </PageShell>
     );
   }
@@ -310,7 +312,7 @@ export function SupplierDetailPage() {
         </div>
       }
     >
-      {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Panel>
@@ -330,7 +332,7 @@ export function SupplierDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel>
           <h2 className="mb-3 text-lg font-semibold">Purchase history</h2>
-          <table className="min-w-full text-sm">
+          <table className="app-data-table min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-textSecondary">
                 <th className="px-2 py-2">Date</th>
@@ -363,7 +365,7 @@ export function SupplierDetailPage() {
 
         <Panel>
           <h2 className="mb-3 text-lg font-semibold">Payment history</h2>
-          <table className="min-w-full text-sm">
+          <table className="app-data-table min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-textSecondary">
                 <th className="px-2 py-2">Date</th>

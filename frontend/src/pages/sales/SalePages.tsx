@@ -12,10 +12,13 @@ import {
   type SalePaymentMethod,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { Printer, Trash2 } from 'lucide-react';
 import {
   DangerButton,
+  Feedback,
   FieldLabel,
   GhostButton,
+  IconButton,
   PageShell,
   Panel,
   PrimaryButton,
@@ -389,9 +392,12 @@ export function NewSalePage() {
                         </td>
                         <td className="px-2 py-2 text-right">{formatMoney(lineTotal(line))}</td>
                         <td className="px-2 py-2">
-                          <GhostButton type="button" onClick={() => setCart((p) => p.filter((l) => l.key !== line.key))}>
-                            Remove
-                          </GhostButton>
+                          <IconButton
+                            icon={Trash2}
+                            label="Remove line"
+                            variant="danger"
+                            onClick={() => setCart((p) => p.filter((l) => l.key !== line.key))}
+                          />
                         </td>
                       </tr>
                     ))}
@@ -400,9 +406,9 @@ export function NewSalePage() {
               </div>
             )}
             {stockErrors.length ? (
-              <p className="mt-3 text-sm text-danger">
+              <Feedback variant="warning" className="mt-3">
                 {stockErrors.map((e) => `${e.name}: only ${e.have} in stock (cart needs ${e.need})`).join(' · ')}
-              </p>
+              </Feedback>
             ) : null}
           </Panel>
         </div>
@@ -498,7 +504,7 @@ export function NewSalePage() {
               </div>
             ) : null}
 
-            {error ? <p className="text-sm text-danger">{error}</p> : null}
+            {error ? <Feedback variant="error">{error}</Feedback> : null}
 
             <PrimaryButton type="submit" disabled={saving || cart.length === 0 || stockErrors.length > 0}>
               {saving ? 'Processing…' : 'Complete Sale'}
@@ -516,6 +522,7 @@ export function NewSalePage() {
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
               <PrimaryButton type="button" onClick={() => printInvoice(completedInvoice, settings)}>
+                <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
                 Print Invoice
               </PrimaryButton>
               <SecondaryButton
@@ -673,6 +680,7 @@ export function InvoiceDetailPage() {
           </Link>
           {settings ? (
             <PrimaryButton type="button" onClick={() => printInvoice(invoice, settings)}>
+              <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
               Print Invoice
             </PrimaryButton>
           ) : null}
@@ -742,7 +750,7 @@ export function InvoiceDetailPage() {
             </div>
           ) : null}
         </div>
-        {error ? <p className="mt-4 text-sm text-danger">{error}</p> : null}
+        {error ? <Feedback variant="error" className="mt-4">{error}</Feedback> : null}
       </Panel>
     </PageShell>
   );

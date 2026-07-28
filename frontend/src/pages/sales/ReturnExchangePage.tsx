@@ -12,8 +12,11 @@ import {
   type ReturnCondition,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { Trash2 } from 'lucide-react';
 import {
+  Feedback,
   FieldLabel,
+  IconButton,
   PageShell,
   Panel,
   PrimaryButton,
@@ -408,9 +411,12 @@ export function ReturnExchangePage() {
                       )
                     }
                   />
-                  <SecondaryButton type="button" onClick={() => setNewItems((prev) => prev.filter((_, i) => i !== idx))}>
-                    Remove
-                  </SecondaryButton>
+                  <IconButton
+                    icon={Trash2}
+                    label="Remove line"
+                    variant="danger"
+                    onClick={() => setNewItems((prev) => prev.filter((_, i) => i !== idx))}
+                  />
                 </div>
               ))}
             </Panel>
@@ -479,8 +485,8 @@ export function ReturnExchangePage() {
             </div>
           </Panel>
 
-          {message ? <p className="mb-3 text-sm text-accent">{message}</p> : null}
-          {error ? <p className="mb-3 text-sm text-danger">{error}</p> : null}
+          {message ? <Feedback variant="success" className="mb-3">{message}</Feedback> : null}
+          {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
 
           <PrimaryButton type="submit" disabled={saving || returnDrafts.length === 0}>
             {saving ? 'Processing…' : mode === 'exchange' ? 'Confirm exchange' : 'Confirm return'}
@@ -488,7 +494,7 @@ export function ReturnExchangePage() {
         </form>
       ) : null}
 
-      {!invoice && error ? <p className="text-sm text-danger">{error}</p> : null}
+      {!invoice && error ? <Feedback variant="error">{error}</Feedback> : null}
     </PageShell>
   );
 }

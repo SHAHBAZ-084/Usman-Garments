@@ -25,8 +25,12 @@
 
   --text-success: #1E5C4A;
   --text-danger: #A32D2D;
+  --text-warning: #9A5B00;
+  --text-info: #1A6B7A;
   --bg-success: #E8F4EF;
   --bg-danger: #FBEAEA;
+  --bg-warning: #FFF4E5;
+  --bg-info: #E8F4F8;
 
   --voucher-payment: #A32D2D;
   --voucher-receipt: #1E5C4A;
@@ -90,8 +94,12 @@
 
   --text-success: #6BC4A8;
   --text-danger: #E88888;
+  --text-warning: #E8B060;
+  --text-info: #6BC4D4;
   --bg-success: #1A2E28;
   --bg-danger: #3A2020;
+  --bg-warning: #3A2A18;
+  --bg-info: #1A2A30;
 
   --voucher-payment: #E88888;
   --voucher-receipt: #6BC4A8;

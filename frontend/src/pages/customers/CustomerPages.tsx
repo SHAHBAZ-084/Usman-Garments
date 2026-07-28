@@ -8,8 +8,10 @@ import {
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
 import { printCustomerStatement } from '../../components/customers/CustomerStatementPrint';
+import { HandCoins, Pencil, Plus, Printer } from 'lucide-react';
 import {
   DangerButton,
+  Feedback,
   FieldLabel,
   PageShell,
   Panel,
@@ -60,7 +62,7 @@ export function CustomersListPage() {
       subtitle="Who buys on udhaar — balances show what they still owe you"
       actions={
         <Link to="/customers/add">
-          <PrimaryButton type="button">Add Customer</PrimaryButton>
+          <PrimaryButton type="button"><Plus className="mr-1.5 inline h-4 w-4" aria-hidden />Add Customer</PrimaryButton>
         </Link>
       }
     >
@@ -93,10 +95,10 @@ export function CustomersListPage() {
         </div>
       </Panel>
 
-      {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
 
       <Panel>
-        <table className="min-w-full text-sm">
+        <table className="app-data-table min-w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-textSecondary">
               <th className="px-2 py-2 font-medium">Name</th>
@@ -225,8 +227,8 @@ export function CustomerFormPage({ mode }: { mode: 'add' | 'edit' }) {
               Active
             </label>
           ) : null}
-          {message ? <p className="text-sm text-accent">{message}</p> : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {message ? <Feedback variant="success">{message}</Feedback> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>
             {saving ? 'Saving…' : mode === 'add' ? 'Create Customer' : 'Save Changes'}
           </PrimaryButton>
@@ -291,7 +293,7 @@ export function CustomerDetailPage() {
   if (!detail) {
     return (
       <PageShell title="Customer">
-        <p className="text-sm text-danger">{error}</p>
+        <Feedback variant="error">{error}</Feedback>
       </PageShell>
     );
   }
@@ -308,12 +310,13 @@ export function CustomerDetailPage() {
             <SecondaryButton type="button">Back</SecondaryButton>
           </Link>
           <Link to={`/customers/${id}/edit`}>
-            <SecondaryButton type="button">Edit</SecondaryButton>
+            <SecondaryButton type="button"><Pencil className="mr-1.5 inline h-4 w-4" aria-hidden />Edit</SecondaryButton>
           </Link>
           <Link to={`/customers/pay?customerId=${id}`}>
-            <PrimaryButton type="button">Record Payment</PrimaryButton>
+            <PrimaryButton type="button"><HandCoins className="mr-1.5 inline h-4 w-4" aria-hidden />Record Payment</PrimaryButton>
           </Link>
           <SecondaryButton type="button" onClick={() => void onPrintStatement()} disabled={printing}>
+            <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
             {printing ? 'Preparing…' : 'Print Statement'}
           </SecondaryButton>
           {customer.isActive ? (
@@ -324,7 +327,7 @@ export function CustomerDetailPage() {
         </div>
       }
     >
-      {error ? <p className="mb-4 text-sm text-danger">{error}</p> : null}
+      {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Panel>
@@ -344,7 +347,7 @@ export function CustomerDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel>
           <h2 className="mb-3 text-lg font-semibold">Purchase history</h2>
-          <table className="min-w-full text-sm">
+          <table className="app-data-table min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-textSecondary">
                 <th className="px-2 py-2">Date</th>
@@ -377,7 +380,7 @@ export function CustomerDetailPage() {
 
         <Panel>
           <h2 className="mb-3 text-lg font-semibold">Payment history</h2>
-          <table className="min-w-full text-sm">
+          <table className="app-data-table min-w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-textSecondary">
                 <th className="px-2 py-2">Date</th>
@@ -407,7 +410,7 @@ export function CustomerDetailPage() {
 
       <Panel className="mt-6">
         <h2 className="mb-3 text-lg font-semibold">Return history</h2>
-        <table className="min-w-full text-sm">
+        <table className="app-data-table min-w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-textSecondary">
               <th className="px-2 py-2">Date / Invoice</th>
@@ -549,8 +552,8 @@ export function CustomerPaymentPage() {
             <FieldLabel>Note (optional)</FieldLabel>
             <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
-          {message ? <p className="text-sm text-accent">{message}</p> : null}
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
+          {message ? <Feedback variant="success">{message}</Feedback> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>
             {saving ? 'Saving…' : 'Record Payment'}
           </PrimaryButton>

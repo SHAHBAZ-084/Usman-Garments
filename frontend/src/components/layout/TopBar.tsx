@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { LayoutDashboard } from 'lucide-react';
 import { TOP_NAV, NavItem } from '../../config/navigation';
+import { NAV_GROUP_ICONS, navLinkIcon } from '../../config/navIcons';
 import { api } from '../../lib/api';
 import { voucherTypeColorClass } from '../../lib/format';
 
@@ -9,6 +11,12 @@ function voucherNavLabelClass(label: string) {
   if (label.startsWith('Receipt')) return voucherTypeColorClass('RECEIPT');
   if (label.startsWith('Journal')) return voucherTypeColorClass('JOURNAL');
   return '';
+}
+
+function NavIcon({ label }: { label: string }) {
+  const Icon = navLinkIcon(label);
+  if (!Icon) return null;
+  return <Icon className="mr-2 h-4 w-4 shrink-0 opacity-80" aria-hidden />;
 }
 
 function NavSubmenu({ label, children }: { label: string; children: { label: string; to: string; description?: string }[] }) {
@@ -27,13 +35,17 @@ function NavSubmenu({ label, children }: { label: string; children: { label: str
         onClick={() => setOpen((v) => !v)}
         className="app-dropdown-item flex w-full items-center justify-between text-left"
       >
-        {label}
+        <span className="flex items-center">
+          <NavIcon label={label} />
+          {label}
+        </span>
         <span className="ml-2 text-textMuted">›</span>
       </button>
       {open ? (
         <div className="app-dropdown left-full top-0">
           {children.map((item) => (
-            <Link key={item.to} to={item.to} className="app-dropdown-item">
+            <Link key={item.to} to={item.to} className="app-dropdown-item flex items-center">
+              <NavIcon label={item.label} />
               {item.label}
             </Link>
           ))}
@@ -47,6 +59,7 @@ function NavDropdown({ label, children }: { label: string; children: NavItem[] }
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const GroupIcon = NAV_GROUP_ICONS[label];
 
   useEffect(() => {
     setOpen(false);
@@ -67,8 +80,9 @@ function NavDropdown({ label, children }: { label: string; children: NavItem[] }
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className={`app-topnav-link ${open ? 'is-open' : ''}`}
+        className={`app-topnav-link gap-1.5 ${open ? 'is-open' : ''}`}
       >
+        {GroupIcon ? <GroupIcon className="h-4 w-4 shrink-0" aria-hidden /> : null}
         {label}
       </button>
       {open ? (
@@ -77,7 +91,12 @@ function NavDropdown({ label, children }: { label: string; children: NavItem[] }
             item.kind === 'submenu' ? (
               <NavSubmenu key={item.label} label={item.label} children={item.children} />
             ) : (
-              <Link key={item.to} to={item.to} className={`app-dropdown-item ${voucherNavLabelClass(item.label)}`}>
+              <Link
+                key={item.to}
+                to={item.to}
+                className={`app-dropdown-item flex items-center ${voucherNavLabelClass(item.label)}`}
+              >
+                <NavIcon label={item.label} />
                 {item.label}
               </Link>
             ),
@@ -117,7 +136,8 @@ export function TopBar() {
   return (
     <header className="app-topnav sticky top-0 isolate shadow-md">
       <div className="flex min-h-12 items-center gap-1 px-4">
-        <Link to="/" className="app-topnav-brand mr-2 shrink-0 pr-2 text-sm">
+        <Link to="/" className="app-topnav-brand mr-2 flex shrink-0 items-center gap-2 pr-2 text-sm">
+          <LayoutDashboard className="h-4 w-4 text-accent" aria-hidden />
           {businessName}
         </Link>
         <nav className="flex flex-1 flex-wrap items-center gap-1">
@@ -128,8 +148,14 @@ export function TopBar() {
               <Link
                 key={group.label}
                 to={group.to!}
-                className={`app-topnav-link ${location.pathname === group.to ? 'is-active' : ''}`}
+                className={`app-topnav-link gap-1.5 ${location.pathname === group.to ? 'is-active' : ''}`}
               >
+                {NAV_GROUP_ICONS[group.label] ? (
+                  (() => {
+                    const Icon = NAV_GROUP_ICONS[group.label];
+                    return <Icon className="h-4 w-4 shrink-0" aria-hidden />;
+                  })()
+                ) : null}
                 {group.label}
               </Link>
             ),

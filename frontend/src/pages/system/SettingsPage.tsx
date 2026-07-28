@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FieldLabel,
+  Feedback,
   PageShell,
   Panel,
   PrimaryButton,
@@ -413,8 +414,8 @@ export function SettingsPage() {
             </div>
           </Tile>
 
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
-          {message ? <p className="text-sm text-success">{message}</p> : null}
+          {error ? <Feedback variant="error">{error}</Feedback> : null}
+          {message ? <Feedback variant="success">{message}</Feedback> : null}
 
           <div className="flex gap-2">
             <PrimaryButton type="submit" disabled={saving}>

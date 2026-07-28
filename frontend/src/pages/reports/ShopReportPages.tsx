@@ -4,8 +4,11 @@ import { formatDate, formatMoney } from '../../lib/format';
 import { downloadCsv, downloadExcel, downloadPdf } from '../../lib/reportExport';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
+import { Printer } from 'lucide-react';
 import {
   FieldLabel,
+  Feedback,
+  IconButton,
   PageShell,
   Panel,
   PrimaryButton,
@@ -137,17 +140,24 @@ export function ReportShell({
           <SecondaryButton type="button" onClick={() => exportReport('csv')} disabled={!rows.length}>
             Download CSV
           </SecondaryButton>
-          <SecondaryButton type="button" onClick={printReport} disabled={!rows.length}>
+          <IconButton
+            icon={Printer}
+            label="Print report"
+            variant="neutral"
+            size="md"
+            onClick={printReport}
+            disabled={!rows.length}
+          >
             Print
-          </SecondaryButton>
+          </IconButton>
         </div>
-        {error ? <p className="text-sm text-danger">{error}</p> : null}
+        {error ? <Feedback variant="error">{error}</Feedback> : null}
         {summary}
       </Panel>
 
       <Panel>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[480px] text-left text-sm">
+          <table className="app-data-table w-full min-w-[480px] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-textMuted">
                 {headers.map((h) => (
