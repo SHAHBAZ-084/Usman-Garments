@@ -1,10 +1,19 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
+import Module from 'module';
 import path from 'path';
 
 const isDev = process.env.NODE_ENV === 'development';
 const BACKEND_PORT = process.env.PORT ?? '3847';
 
 let mainWindow: BrowserWindow | null = null;
+
+/** Ensure backend can resolve hoisted production deps from app root node_modules. */
+function configureBackendModulePaths(): void {
+  const appRoot = path.join(__dirname, '..');
+  const nodeModules = path.join(appRoot, 'node_modules');
+  process.env.NODE_PATH = [nodeModules, process.env.NODE_PATH].filter(Boolean).join(path.delimiter);
+  (Module as typeof Module & { Module: { _initPaths(): void } }).Module._initPaths();
+}
 
 async function startBackend(): Promise<void> {
   if (isDev) {
@@ -14,6 +23,8 @@ async function startBackend(): Promise<void> {
   process.env.PORT = BACKEND_PORT;
   process.env.NODE_ENV = 'production';
   process.env.USMAN_USER_DATA = app.getPath('userData');
+
+  configureBackendModulePaths();
 
   const backendEntry = path.join(__dirname, '../backend/dist/index.js');
   await import(backendEntry);

@@ -10,7 +10,7 @@
     "dev:web": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\"",
     "electron:dev": "npm run build:electron && wait-on http://127.0.0.1:5173 http://127.0.0.1:3847/api/health && cross-env NODE_ENV=development electron .",
     "electron:build": "npm run build -w backend && npm run build -w frontend && npm run build:electron",
-    "dist:win": "npm run electron:build && electron-builder --win",
+    "dist:win": "npm run electron:build && npm run db:generate -w backend && electron-builder --win",
     "build:electron": "tsc -p electron/tsconfig.json",
     "start": "cross-env NODE_ENV=production electron .",
     "postinstall": "npm run db:generate -w backend"
@@ -19,6 +19,19 @@
     "backend",
     "frontend"
   ],
+  "dependencies": {
+    "@prisma/client": "^6.3.1",
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "multer": "^2.2.0",
+    "prisma": "^6.3.1",
+    "xlsx": "^0.18.5",
+    "zod": "^3.24.1"
+  },
   "devDependencies": {
     "concurrently": "^9.1.2",
     "cross-env": "^7.0.3",
@@ -36,11 +49,23 @@
     "files": [
       "dist-electron/**/*",
       "backend/dist/**/*",
+      "!backend/dist/**/*.test.js",
+      "!backend/dist/test-helpers/**/*",
       "frontend/dist/**/*",
       "backend/prisma/schema.prisma",
       "backend/prisma/migrations/**/*",
       "backend/package.json",
-      "node_modules/**/*"
+      "package.json",
+      {
+        "from": "node_modules/.prisma",
+        "to": "node_modules/.prisma",
+        "filter": ["**/*"]
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/@prisma/**",
+      "**/node_modules/.prisma/**",
+      "**/node_modules/prisma/**"
     ],
     "win": {
       "target": ["nsis"],

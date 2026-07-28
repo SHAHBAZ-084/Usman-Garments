@@ -8,6 +8,31 @@ import { runDailyBackupIfNeeded, runPreMigrationBackup } from './modules/backup/
 
 const BACKEND_ROOT = path.resolve(__dirname, '..');
 
+function runPrismaCommand(args: string): string {
+  const appRoot = path.resolve(BACKEND_ROOT, '..');
+  const bundled = path.join(appRoot, 'node_modules', 'prisma', 'build', 'index.js');
+
+  if (fs.existsSync(bundled)) {
+    return execSync(`"${process.execPath}" "${bundled}" ${args}`, {
+      cwd: BACKEND_ROOT,
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        DATABASE_URL: getDatabaseUrl(),
+      },
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+  }
+
+  return execSync(`npx prisma ${args}`, {
+    cwd: BACKEND_ROOT,
+    env: { ...process.env, DATABASE_URL: getDatabaseUrl() },
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+}
+
 export async function runStartupTasks(): Promise<void> {
   process.env.DATABASE_URL = getDatabaseUrl();
   await configureSqlite();
@@ -36,11 +61,7 @@ export async function runStartupTasks(): Promise<void> {
 
 function hasPendingMigrations(): boolean {
   try {
-    const out = execSync('npx prisma migrate status', {
-      cwd: BACKEND_ROOT,
-      env: { ...process.env, DATABASE_URL: getDatabaseUrl() },
-      encoding: 'utf8',
-    });
+    const out = runPrismaCommand('migrate status');
     return /following migration have not yet been applied/i.test(out);
   } catch {
     return false;
@@ -51,11 +72,7 @@ async function runMigrations(withBackup: boolean) {
   if (withBackup) {
     await runPreMigrationBackup();
   }
-  execSync('npx prisma migrate deploy', {
-    cwd: BACKEND_ROOT,
-    env: { ...process.env, DATABASE_URL: getDatabaseUrl() },
-    stdio: 'pipe',
-  });
+  runPrismaCommand('migrate deploy');
 }
 
 export function registerShutdownHooks() {
