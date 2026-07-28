@@ -153,14 +153,19 @@ export function DashboardPage() {
           </div>
           <div className="dashboard-quick-actions-grid">
             {QUICK_ACTIONS.map((a) => {
-              const Icon = a.icon;
-              return (
-                <Link key={a.to} to={a.to} className="dashboard-quick-action-btn">
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                  {a.label}
-                </Link>
-              );
-            })}
+            const Icon = a.icon;
+            const isNewSale = a.to === '/sales/new';
+            return (
+              <Link
+                key={a.to}
+                to={a.to}
+                className={isNewSale ? 'dashboard-quick-action-btn is-primary-action' : 'dashboard-quick-action-btn'}
+              >
+                <Icon className={isNewSale ? 'h-5 w-5 shrink-0' : 'h-4 w-4 shrink-0'} aria-hidden />
+                {a.label}
+              </Link>
+            );
+          })}
           </div>
         </div>
       </section>

@@ -576,6 +576,29 @@
     color: var(--soft-gold, #e2b93b);
   }
 
+  .dashboard-quick-action-btn.is-primary-action {
+    order: -1;
+    padding: 0.7rem 1.15rem;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    border-color: var(--fill-accent, #c99618);
+    background: linear-gradient(135deg, #c99618 0%, #e2b93b 55%, #c99618 100%);
+    color: #111111;
+    box-shadow: 0 4px 16px rgba(201, 150, 24, 0.4);
+  }
+
+  .dashboard-quick-action-btn.is-primary-action svg {
+    color: #111111;
+  }
+
+  .dashboard-quick-action-btn.is-primary-action:hover {
+    background: linear-gradient(135deg, #e2b93b 0%, #c99618 100%);
+    border-color: #e2b93b;
+    color: #000000;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 20px rgba(201, 150, 24, 0.5);
+  }
+
   /* Primary actions — gold */
   .btn-primary {
     border-radius: 0.5rem;
