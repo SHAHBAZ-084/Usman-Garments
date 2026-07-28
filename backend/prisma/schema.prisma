@@ -725,6 +725,8 @@ model BusinessSettings {
   logoPath          String?
   isIdentityLocked  Boolean     @default(true)
   developerPassphraseHash String @default("")
+  /// Print footer credit; editable only in developer edit mode.
+  developerCreditLine String    @default("AS Solutions — Ali & Shahbaz — 0322-0726006")
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 }

@@ -66,6 +66,7 @@ export function ProductsListPage() {
   const [allowQtyEdit, setAllowQtyEdit] = useState(false);
   const [selected, setSelected] = useState<Record<string, LabelItem>>({});
   const [businessName, setBusinessName] = useState('Usman Mall');
+  const [creditLine, setCreditLine] = useState('');
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
@@ -87,6 +88,7 @@ export function ProductsListPage() {
       .then(([cats, settings]) => {
         setCategories(cats);
         setBusinessName(settings.businessName);
+        setCreditLine(settings.developerCreditLine ?? '');
         setLabelSizeKey(settings.barcodeLabelSize || '50x30');
       })
       .catch(() => setCategories([]));
@@ -244,6 +246,7 @@ export function ProductsListPage() {
           items={labelItems}
           labelSizeKey={labelSizeKey}
           allowQuantityEdit={allowQtyEdit}
+          creditLine={creditLine}
           title={allowQtyEdit ? 'Print barcode labels' : 'Imported barcode labels'}
           onClose={() => {
             setLabelItems(null);
@@ -519,6 +522,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
   const productId = mode === 'edit' ? Number(params.id) : null;
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [businessName, setBusinessName] = useState('Usman Mall');
+  const [creditLine, setCreditLine] = useState('');
   const [labelSizeKey, setLabelSizeKey] = useState('50x30');
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
@@ -544,6 +548,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       .then(([cats, settings]) => {
         setCategories(cats);
         setBusinessName(settings.businessName);
+        setCreditLine(settings.developerCreditLine ?? '');
         setLabelSizeKey(settings.barcodeLabelSize || '50x30');
       })
       .catch(() => setCategories([]));
@@ -726,7 +731,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           {mode === 'edit' && product?.isActive ? (
             <>
               {printableLabels.length > 0 ? (
-                <SecondaryButton type="button" onClick={() => printBarcodeLabels(printableLabels, labelSizeKey)}>
+                <SecondaryButton type="button" onClick={() => printBarcodeLabels(printableLabels, labelSizeKey, creditLine)}>
                   <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
                   Print Label{printableLabels.length > 1 ? 's' : ''}
                 </SecondaryButton>
@@ -937,7 +942,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       ) : null}
 
       {labelItems && labelItems.length > 0 ? (
-        <BarcodeLabelModal items={labelItems} labelSizeKey={labelSizeKey} onClose={closeLabelModal} />
+        <BarcodeLabelModal items={labelItems} labelSizeKey={labelSizeKey} creditLine={creditLine} onClose={closeLabelModal} />
       ) : null}
     </PageShell>
   );

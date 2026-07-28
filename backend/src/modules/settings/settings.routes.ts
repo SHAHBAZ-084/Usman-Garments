@@ -45,6 +45,7 @@ const updateSchema = z.object({
   barcodeLabelSize: z.string().min(1).max(40).optional(),
   lowStockLimit: z.number().int().positive().optional(),
   backupFolderPath: z.string().max(500).optional(),
+  developerCreditLine: z.string().max(200).optional(),
   themeMode: z
     .union([z.nativeEnum(ThemeMode), z.enum(['light', 'dark'])])
     .optional()
@@ -138,6 +139,11 @@ settingsRouter.patch(
 settingsRouter.post(
   '/logo',
   asyncHandler(async (req, res) => {
+    if (!identityAccess.isIdentityEditActive(req.session)) {
+      throw new AppError(403, 'This setting cannot be changed');
+    }
+    identityAccess.touchIdentityEditSession(req.session);
+
     await new Promise<void>((resolve, reject) => {
       upload.single('logo')(req, res, (err) => {
         if (err) reject(err);

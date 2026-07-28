@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, LayoutDashboard, LogOut } from 'lucide-react';
+import { ChevronDown, LogOut } from 'lucide-react';
 import { TOP_NAV, type NavItem } from '../../config/navigation';
 import { NAV_GROUP_ICONS, navLinkIcon } from '../../config/navIcons';
 import { useAuth } from '../../contexts/AuthContext';
@@ -142,8 +142,8 @@ export function Sidebar() {
         {logoUrl ? (
           <img src={logoUrl} alt="" className="app-sidebar-logo" />
         ) : (
-          <span className="app-sidebar-logo-fallback">
-            <LayoutDashboard className="h-5 w-5" aria-hidden />
+          <span className="app-sidebar-logo-fallback" aria-hidden>
+            {(businessName.trim().charAt(0) || 'U').toUpperCase()}
           </span>
         )}
         <span className="app-sidebar-brand-name">{businessName}</span>

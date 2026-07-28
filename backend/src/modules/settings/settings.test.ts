@@ -56,17 +56,17 @@ describe('business settings', () => {
 
   it('updates settings and persists values', async () => {
     const updated = await updateBusinessSettings({
-      ownerName: 'Owner Test',
       lowStockLimit: 8,
       themeMode: ThemeMode.DARK,
+      invoiceFooter: 'Thanks for shopping',
     });
 
-    expect(updated.ownerName).toBe('Owner Test');
+    expect(updated.invoiceFooter).toBe('Thanks for shopping');
     expect(updated.lowStockLimit).toBe(8);
     expect(updated.themeMode).toBe('dark');
 
     const again = await getBusinessSettings();
-    expect(again.ownerName).toBe('Owner Test');
+    expect(again.invoiceFooter).toBe('Thanks for shopping');
     expect(again.lowStockLimit).toBe(8);
     expect(again.themeMode).toBe('dark');
   });

@@ -1,5 +1,4 @@
 import { formatDate, formatMoney } from '../../lib/format';
-import { PRINT_SOFTWARE_CREDIT_LINE } from '../../config/printCredit';
 import type { BusinessSettings, Invoice } from '../../lib/api';
 
 function escapeHtml(text: string): string {
@@ -66,7 +65,7 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
       <hr />
       <p class="footer">${escapeHtml(settings.invoiceFooter)}</p>
       <p class="policy">${escapeHtml(settings.returnPolicy)}</p>
-      <p class="credit">${escapeHtml(PRINT_SOFTWARE_CREDIT_LINE)}</p>
+      ${settings.developerCreditLine?.trim() ? `<p class="credit">${escapeHtml(settings.developerCreditLine.trim())}</p>` : ''}
     </div>`;
 
   if (isA4) {

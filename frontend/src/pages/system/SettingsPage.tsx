@@ -10,7 +10,8 @@ import {
   TextInput,
   Tile,
 } from '../../components/ui/PageShell';
-import { isProtectedSettingsField } from '../../config/protectedSettingsFields';
+import { DEFAULT_DEVELOPER_CREDIT_LINE } from '../../config/printCredit';
+import { PROTECTED_SETTINGS_FIELD_KEYS } from '../../config/protectedSettingsFields';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAccessComboListener } from '../../hooks/useAccessComboListener';
 import { api, type BusinessSettings } from '../../lib/api';
@@ -22,6 +23,7 @@ const emptyForm = {
   phone: '0300-6195469',
   whatsapp: '0300-6195469',
   address: 'Al-Nisa Road, Chishtian',
+  developerCreditLine: DEFAULT_DEVELOPER_CREDIT_LINE,
   invoiceFooter: 'Thank you for shopping at Usman Mall',
   returnPolicy:
     'Returns accepted within 7 days with original receipt. Items must be unused and in original condition.',
@@ -83,7 +85,10 @@ export function SettingsPage() {
     if (!identityEditActive) return;
 
     function onActivity() {
-      void api.touchIdentityAccess().then((status) => setIdentityEditActive(status.active)).catch(() => setIdentityEditActive(false));
+      void api
+        .touchIdentityAccess()
+        .then((status) => setIdentityEditActive(status.active))
+        .catch(() => setIdentityEditActive(false));
     }
 
     const timer = window.setInterval(onActivity, 60_000);
@@ -95,10 +100,6 @@ export function SettingsPage() {
       window.removeEventListener('keydown', onActivity);
     };
   }, [identityEditActive]);
-
-  function identityFieldLocked(key: keyof typeof form) {
-    return isProtectedSettingsField(key) && !identityEditActive;
-  }
 
   async function submitAccessPrompt(event: FormEvent) {
     event.preventDefault();
@@ -147,6 +148,7 @@ export function SettingsPage() {
           phone: settings.phone,
           whatsapp: settings.whatsapp,
           address: settings.address,
+          developerCreditLine: settings.developerCreditLine || DEFAULT_DEVELOPER_CREDIT_LINE,
           invoiceFooter: settings.invoiceFooter,
           returnPolicy: settings.returnPolicy,
           invoicePrefix: settings.invoicePrefix,
@@ -184,11 +186,30 @@ export function SettingsPage() {
     setMessage('');
     setSaving(true);
     try {
-      const saved = await api.updateSettings({
-        ...form,
+      const payload: Partial<typeof form> & { printerName: string | null; themeMode: 'light' | 'dark' } = {
+        invoiceFooter: form.invoiceFooter,
+        returnPolicy: form.returnPolicy,
+        invoicePrefix: form.invoicePrefix,
+        currency: form.currency,
+        receiptSize: form.receiptSize,
+        a4InvoiceEnabled: form.a4InvoiceEnabled,
         printerName: form.printerName.trim() ? form.printerName.trim() : null,
+        barcodeLabelSize: form.barcodeLabelSize,
+        lowStockLimit: form.lowStockLimit,
+        backupFolderPath: form.backupFolderPath,
         themeMode: theme,
-      });
+      };
+
+      if (identityEditActive) {
+        for (const key of PROTECTED_SETTINGS_FIELD_KEYS) {
+          if (key === 'logoPath') continue;
+          if (key in form) {
+            (payload as Record<string, unknown>)[key] = form[key as keyof typeof form];
+          }
+        }
+      }
+
+      const saved = await api.updateSettings(payload);
       setForm((prev) => ({
         ...prev,
         businessName: saved.businessName,
@@ -197,6 +218,7 @@ export function SettingsPage() {
         phone: saved.phone,
         whatsapp: saved.whatsapp,
         address: saved.address,
+        developerCreditLine: saved.developerCreditLine || DEFAULT_DEVELOPER_CREDIT_LINE,
         invoiceFooter: saved.invoiceFooter,
         returnPolicy: saved.returnPolicy,
         invoicePrefix: saved.invoicePrefix,
@@ -247,10 +269,10 @@ export function SettingsPage() {
   }
 
   return (
-    <PageShell title="Settings" subtitle="Business, invoice, printer, and appearance">
+    <PageShell title="Settings" subtitle="Invoice, printer, inventory, and appearance">
       {identityEditActive ? (
         <div className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-950 dark:text-amber-100">
-          Developer Edit Mode active — protected business fields are editable for this session.
+          Developer Edit Mode active — Business Info is editable for this session.
         </div>
       ) : null}
 
@@ -280,66 +302,67 @@ export function SettingsPage() {
 
       <form className="space-y-4" onSubmit={onSave}>
         <Panel className={`max-w-3xl space-y-4 ${identityEditActive ? 'ring-2 ring-amber-500/40' : ''}`}>
-          <Tile>
-            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Business Info</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="sm:col-span-2">
-                <FieldLabel>Business name</FieldLabel>
-                <TextInput
-                  value={form.businessName}
-                  onChange={(e) => patchField('businessName', e.target.value)}
-                  readOnly={identityFieldLocked('businessName')}
-                  required
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <FieldLabel>Tagline</FieldLabel>
-                <TextInput value={form.tagline} onChange={(e) => patchField('tagline', e.target.value)} />
-              </div>
-              <div>
-                <FieldLabel>Owner name</FieldLabel>
-                <TextInput value={form.ownerName} onChange={(e) => patchField('ownerName', e.target.value)} />
-              </div>
-              <div>
-                <FieldLabel>Phone</FieldLabel>
-                <TextInput
-                  value={form.phone}
-                  onChange={(e) => patchField('phone', e.target.value)}
-                  readOnly={identityFieldLocked('phone')}
-                />
-              </div>
-              <div>
-                <FieldLabel>WhatsApp</FieldLabel>
-                <TextInput value={form.whatsapp} onChange={(e) => patchField('whatsapp', e.target.value)} />
-              </div>
-              <div className="sm:col-span-2">
-                <FieldLabel>Address</FieldLabel>
-                <TextInput
-                  value={form.address}
-                  onChange={(e) => patchField('address', e.target.value)}
-                  readOnly={identityFieldLocked('address')}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <FieldLabel>Shop logo</FieldLabel>
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-border bg-surface1 text-lg font-semibold text-textPrimary">
-                    {logoUrl ? (
-                      <img src={logoUrl} alt="Shop logo" className="h-full w-full object-cover" />
-                    ) : (
-                      'UM'
-                    )}
-                  </div>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif"
-                    onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
-                    className="text-sm text-textSecondary"
+          {identityEditActive ? (
+            <Tile>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Business Info</h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="sm:col-span-2">
+                  <FieldLabel>Business name</FieldLabel>
+                  <TextInput
+                    value={form.businessName}
+                    onChange={(e) => patchField('businessName', e.target.value)}
+                    required
                   />
                 </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Tagline</FieldLabel>
+                  <TextInput value={form.tagline} onChange={(e) => patchField('tagline', e.target.value)} />
+                </div>
+                <div>
+                  <FieldLabel>Owner name</FieldLabel>
+                  <TextInput value={form.ownerName} onChange={(e) => patchField('ownerName', e.target.value)} />
+                </div>
+                <div>
+                  <FieldLabel>Phone</FieldLabel>
+                  <TextInput value={form.phone} onChange={(e) => patchField('phone', e.target.value)} />
+                </div>
+                <div>
+                  <FieldLabel>WhatsApp</FieldLabel>
+                  <TextInput value={form.whatsapp} onChange={(e) => patchField('whatsapp', e.target.value)} />
+                </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Address</FieldLabel>
+                  <TextInput value={form.address} onChange={(e) => patchField('address', e.target.value)} />
+                </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Developer credit line</FieldLabel>
+                  <TextInput
+                    value={form.developerCreditLine}
+                    onChange={(e) => patchField('developerCreditLine', e.target.value)}
+                  />
+                  <p className="mt-1 text-xs text-textMuted">Shown as a small footer on invoices, receipts, and labels.</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <FieldLabel>Shop logo</FieldLabel>
+                  <div className="flex flex-wrap items-center gap-4">
+                    <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-full border border-border bg-surface1 text-lg font-semibold text-textPrimary">
+                      {logoUrl ? (
+                        <img src={logoUrl} alt="Shop logo" className="h-full w-full object-cover" />
+                      ) : (
+                        (form.businessName.trim().charAt(0) || 'U').toUpperCase()
+                      )}
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/gif"
+                      onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
+                      className="text-sm text-textSecondary"
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-          </Tile>
+            </Tile>
+          ) : null}
 
           <Tile>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Invoice</h2>
@@ -362,7 +385,6 @@ export function SettingsPage() {
                 <TextInput
                   value={form.invoicePrefix}
                   onChange={(e) => patchField('invoicePrefix', e.target.value)}
-                  readOnly={identityFieldLocked('invoicePrefix')}
                   required
                 />
               </div>
@@ -371,7 +393,6 @@ export function SettingsPage() {
                 <TextInput
                   value={form.currency}
                   onChange={(e) => patchField('currency', e.target.value)}
-                  readOnly={identityFieldLocked('currency')}
                   required
                 />
               </div>

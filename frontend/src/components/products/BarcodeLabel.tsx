@@ -8,7 +8,6 @@ import {
   type ParsedLabelSize,
 } from '../../lib/barcodeLabels';
 import { formatMoney } from '../../lib/format';
-import { PRINT_SOFTWARE_CREDIT_LINE } from '../../config/printCredit';
 import { shortcutLabel } from '../../lib/shortcuts';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import { FieldLabel, PrimaryButton, SecondaryButton, TextInput } from '../ui/PageShell';
@@ -85,10 +84,11 @@ function LabelCard({ item, size }: { item: LabelItem; size: ParsedLabelSize }) {
   );
 }
 
-function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize): string {
+function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize, creditLine = ''): string {
   const compact = size.heightMm <= 25 || size.widthMm <= 40;
   const barcodeHeight = compact ? 28 : 36;
   const barcodeWidth = compact ? 1.1 : 1.3;
+  const credit = creditLine.trim();
 
   if (size.mode === 'a4') {
     const cols = a4GridColumns(size.widthMm);
@@ -109,7 +109,9 @@ function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize): string {
           </div>`;
         })
         .join('');
-      pages.push(`<div class="page">${cells}</div><p class="sheet-credit">${escapeHtml(PRINT_SOFTWARE_CREDIT_LINE)}</p>`);
+      pages.push(
+        `<div class="page">${cells}</div>${credit ? `<p class="sheet-credit">${escapeHtml(credit)}</p>` : ''}`,
+      );
     }
 
     return `<!DOCTYPE html>
@@ -148,17 +150,15 @@ function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize): string {
   const cards = items
     .map((item) => {
       const variantLine = [item.size, item.colour].filter(Boolean).join(' · ');
-      const creditLine =
-        size.heightMm >= 30
-          ? `<p class="credit">${escapeHtml(PRINT_SOFTWARE_CREDIT_LINE)}</p>`
-          : '';
+      const itemCredit =
+        credit && size.heightMm >= 30 ? `<p class="credit">${escapeHtml(credit)}</p>` : '';
       return `<div class="label">
         <p class="shop">${escapeHtml(item.businessName)}</p>
         <p class="name">${escapeHtml(item.productName)}</p>
         ${variantLine ? `<p class="variant">${escapeHtml(variantLine)}</p>` : ''}
         <p class="price">Rs ${formatMoney(item.price)}</p>
         <div class="barcode-wrap">${barcodeSvgMarkup(item.barcode, barcodeHeight, barcodeWidth)}</div>
-        ${creditLine}
+        ${itemCredit}
       </div>`;
     })
     .join('');
@@ -194,10 +194,10 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function printBarcodeLabels(items: LabelItem[], labelSizeKey?: string) {
+export function printBarcodeLabels(items: LabelItem[], labelSizeKey?: string, creditLine = '') {
   if (items.length === 0) return;
   const size = parseLabelSize(labelSizeKey);
-  const html = buildPrintHtml(items, size);
+  const html = buildPrintHtml(items, size, creditLine);
   const win = window.open('', '_blank', 'width=720,height=900');
   if (!win) return;
   win.document.write(html);
@@ -210,12 +210,14 @@ export function BarcodeLabelModal({
   title = 'Barcode Labels',
   labelSizeKey,
   allowQuantityEdit = false,
+  creditLine = '',
 }: {
   items: LabelItem[];
   onClose: () => void;
   title?: string;
   labelSizeKey?: string;
   allowQuantityEdit?: boolean;
+  creditLine?: string;
 }) {
   const [sizeKey, setSizeKey] = useState(labelSizeKey ?? '50x30');
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
@@ -232,7 +234,7 @@ export function BarcodeLabelModal({
   }, [labelSizeKey]);
 
   useFormShortcuts({
-    onPrint: () => printBarcodeLabels(printable, sizeKey),
+    onPrint: () => printBarcodeLabels(printable, sizeKey, creditLine),
     onCancel: onClose,
     printEnabled: printable.length > 0,
   });
@@ -304,7 +306,7 @@ export function BarcodeLabelModal({
           <SecondaryButton type="button" onClick={onClose}>
             Done (Esc)
           </SecondaryButton>
-          <PrimaryButton type="button" onClick={() => printBarcodeLabels(printable, sizeKey)}>
+          <PrimaryButton type="button" onClick={() => printBarcodeLabels(printable, sizeKey, creditLine)}>
             {shortcutLabel(printable.length > 1 ? 'Print Labels' : 'Print Label', 'F10')}
           </PrimaryButton>
         </div>

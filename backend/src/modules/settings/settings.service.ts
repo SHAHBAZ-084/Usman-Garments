@@ -31,6 +31,7 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   backupFolderPath: '',
   themeMode: ThemeMode.LIGHT,
   logoPath: null as string | null,
+  developerCreditLine: 'AS Solutions — Ali & Shahbaz — 0322-0726006',
 };
 
 export type BusinessSettingsUpdateInput = {
@@ -52,6 +53,7 @@ export type BusinessSettingsUpdateInput = {
   backupFolderPath?: string;
   themeMode?: ThemeMode;
   logoPath?: string | null;
+  developerCreditLine?: string;
 };
 
 function serializeSettings(row: {
@@ -76,6 +78,7 @@ function serializeSettings(row: {
   logoPath: string | null;
   isIdentityLocked: boolean;
   developerPassphraseHash: string;
+  developerCreditLine: string;
   createdAt: Date;
   updatedAt: Date;
 }) {
@@ -159,6 +162,9 @@ export async function updateBusinessSettings(
   if (input.backupFolderPath !== undefined) data.backupFolderPath = input.backupFolderPath.trim();
   if (input.themeMode !== undefined) data.themeMode = input.themeMode;
   if (input.logoPath !== undefined) data.logoPath = input.logoPath;
+  if (input.developerCreditLine !== undefined) {
+    data.developerCreditLine = input.developerCreditLine.trim();
+  }
 
   if (data.businessName === '') {
     throw new AppError(400, 'Business name is required');
@@ -207,6 +213,9 @@ export async function saveBusinessLogo(file: {
 
   // Store relative path under prisma/data/uploads for portability
   const relativePath = path.join('uploads', filename);
-  const updated = await updateBusinessSettings({ logoPath: relativePath });
+  const updated = await updateBusinessSettings(
+    { logoPath: relativePath },
+    { identityEditActive: true },
+  );
   return updated;
 }

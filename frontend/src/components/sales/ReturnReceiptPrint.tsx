@@ -1,5 +1,4 @@
 import { formatDate, formatMoney } from '../../lib/format';
-import { PRINT_SOFTWARE_CREDIT_LINE } from '../../config/printCredit';
 import type { BusinessSettings, ExchangeResult, SaleReturn } from '../../lib/api';
 
 function escapeHtml(text: string): string {
@@ -86,7 +85,7 @@ export function buildReturnReceiptHtml(
   ${newRows ? `<h2 style="font-size:12px;margin:8px 0 4px;">New items</h2><table><thead><tr><th>Item</th><th>Qty</th><th></th><th>Total</th></tr></thead><tbody>${newRows}</tbody></table>` : ''}
   ${summary}
   <p class="footer">${escapeHtml(settings.invoiceFooter)}</p>
-  <p class="credit">${escapeHtml(PRINT_SOFTWARE_CREDIT_LINE)}</p>
+  ${settings.developerCreditLine?.trim() ? `<p class="credit">${escapeHtml(settings.developerCreditLine.trim())}</p>` : ''}
 <script>window.onload=function(){window.print();};<\/script>
 </body></html>`;
 }

@@ -25,6 +25,7 @@ export type BusinessSettings = {
   themeMode: 'light' | 'dark';
   logoPath: string | null;
   logoUrl: string | null;
+  developerCreditLine: string;
   createdAt: string;
   updatedAt: string;
 };

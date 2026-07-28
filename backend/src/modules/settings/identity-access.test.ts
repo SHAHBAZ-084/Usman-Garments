@@ -24,17 +24,23 @@ describe('identity access (developer edit mode)', () => {
     await ensureBusinessSettings();
     await prisma.businessSettings.update({
       where: { id: BUSINESS_SETTINGS_ID },
-      data: { developerPassphraseHash: await bcrypt.hash('CUIVHR', 10) },
+      data: {
+        developerPassphraseHash: await bcrypt.hash('CUIVHR', 10),
+        developerCreditLine: 'AS Solutions — Ali & Shahbaz — 0322-0726006',
+      },
     });
   });
 
   it('exports a single protected-field list', () => {
     expect(PROTECTED_BUSINESS_IDENTITY_FIELDS).toEqual([
       'businessName',
+      'tagline',
+      'ownerName',
       'phone',
+      'whatsapp',
       'address',
-      'invoicePrefix',
-      'currency',
+      'logoPath',
+      'developerCreditLine',
     ]);
   });
 
@@ -43,20 +49,38 @@ describe('identity access (developer edit mode)', () => {
       /cannot be changed/i,
     );
     await expect(updateBusinessSettings({ phone: '0300-0000000' })).rejects.toThrow(/cannot be changed/i);
+    await expect(
+      updateBusinessSettings({ developerCreditLine: 'Hacked Credit' }),
+    ).rejects.toThrow(/cannot be changed/i);
   });
 
   it('allows protected field updates when identity edit session is active', async () => {
     const updated = await updateBusinessSettings(
-      { businessName: 'Changed Name', phone: '0300-1111111' },
+      { businessName: 'Changed Name', phone: '0300-1111111', developerCreditLine: 'Custom Credit Line' },
       { identityEditActive: true },
     );
     expect(updated.businessName).toBe('Changed Name');
     expect(updated.phone).toBe('0300-1111111');
+    expect(updated.developerCreditLine).toBe('Custom Credit Line');
+  });
+
+  it('defaults developerCreditLine and allows invoice fields without edit session', async () => {
+    const settings = await getBusinessSettings();
+    expect(settings.developerCreditLine).toBe('AS Solutions — Ali & Shahbaz — 0322-0726006');
+
+    const updated = await updateBusinessSettings({
+      invoicePrefix: 'XX-',
+      currency: 'USD',
+      invoiceFooter: 'Thanks',
+    });
+    expect(updated.invoicePrefix).toBe('XX-');
+    expect(updated.currency).toBe('USD');
+    expect(updated.invoiceFooter).toBe('Thanks');
   });
 
   it('allows non-protected updates without identity edit session', async () => {
-    const updated = await updateBusinessSettings({ tagline: 'New tagline' });
-    expect(updated.tagline).toBe('New tagline');
+    const updated = await updateBusinessSettings({ lowStockLimit: 9 });
+    expect(updated.lowStockLimit).toBe(9);
   });
 
   it('verifies passphrase and never exposes hash in settings payload', async () => {

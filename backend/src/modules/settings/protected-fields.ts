@@ -1,12 +1,15 @@
 import type { BusinessSettingsUpdateInput } from './settings.service';
 
-/** Shop identity fields locked unless an active server-side edit session is present. */
+/** Fields editable only while an identity-edit session is active (Business Info). */
 export const PROTECTED_BUSINESS_IDENTITY_FIELDS = [
   'businessName',
+  'tagline',
+  'ownerName',
   'phone',
+  'whatsapp',
   'address',
-  'invoicePrefix',
-  'currency',
+  'logoPath',
+  'developerCreditLine',
 ] as const satisfies readonly (keyof BusinessSettingsUpdateInput)[];
 
 export type ProtectedBusinessIdentityField = (typeof PROTECTED_BUSINESS_IDENTITY_FIELDS)[number];
