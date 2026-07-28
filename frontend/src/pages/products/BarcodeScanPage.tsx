@@ -22,7 +22,8 @@ export function BarcodeScanField({
   const [result, setResult] = useState<BarcodeLookupResult | null>(null);
 
   async function lookup(raw: string) {
-    const barcode = raw.trim();
+    // Match printed CODE128 value; scanners may append CR/LF or spaces.
+    const barcode = raw.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, '').trim();
     if (!barcode) return;
     setBusy(true);
     setError('');

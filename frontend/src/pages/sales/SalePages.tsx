@@ -163,6 +163,14 @@ export function NewSalePage() {
   }
 
   function onBarcodeMatch(result: BarcodeLookupResult) {
+    if (result.matchType === 'product' && (result.product.variants?.length ?? 0) > 0) {
+      setError('Scan the size/colour barcode on the printed label for this product.');
+      return;
+    }
+    if (result.matchType === 'variant' && !result.variant) {
+      setError('Barcode matched a product but no variant — reprint the variant label.');
+      return;
+    }
     addOrIncrement(lookupToCartLine(result));
   }
 

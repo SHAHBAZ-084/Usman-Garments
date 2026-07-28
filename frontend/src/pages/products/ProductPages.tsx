@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { BarcodeLabelModal, ProductIdentityPanel, type LabelItem } from '../../components/products/BarcodeLabel';
+import { BarcodeLabelModal, type LabelItem } from '../../components/products/BarcodeLabel';
 import {
   api,
   type CreateProductInput,
@@ -19,6 +19,8 @@ type VariantDraft = ProductVariantInput & {
   existingId?: number;
   productCode?: string;
   barcode?: string | null;
+  /** Stock when the edit form loaded — used to sync adjustments on save. */
+  originalStock?: number;
   /** True when shopkeeper chose Custom… size (even before typing). */
   sizeCustom?: boolean;
   colourCustom?: boolean;
@@ -574,6 +576,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
         setPurchasePrice(p.purchasePrice > 0 ? String(p.purchasePrice) : '');
         setSalePrice(String(p.salePrice));
         setLowStockLimit(p.lowStockLimit != null ? String(p.lowStockLimit) : '');
+        setOpeningStock(String(p.currentStock));
         setNotes(p.notes ?? '');
         setVariants(
           (p.variants ?? []).map((v) => ({
@@ -586,6 +589,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
             purchasePrice: v.purchasePrice,
             salePrice: v.salePrice,
             currentStock: v.currentStock,
+            originalStock: v.currentStock,
             sizeCustom: !!(v.size && !(SIZE_PRESETS as readonly string[]).includes(v.size)),
             colourCustom: !!(v.colour && !(COLOUR_PRESETS as readonly string[]).includes(v.colour)),
           })),
@@ -619,28 +623,26 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
     setError('');
     setMessage('');
     const hasVariants = variants.some((v) => v.size?.trim() || v.colour?.trim());
-    if (mode === 'add' && hasVariants && allocatedStock > totalStock) {
+    if (hasVariants && totalStock > 0 && allocatedStock > totalStock) {
       setError(`Variant stock (${allocatedStock}) cannot exceed Total Stock (${totalStock}).`);
       return;
     }
-    if (mode === 'add') {
-      if (!hasVariants) {
-        setError('Add at least one variant row with qty and sale price. Barcodes are created per variant for sales.');
-        return;
-      }
-      const missingPrice = variants
-        .filter((v) => v.size?.trim() || v.colour?.trim() || Number(v.currentStock) > 0)
-        .some((v) => v.salePrice == null || Number(v.salePrice) < 0 || Number.isNaN(Number(v.salePrice)));
-      if (missingPrice) {
-        setError('Each variant needs a sale price (purchase price is optional).');
-        return;
-      }
+    if (!hasVariants) {
+      setError('Add at least one variant row with qty and sale price. Barcodes are created per variant for sales.');
+      return;
+    }
+    const missingPrice = variants
+      .filter((v) => v.size?.trim() || v.colour?.trim() || Number(v.currentStock) > 0 || v.existingId)
+      .some((v) => v.salePrice == null || Number(v.salePrice) < 0 || Number.isNaN(Number(v.salePrice)));
+    if (missingPrice) {
+      setError('Each variant needs a sale price (purchase price is optional).');
+      return;
     }
     setSaving(true);
     try {
       const resolvedCategoryId = await ensureCategoryId();
       const variantRows = variants.filter(
-        (v) => v.size?.trim() || v.colour?.trim() || Number(v.currentStock) > 0 || v.salePrice != null,
+        (v) => v.size?.trim() || v.colour?.trim() || Number(v.currentStock) > 0 || v.salePrice != null || v.existingId,
       );
       const variantPrices = variantRows
         .map((v) => Number(v.salePrice))
@@ -651,10 +653,10 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       const variantPurchases = variantRows
         .map((v) => (v.purchasePrice != null ? Number(v.purchasePrice) : NaN))
         .filter((n) => !Number.isNaN(n) && n >= 0);
-      const parsedPurchase = purchasePrice.trim()
-        ? Number(purchasePrice)
-        : variantPurchases.length
-          ? Math.min(...variantPurchases)
+      const parsedPurchase = variantPurchases.length
+        ? Math.min(...variantPurchases)
+        : purchasePrice.trim()
+          ? Number(purchasePrice)
           : undefined;
       const payload: CreateProductInput = {
         name,
@@ -665,7 +667,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
 
       if (mode === 'add') {
         const variantPayload = variantRows.map(
-          ({ key: _key, existingId: _existingId, productCode: _productCode, sizeCustom: _sc, colourCustom: _cc, barcode: _bc, ...v }) => ({
+          ({ key: _key, existingId: _existingId, productCode: _productCode, sizeCustom: _sc, colourCustom: _cc, barcode: _bc, originalStock: _os, ...v }) => ({
             size: v.size?.trim() || null,
             colour: v.colour?.trim() || null,
             currentStock: Number(v.currentStock) || 0,
@@ -689,7 +691,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       } else if (productId) {
         await api.updateProduct(productId, {
           ...payload,
-          purchasePrice: purchasePrice.trim() ? Number(purchasePrice) : 0,
+          ...(parsedPurchase !== undefined ? { purchasePrice: parsedPurchase } : { purchasePrice: 0 }),
           brand: brand.trim() || null,
           lowStockLimit: lowStockLimit.trim() ? Number(lowStockLimit) : null,
           notes: notes.trim() || null,
@@ -704,6 +706,17 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           };
           if (v.existingId) {
             await api.updateProductVariant(productId, v.existingId, data);
+            const nextStock = Math.max(0, Number(v.currentStock) || 0);
+            const prevStock = Math.max(0, Number(v.originalStock) || 0);
+            const delta = nextStock - prevStock;
+            if (delta !== 0) {
+              await api.adjustProductStock(productId, {
+                variantId: v.existingId,
+                quantity: Math.abs(delta),
+                direction: delta > 0 ? 'add' : 'reduce',
+                note: 'Stock updated on product edit',
+              });
+            }
           } else if (v.size?.trim() || v.colour?.trim()) {
             await api.createProductVariant(productId, {
               ...data,
@@ -714,7 +727,25 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
 
         const refreshed = await api.getProduct(productId);
         setProduct(refreshed);
-        setMessage('Product updated.');
+        setOpeningStock(String(refreshed.currentStock));
+        setVariants(
+          (refreshed.variants ?? []).map((v) => ({
+            key: String(v.id),
+            existingId: v.id,
+            size: v.size ?? '',
+            colour: v.colour ?? '',
+            productCode: v.productCode,
+            barcode: v.barcode,
+            purchasePrice: v.purchasePrice,
+            salePrice: v.salePrice,
+            currentStock: v.currentStock,
+            originalStock: v.currentStock,
+            sizeCustom: !!(v.size && !(SIZE_PRESETS as readonly string[]).includes(v.size)),
+            colourCustom: !!(v.colour && !(COLOUR_PRESETS as readonly string[]).includes(v.colour)),
+          })),
+        );
+        setHistoryKey((k) => k + 1);
+        setMessage('Product updated. Existing barcodes were kept as the sale identity.');
         const items = labelItemsFromProduct(refreshed, businessName);
         if (items.length) setLabelItems(items);
       }
@@ -750,7 +781,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       subtitle={
         mode === 'add'
           ? 'Set total stock first, then split into size/colour variants with their own prices'
-          : 'Update product details and variants'
+          : 'Same as add — edit name, category, total stock, and variant rows. Existing barcodes stay as sale identity.'
       }
       actions={
         <div className="flex flex-wrap gap-2">
@@ -820,51 +851,28 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                 min="0"
                 step="1"
                 value={openingStock}
-                onChange={(event) => setOpeningStock(event.target.value)}
+                onChange={(event) => {
+                  const raw = event.target.value;
+                  setOpeningStock(raw);
+                  const nextTotal = Number(raw) || 0;
+                  if (nextTotal <= 0) return;
+                  setVariants((rows) => {
+                    let remaining = nextTotal;
+                    return rows.map((row) => {
+                      const want = Number(row.currentStock) || 0;
+                      const qty = Math.min(want, remaining);
+                      remaining -= qty;
+                      return qty === want ? row : { ...row, currentStock: qty };
+                    });
+                  });
+                }}
                 placeholder="e.g. 5"
-                disabled={mode === 'edit'}
-                required={mode === 'add'}
+                required
               />
-              {mode === 'add' ? (
-                <p className="mt-1 text-xs text-textMuted">
-                  Enter full stock first. Variant quantities together cannot exceed this number.
-                </p>
-              ) : null}
+              <p className="mt-1 text-xs text-textMuted">
+                Enter full stock first. Variant quantities together cannot exceed this number.
+              </p>
             </div>
-
-            {mode === 'edit' && product ? (
-              <div>
-                <FieldLabel>Current stock</FieldLabel>
-                <TextInput value={String(product.currentStock)} readOnly className="bg-surface1" />
-              </div>
-            ) : null}
-
-            {mode === 'edit' ? (
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <FieldLabel>Default sale price</FieldLabel>
-                  <TextInput
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={salePrice}
-                    onChange={(event) => setSalePrice(event.target.value)}
-                    placeholder="Fallback if variant price empty"
-                  />
-                </div>
-                <div>
-                  <FieldLabel>Default purchase price</FieldLabel>
-                  <TextInput
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={purchasePrice}
-                    onChange={(event) => setPurchasePrice(event.target.value)}
-                    placeholder="Optional"
-                  />
-                </div>
-              </div>
-            ) : null}
 
             {mode === 'edit' && product?.costNotSet ? (
               <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
@@ -883,7 +891,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                 <GhostButton
                   type="button"
                   onClick={() => {
-                    if (mode === 'add' && totalStock > 0 && allocatedStock >= totalStock) {
+                    if (totalStock > 0 && allocatedStock >= totalStock) {
                       setError('All stock is already allocated. Increase Total Stock or reduce a variant qty.');
                       return;
                     }
@@ -899,11 +907,9 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                 </p>
               ) : (
                 <div className="space-y-3">
-                  {mode === 'add' ? (
-                    <p className={remainingStock < 0 ? 'text-sm text-danger' : 'text-sm text-textSecondary'}>
-                      Allocated: {allocatedStock} of {totalStock} — {remainingStock} remaining
-                    </p>
-                  ) : null}
+                  <p className={remainingStock < 0 ? 'text-sm text-danger' : 'text-sm text-textSecondary'}>
+                    Allocated: {allocatedStock} of {totalStock || '—'} — {remainingStock} remaining
+                  </p>
                   {variants.map((v, idx) => (
                     <div key={v.key} className="rounded-lg border border-border bg-surface1 p-3">
                       <div className="mb-2 grid gap-2 sm:grid-cols-2">
@@ -975,30 +981,23 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                         </div>
                       </div>
                       <div className="grid gap-2 sm:grid-cols-3">
-                        {mode === 'add' || !v.existingId ? (
-                          <div>
-                            <FieldLabel>Qty</FieldLabel>
-                            <TextInput
-                              type="number"
-                              min="0"
-                              placeholder="Qty"
-                              value={String(v.currentStock ?? 0)}
-                              onChange={(e) => {
-                                const requested = Math.max(0, Number(e.target.value) || 0);
-                                const others = allocatedStock - (Number(v.currentStock) || 0);
-                                const maxAllowed = mode === 'add' && totalStock > 0 ? Math.max(0, totalStock - others) : requested;
-                                const next = [...variants];
-                                next[idx] = { ...v, currentStock: Math.min(requested, maxAllowed) };
-                                setVariants(next);
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          <div>
-                            <FieldLabel>Stock</FieldLabel>
-                            <TextInput value={String(v.currentStock ?? 0)} readOnly className="bg-surface2" />
-                          </div>
-                        )}
+                        <div>
+                          <FieldLabel>Qty</FieldLabel>
+                          <TextInput
+                            type="number"
+                            min="0"
+                            placeholder="Qty"
+                            value={String(v.currentStock ?? 0)}
+                            onChange={(e) => {
+                              const requested = Math.max(0, Number(e.target.value) || 0);
+                              const others = allocatedStock - (Number(v.currentStock) || 0);
+                              const maxAllowed = totalStock > 0 ? Math.max(0, totalStock - others) : requested;
+                              const next = [...variants];
+                              next[idx] = { ...v, currentStock: Math.min(requested, maxAllowed) };
+                              setVariants(next);
+                            }}
+                          />
+                        </div>
                         <div>
                           <FieldLabel>Sale price</FieldLabel>
                           <TextInput
@@ -1032,9 +1031,15 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                           />
                         </div>
                       </div>
-                      {v.existingId && v.productCode ? (
+                      {v.barcode ? (
+                        <p className="mt-2 rounded-md border border-border bg-surface2 px-2 py-1.5 font-mono text-xs text-textPrimary">
+                          Barcode (sale identity): <span className="font-semibold">{v.barcode}</span>
+                        </p>
+                      ) : v.existingId && v.productCode ? (
                         <p className="mt-2 font-mono text-xs text-textMuted">Code: {v.productCode}</p>
-                      ) : null}
+                      ) : (
+                        <p className="mt-2 text-xs text-textMuted">Barcode will be created on save.</p>
+                      )}
                       <div className="mt-2 text-right">
                         <IconButton
                           icon={Trash2}
@@ -1050,8 +1055,6 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                 </div>
               )}
             </div>
-
-            {mode === 'edit' && product ? <ProductIdentityPanel product={product} /> : null}
 
             {message ? <Feedback variant="success">{message}</Feedback> : null}
             {error ? <Feedback variant="error">{error}</Feedback> : null}

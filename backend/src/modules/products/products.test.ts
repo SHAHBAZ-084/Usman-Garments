@@ -220,9 +220,41 @@ describe('products inventory foundation', () => {
     expect(byVariant.matchType).toBe('variant');
     expect(byVariant.variant?.id).toBe(variant.id);
 
-    const byProduct = await getProductByBarcode(product.barcode!);
-    expect(byProduct.matchType).toBe('product');
-    expect(byProduct.product.id).toBe(product.id);
+    // Parent product barcode is not sellable when variants exist — labels use variant barcodes.
+    await expect(getProductByBarcode(product.barcode!)).rejects.toThrow(/size\/colour barcode/i);
+  });
+
+  it('sale scan matches printed variant barcode even with scanner noise', async () => {
+    const product = await createProduct({
+      name: `${TEST_NAME_PREFIX}Scan Identity`,
+      salePrice: 450,
+      openingStock: 3,
+      variants: [
+        { size: 'M', colour: 'Black', currentStock: 2, salePrice: 450 },
+        { size: 'L', colour: 'Red', currentStock: 1, salePrice: 480 },
+      ],
+    });
+
+    const medium = product.variants!.find((v) => v.size === 'M')!;
+    const large = product.variants!.find((v) => v.size === 'L')!;
+    expect(medium.barcode).toBeTruthy();
+    expect(large.barcode).toBeTruthy();
+    expect(medium.barcode).not.toBe(large.barcode);
+
+    // Exact printed CODE128 payload
+    const exact = await getProductByBarcode(medium.barcode!);
+    expect(exact.matchType).toBe('variant');
+    expect(exact.variant?.id).toBe(medium.id);
+    expect(exact.variant?.size).toBe('M');
+    expect(exact.variant?.colour).toBe('Black');
+
+    // USB scanners often append CR/LF and may include spaces around the value
+    const noisy = await getProductByBarcode(`  ${medium.barcode!}\r\n`);
+    expect(noisy.variant?.id).toBe(medium.id);
+
+    const other = await getProductByBarcode(large.barcode!);
+    expect(other.variant?.id).toBe(large.id);
+    expect(other.variant?.size).toBe('L');
   });
 
   it('returns a clear not-found error for unknown barcodes', async () => {

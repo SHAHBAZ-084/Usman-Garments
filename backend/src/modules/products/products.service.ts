@@ -732,8 +732,8 @@ export async function listStockMovements(
 }
 
 export async function getProductByBarcode(barcode: string) {
-  // Scanners send plain text + Enter; trim and strip non-printable control chars.
-  const trimmed = barcode.replace(/[\u0000-\u001F\u007F]/g, '').trim();
+  // USB scanners type digits then Enter; strip control chars / whitespace so lookup matches printed CODE128 value.
+  const trimmed = barcode.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, '').trim();
   if (!trimmed) throw new AppError(400, 'Barcode is required');
 
   const settings = await ensureBusinessSettings();
@@ -751,6 +751,9 @@ export async function getProductByBarcode(barcode: string) {
   });
 
   if (variantRow) {
+    if (!variantRow.product.isActive) {
+      throw new AppError(400, 'This product is inactive and cannot be sold');
+    }
     const product = serializeProduct(variantRow.product, settings.lowStockLimit);
     const variant = product.variants?.find((v) => v.id === variantRow.id) ?? null;
     return {
@@ -769,6 +772,17 @@ export async function getProductByBarcode(barcode: string) {
   });
 
   if (!productRow) throw new AppError(404, 'No product found for this barcode');
+  if (!productRow.isActive) {
+    throw new AppError(400, 'This product is inactive and cannot be sold');
+  }
+
+  // Printed labels use variant barcodes. Parent barcode must not add a non-variant sale line.
+  if (productRow.variants.length > 0) {
+    throw new AppError(
+      400,
+      'Scan the size/colour barcode printed on the label — this code is not a sellable variant identity',
+    );
+  }
 
   return {
     matchType: 'product' as const,
