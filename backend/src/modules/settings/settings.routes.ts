@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { requireAuth } from '../../middleware/auth';
 import { asyncHandler, validateBody, AppError } from '../../utils/helpers';
 import * as settingsService from './settings.service';
+import * as identityAccess from './identity-access.service';
 
 export const settingsRouter = Router();
 
@@ -54,7 +55,63 @@ const updateSchema = z.object({
     }),
 });
 
+const passphraseSchema = z.object({
+  passphrase: z.string().min(1).max(128),
+});
+
+const changePassphraseSchema = z.object({
+  currentPassphrase: z.string().min(1).max(128),
+  newPassphrase: z.string().min(4).max(128),
+});
+
 settingsRouter.use(requireAuth);
+
+settingsRouter.get(
+  '/identity-access/status',
+  asyncHandler(async (req, res) => {
+    res.json({ active: identityAccess.isIdentityEditActive(req.session) });
+  }),
+);
+
+settingsRouter.post(
+  '/identity-access/verify',
+  validateBody(passphraseSchema),
+  asyncHandler(async (req, res) => {
+    const ok = await identityAccess.verifyIdentityPassphrase(req.body.passphrase);
+    if (ok) {
+      identityAccess.activateIdentityEditSession(req.session);
+    }
+    res.json({ ok });
+  }),
+);
+
+settingsRouter.post(
+  '/identity-access/end',
+  asyncHandler(async (req, res) => {
+    identityAccess.endIdentityEditSession(req.session);
+    res.json({ ok: true });
+  }),
+);
+
+settingsRouter.post(
+  '/identity-access/touch',
+  asyncHandler(async (req, res) => {
+    identityAccess.touchIdentityEditSession(req.session);
+    res.json({ active: identityAccess.isIdentityEditActive(req.session) });
+  }),
+);
+
+settingsRouter.post(
+  '/identity-access/passphrase',
+  validateBody(changePassphraseSchema),
+  asyncHandler(async (req, res) => {
+    if (!identityAccess.isIdentityEditActive(req.session)) {
+      throw new AppError(403, 'Edit session is not active');
+    }
+    await identityAccess.changeIdentityPassphrase(req.body.currentPassphrase, req.body.newPassphrase);
+    res.json({ ok: true });
+  }),
+);
 
 settingsRouter.get(
   '/',
@@ -68,7 +125,12 @@ settingsRouter.patch(
   '/',
   validateBody(updateSchema),
   asyncHandler(async (req, res) => {
-    const settings = await settingsService.updateBusinessSettings(req.body);
+    if (identityAccess.isIdentityEditActive(req.session)) {
+      identityAccess.touchIdentityEditSession(req.session);
+    }
+    const settings = await settingsService.updateBusinessSettings(req.body, {
+      identityEditActive: identityAccess.isIdentityEditActive(req.session),
+    });
     res.json(settings);
   }),
 );

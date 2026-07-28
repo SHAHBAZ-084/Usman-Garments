@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FieldLabel,
@@ -10,7 +10,9 @@ import {
   TextInput,
   Tile,
 } from '../../components/ui/PageShell';
+import { isProtectedSettingsField } from '../../config/protectedSettingsFields';
 import { useTheme } from '../../contexts/ThemeContext';
+import { useAccessComboListener } from '../../hooks/useAccessComboListener';
 import { api, type BusinessSettings } from '../../lib/api';
 
 const emptyForm = {
@@ -43,6 +45,94 @@ export function SettingsPage() {
   const [backupBusy, setBackupBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [identityEditActive, setIdentityEditActive] = useState(false);
+  const [accessPromptOpen, setAccessPromptOpen] = useState(false);
+  const [accessInput, setAccessInput] = useState('');
+  const [accessError, setAccessError] = useState('');
+  const [accessBusy, setAccessBusy] = useState(false);
+  const [currentPassphrase, setCurrentPassphrase] = useState('');
+  const [newPassphrase, setNewPassphrase] = useState('');
+  const [passphraseMessage, setPassphraseMessage] = useState('');
+
+  const refreshAccessStatus = useCallback(async () => {
+    try {
+      const status = await api.getIdentityAccessStatus();
+      setIdentityEditActive(status.active);
+    } catch {
+      setIdentityEditActive(false);
+    }
+  }, []);
+
+  useAccessComboListener({
+    enabled: !loading && !identityEditActive,
+    onMatch: () => {
+      setAccessError('');
+      setAccessInput('');
+      setAccessPromptOpen(true);
+    },
+  });
+
+  useEffect(() => {
+    void refreshAccessStatus();
+    return () => {
+      void api.endIdentityAccess().catch(() => undefined);
+    };
+  }, [refreshAccessStatus]);
+
+  useEffect(() => {
+    if (!identityEditActive) return;
+
+    function onActivity() {
+      void api.touchIdentityAccess().then((status) => setIdentityEditActive(status.active)).catch(() => setIdentityEditActive(false));
+    }
+
+    const timer = window.setInterval(onActivity, 60_000);
+    window.addEventListener('mousedown', onActivity);
+    window.addEventListener('keydown', onActivity);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener('mousedown', onActivity);
+      window.removeEventListener('keydown', onActivity);
+    };
+  }, [identityEditActive]);
+
+  function identityFieldLocked(key: keyof typeof form) {
+    return isProtectedSettingsField(key) && !identityEditActive;
+  }
+
+  async function submitAccessPrompt(event: FormEvent) {
+    event.preventDefault();
+    setAccessBusy(true);
+    setAccessError('');
+    try {
+      const result = await api.verifyIdentityAccess(accessInput);
+      if (!result.ok) {
+        setAccessError('Incorrect passphrase.');
+        return;
+      }
+      setIdentityEditActive(true);
+      setAccessPromptOpen(false);
+      setAccessInput('');
+    } catch (err) {
+      setAccessError(err instanceof Error ? err.message : 'Verification failed');
+    } finally {
+      setAccessBusy(false);
+    }
+  }
+
+  async function onChangePassphrase(event: FormEvent) {
+    event.preventDefault();
+    setPassphraseMessage('');
+    setError('');
+    try {
+      await api.changeIdentityPassphrase(currentPassphrase, newPassphrase);
+      setPassphraseMessage('Passphrase updated.');
+      setCurrentPassphrase('');
+      setNewPassphrase('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update passphrase');
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -158,14 +248,49 @@ export function SettingsPage() {
 
   return (
     <PageShell title="Settings" subtitle="Business, invoice, printer, and appearance">
+      {identityEditActive ? (
+        <div className="mb-4 rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-950 dark:text-amber-100">
+          Developer Edit Mode active — protected business fields are editable for this session.
+        </div>
+      ) : null}
+
+      {accessPromptOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <Panel className="w-full max-w-sm">
+            <form onSubmit={submitAccessPrompt} className="space-y-3">
+              <TextInput
+                type="password"
+                autoFocus
+                value={accessInput}
+                onChange={(e) => setAccessInput(e.target.value)}
+              />
+              {accessError ? <Feedback variant="error">{accessError}</Feedback> : null}
+              <div className="flex justify-end gap-2">
+                <SecondaryButton type="button" onClick={() => setAccessPromptOpen(false)}>
+                  Cancel
+                </SecondaryButton>
+                <PrimaryButton type="submit" disabled={accessBusy || !accessInput}>
+                  {accessBusy ? 'Checking…' : 'Continue'}
+                </PrimaryButton>
+              </div>
+            </form>
+          </Panel>
+        </div>
+      ) : null}
+
       <form className="space-y-4" onSubmit={onSave}>
-        <Panel className="max-w-3xl space-y-4">
+        <Panel className={`max-w-3xl space-y-4 ${identityEditActive ? 'ring-2 ring-amber-500/40' : ''}`}>
           <Tile>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Business Info</h2>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <FieldLabel>Business name</FieldLabel>
-                <TextInput value={form.businessName} onChange={(e) => patchField('businessName', e.target.value)} required />
+                <TextInput
+                  value={form.businessName}
+                  onChange={(e) => patchField('businessName', e.target.value)}
+                  readOnly={identityFieldLocked('businessName')}
+                  required
+                />
               </div>
               <div className="sm:col-span-2">
                 <FieldLabel>Tagline</FieldLabel>
@@ -177,7 +302,11 @@ export function SettingsPage() {
               </div>
               <div>
                 <FieldLabel>Phone</FieldLabel>
-                <TextInput value={form.phone} onChange={(e) => patchField('phone', e.target.value)} />
+                <TextInput
+                  value={form.phone}
+                  onChange={(e) => patchField('phone', e.target.value)}
+                  readOnly={identityFieldLocked('phone')}
+                />
               </div>
               <div>
                 <FieldLabel>WhatsApp</FieldLabel>
@@ -185,7 +314,11 @@ export function SettingsPage() {
               </div>
               <div className="sm:col-span-2">
                 <FieldLabel>Address</FieldLabel>
-                <TextInput value={form.address} onChange={(e) => patchField('address', e.target.value)} />
+                <TextInput
+                  value={form.address}
+                  onChange={(e) => patchField('address', e.target.value)}
+                  readOnly={identityFieldLocked('address')}
+                />
               </div>
               <div className="sm:col-span-2">
                 <FieldLabel>Shop logo</FieldLabel>
@@ -226,11 +359,21 @@ export function SettingsPage() {
               </div>
               <div>
                 <FieldLabel>Invoice prefix</FieldLabel>
-                <TextInput value={form.invoicePrefix} onChange={(e) => patchField('invoicePrefix', e.target.value)} required />
+                <TextInput
+                  value={form.invoicePrefix}
+                  onChange={(e) => patchField('invoicePrefix', e.target.value)}
+                  readOnly={identityFieldLocked('invoicePrefix')}
+                  required
+                />
               </div>
               <div>
                 <FieldLabel>Currency</FieldLabel>
-                <TextInput value={form.currency} onChange={(e) => patchField('currency', e.target.value)} required />
+                <TextInput
+                  value={form.currency}
+                  onChange={(e) => patchField('currency', e.target.value)}
+                  readOnly={identityFieldLocked('currency')}
+                  required
+                />
               </div>
               <div>
                 <FieldLabel>Receipt size</FieldLabel>
@@ -413,6 +556,35 @@ export function SettingsPage() {
               </div>
             </div>
           </Tile>
+
+          {identityEditActive ? (
+            <Tile>
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Access passphrase</h2>
+              <form className="grid max-w-md gap-3" onSubmit={onChangePassphrase}>
+                <div>
+                  <FieldLabel>Current passphrase</FieldLabel>
+                  <TextInput
+                    type="password"
+                    value={currentPassphrase}
+                    onChange={(e) => setCurrentPassphrase(e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <FieldLabel>New passphrase</FieldLabel>
+                  <TextInput
+                    type="password"
+                    value={newPassphrase}
+                    onChange={(e) => setNewPassphrase(e.target.value)}
+                    minLength={4}
+                    required
+                  />
+                </div>
+                {passphraseMessage ? <Feedback variant="success">{passphraseMessage}</Feedback> : null}
+                <PrimaryButton type="submit">Update passphrase</PrimaryButton>
+              </form>
+            </Tile>
+          ) : null}
 
           {error ? <Feedback variant="error">{error}</Feedback> : null}
           {message ? <Feedback variant="success">{message}</Feedback> : null}

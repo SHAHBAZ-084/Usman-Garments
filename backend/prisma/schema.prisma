@@ -723,6 +723,8 @@ model BusinessSettings {
   backupFolderPath  String      @default("")
   themeMode         ThemeMode   @default(LIGHT)
   logoPath          String?
+  isIdentityLocked  Boolean     @default(true)
+  developerPassphraseHash String @default("")
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 }

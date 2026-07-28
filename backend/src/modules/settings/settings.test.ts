@@ -12,25 +12,28 @@ import {
 describe('business settings', () => {
   beforeEach(async () => {
     await ensureBusinessSettings();
-    await updateBusinessSettings({
-      businessName: DEFAULT_BUSINESS_SETTINGS.businessName,
-      tagline: DEFAULT_BUSINESS_SETTINGS.tagline,
-      ownerName: DEFAULT_BUSINESS_SETTINGS.ownerName,
-      phone: DEFAULT_BUSINESS_SETTINGS.phone,
-      whatsapp: DEFAULT_BUSINESS_SETTINGS.whatsapp,
-      address: DEFAULT_BUSINESS_SETTINGS.address,
-      invoiceFooter: DEFAULT_BUSINESS_SETTINGS.invoiceFooter,
-      returnPolicy: DEFAULT_BUSINESS_SETTINGS.returnPolicy,
-      invoicePrefix: DEFAULT_BUSINESS_SETTINGS.invoicePrefix,
-      currency: DEFAULT_BUSINESS_SETTINGS.currency,
-      receiptSize: DEFAULT_BUSINESS_SETTINGS.receiptSize,
-      a4InvoiceEnabled: DEFAULT_BUSINESS_SETTINGS.a4InvoiceEnabled,
-      printerName: DEFAULT_BUSINESS_SETTINGS.printerName,
-      barcodeLabelSize: DEFAULT_BUSINESS_SETTINGS.barcodeLabelSize,
-      lowStockLimit: DEFAULT_BUSINESS_SETTINGS.lowStockLimit,
-      backupFolderPath: DEFAULT_BUSINESS_SETTINGS.backupFolderPath,
-      themeMode: DEFAULT_BUSINESS_SETTINGS.themeMode,
-    });
+    await updateBusinessSettings(
+      {
+        businessName: DEFAULT_BUSINESS_SETTINGS.businessName,
+        tagline: DEFAULT_BUSINESS_SETTINGS.tagline,
+        ownerName: DEFAULT_BUSINESS_SETTINGS.ownerName,
+        phone: DEFAULT_BUSINESS_SETTINGS.phone,
+        whatsapp: DEFAULT_BUSINESS_SETTINGS.whatsapp,
+        address: DEFAULT_BUSINESS_SETTINGS.address,
+        invoiceFooter: DEFAULT_BUSINESS_SETTINGS.invoiceFooter,
+        returnPolicy: DEFAULT_BUSINESS_SETTINGS.returnPolicy,
+        invoicePrefix: DEFAULT_BUSINESS_SETTINGS.invoicePrefix,
+        currency: DEFAULT_BUSINESS_SETTINGS.currency,
+        receiptSize: DEFAULT_BUSINESS_SETTINGS.receiptSize,
+        a4InvoiceEnabled: DEFAULT_BUSINESS_SETTINGS.a4InvoiceEnabled,
+        printerName: DEFAULT_BUSINESS_SETTINGS.printerName,
+        barcodeLabelSize: DEFAULT_BUSINESS_SETTINGS.barcodeLabelSize,
+        lowStockLimit: DEFAULT_BUSINESS_SETTINGS.lowStockLimit,
+        backupFolderPath: DEFAULT_BUSINESS_SETTINGS.backupFolderPath,
+        themeMode: DEFAULT_BUSINESS_SETTINGS.themeMode,
+      },
+      { identityEditActive: true },
+    );
   });
 
   it('returns singleton defaults and never creates a second row', async () => {
@@ -53,7 +56,6 @@ describe('business settings', () => {
 
   it('updates settings and persists values', async () => {
     const updated = await updateBusinessSettings({
-      businessName: 'Usman Mall',
       ownerName: 'Owner Test',
       lowStockLimit: 8,
       themeMode: ThemeMode.DARK,
@@ -93,7 +95,7 @@ describe('business settings', () => {
   });
 
   it('rejects empty business name', async () => {
-    await expect(updateBusinessSettings({ businessName: '   ' })).rejects.toThrow(
+    await expect(updateBusinessSettings({ businessName: '   ' }, { identityEditActive: true })).rejects.toThrow(
       /Business name is required/i,
     );
   });

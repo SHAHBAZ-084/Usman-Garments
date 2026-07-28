@@ -13,7 +13,7 @@ export default async function globalSetup() {
 
   fs.writeFileSync(ENV_FILE, JSON.stringify({ databaseUrl, dbDir }), 'utf8');
 
-  const env = { ...process.env, DATABASE_URL: databaseUrl };
+  const env = { ...process.env, DATABASE_URL: databaseUrl, NODE_ENV: 'test' };
 
   execSync('npx prisma migrate deploy', {
     cwd: BACKEND_ROOT,

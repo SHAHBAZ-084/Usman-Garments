@@ -130,6 +130,28 @@ export const api = {
     });
   },
 
+  getIdentityAccessStatus() {
+    return request<{ active: boolean }>('/api/settings/identity-access/status');
+  },
+  verifyIdentityAccess(passphrase: string) {
+    return request<{ ok: boolean }>('/api/settings/identity-access/verify', {
+      method: 'POST',
+      body: JSON.stringify({ passphrase }),
+    });
+  },
+  endIdentityAccess() {
+    return request<{ ok: boolean }>('/api/settings/identity-access/end', { method: 'POST' });
+  },
+  touchIdentityAccess() {
+    return request<{ active: boolean }>('/api/settings/identity-access/touch', { method: 'POST' });
+  },
+  changeIdentityPassphrase(currentPassphrase: string, newPassphrase: string) {
+    return request<{ ok: boolean }>('/api/settings/identity-access/passphrase', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassphrase, newPassphrase }),
+    });
+  },
+
   listCategories() {
     return request<AccountCategory[]>('/api/accounting/categories');
   },

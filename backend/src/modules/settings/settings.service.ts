@@ -5,6 +5,9 @@ import { getUploadsDir as resolveUploadsDir } from '../../config/paths';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../utils/helpers';
 import { isValidBarcodeLabelSize, normalizeBarcodeLabelSize } from './label-size';
+import { assertIdentityFieldsEditable, ensureDeveloperPassphraseHash } from './identity-access.service';
+
+export { PROTECTED_BUSINESS_IDENTITY_FIELDS } from './protected-fields';
 
 export const BUSINESS_SETTINGS_ID = 1;
 
@@ -71,11 +74,18 @@ function serializeSettings(row: {
   backupFolderPath: string;
   themeMode: ThemeMode;
   logoPath: string | null;
+  isIdentityLocked: boolean;
+  developerPassphraseHash: string;
   createdAt: Date;
   updatedAt: Date;
 }) {
+  const {
+    developerPassphraseHash: _hash,
+    isIdentityLocked: _locked,
+    ...safe
+  } = row;
   return {
-    ...row,
+    ...safe,
     themeMode: row.themeMode === ThemeMode.DARK ? 'dark' : 'light',
     logoUrl: row.logoPath ? `/uploads/${path.basename(row.logoPath)}` : null,
   };
@@ -86,19 +96,24 @@ export async function ensureBusinessSettings() {
   const existing = await prisma.businessSettings.findUnique({
     where: { id: BUSINESS_SETTINGS_ID },
   });
-  if (existing) return existing;
+  if (existing) {
+    await ensureDeveloperPassphraseHash();
+    return existing;
+  }
 
   const count = await prisma.businessSettings.count();
   if (count > 0) {
     throw new AppError(500, 'Business settings integrity error: unexpected extra rows');
   }
 
-  return prisma.businessSettings.create({
+  const row = await prisma.businessSettings.create({
     data: {
       id: BUSINESS_SETTINGS_ID,
       ...DEFAULT_BUSINESS_SETTINGS,
     },
   });
+  await ensureDeveloperPassphraseHash();
+  return row;
 }
 
 export async function getBusinessSettings() {
@@ -106,8 +121,12 @@ export async function getBusinessSettings() {
   return serializeSettings(row);
 }
 
-export async function updateBusinessSettings(input: BusinessSettingsUpdateInput) {
+export async function updateBusinessSettings(
+  input: BusinessSettingsUpdateInput,
+  options?: { identityEditActive?: boolean },
+) {
   await ensureBusinessSettings();
+  assertIdentityFieldsEditable(input, Boolean(options?.identityEditActive));
 
   const data: Prisma.BusinessSettingsUpdateInput = {};
 

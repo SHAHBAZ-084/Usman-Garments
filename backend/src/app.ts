@@ -22,6 +22,7 @@ import { getUploadsDir } from './config/paths';
 declare module 'express-session' {
   interface SessionData {
     userId?: number;
+    identityEditExpiresAt?: number;
   }
 }
 

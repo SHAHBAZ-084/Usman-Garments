@@ -4,6 +4,7 @@ import {
   bootstrapChartOfAccounts,
   fiscalYearLabelForDate,
 } from '../src/modules/accounting/accounting.service';
+import { ensureDeveloperPassphraseHash } from '../src/modules/settings/identity-access.service';
 import { ensureBusinessSettings } from '../src/modules/settings/settings.service';
 
 const prisma = new PrismaClient();
@@ -49,6 +50,7 @@ async function main() {
   console.log('Chart of accounts bootstrapped.');
 
   await ensureBusinessSettings();
+  await ensureDeveloperPassphraseHash();
   console.log('Business settings ensured.');
 
   const { ensureDefaultProductCategories } = await import('../src/modules/products/products.service');
