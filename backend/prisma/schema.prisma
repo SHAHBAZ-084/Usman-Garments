@@ -64,6 +64,7 @@ model User {
   username     String   @unique
   passwordHash String
   displayName  String?
+  role         String?  @default("Owner")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

@@ -2,6 +2,7 @@ export type User = {
   id: number;
   username: string;
   displayName: string;
+  role: string;
 };
 
 export type BusinessSettings = {
@@ -84,13 +85,20 @@ export type Voucher = {
 type ApiError = { error: string };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-    credentials: 'include',
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      credentials: 'include',
+    });
+  } catch {
+    throw new Error('Cannot reach the server. Restart the app / backend and try again.');
+  }
   const data = (await response.json().catch(() => ({}))) as T & ApiError;
-  if (!response.ok) throw new Error(data.error ?? 'Request failed');
+  if (!response.ok) {
+    throw new Error(data.error || `Request failed (${response.status})`);
+  }
   return data;
 }
 
@@ -106,6 +114,24 @@ export const api = {
   },
   me() {
     return request<{ user: User }>('/api/auth/me');
+  },
+  updateProfile(data: {
+    displayName?: string;
+    role?: string;
+    username?: string;
+    currentPassword?: string;
+    newPassword?: string;
+  }) {
+    return request<{ user: User }>('/api/auth/profile', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  },
+  verifyPassword(currentPassword: string) {
+    return request<{ ok: boolean }>('/api/auth/verify-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword }),
+    });
   },
 
   getSettings() {

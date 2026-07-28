@@ -2,6 +2,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { getDatabasePath, getDatabaseUrl, isAppDataMode } from './config/paths';
+import { ensureRequiredSchemaColumns } from './lib/ensure-schema';
 import { logger } from './lib/logger';
 import { configureSqlite } from './lib/prisma';
 import { runDailyBackupIfNeeded, runPreMigrationBackup } from './modules/backup/backup.service';
@@ -50,6 +51,28 @@ export async function runStartupTasks(): Promise<void> {
       await runPreMigrationBackup();
       await runMigrations(false);
     }
+  } else {
+    // Local/dev: still apply pending migrations when possible
+    try {
+      if (hasPendingMigrations()) {
+        logger.info('Local pending migrations — running migrate deploy');
+        await runMigrations(false);
+      }
+    } catch (err) {
+      logger.warn('Local migrate deploy skipped', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Always reconcile critical columns (covers migrate lock / partial apply)
+  try {
+    await ensureRequiredSchemaColumns();
+  } catch (err) {
+    logger.warn('Schema column ensure failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    throw err;
   }
 
   try {

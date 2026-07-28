@@ -24,8 +24,14 @@ async function main() {
         displayName: 'Shop Owner',
       },
     });
+    await prisma.$executeRaw`
+      UPDATE User SET role = ${'Owner'} WHERE username = ${username}
+    `;
     console.log(`Created default user "${username}". Change the password after first login.`);
   } else {
+    await prisma.$executeRaw`
+      UPDATE User SET role = COALESCE(NULLIF(role, ''), ${'Owner'}) WHERE id = ${existing.id}
+    `;
     console.log(`Default user "${username}" already exists — skipping user seed.`);
   }
 

@@ -157,11 +157,7 @@ export function Sidebar() {
       </Link>
 
       <nav className="app-sidebar-nav">
-        <SidebarLink
-          to="/"
-          label="Dashboard"
-          active={location.pathname === '/'}
-        />
+        <SidebarLink to="/" label="Dashboard" active={location.pathname === '/'} />
         {TOP_NAV.map((group) =>
           group.children ? (
             <SidebarGroup
@@ -183,10 +179,11 @@ export function Sidebar() {
 
       <div className="app-sidebar-footer">
         {user ? (
-          <div className="app-sidebar-user">
+          <Link to="/user" className="app-sidebar-user block hover:border-[rgba(201,150,24,0.35)]">
             <p className="app-sidebar-user-name truncate">{user.displayName || user.username}</p>
-            <p className="app-sidebar-user-role truncate">{user.username}</p>
-          </div>
+            <p className="app-sidebar-user-role truncate">{user.role || 'Owner'}</p>
+            <p className="app-sidebar-user-username truncate">@{user.username}</p>
+          </Link>
         ) : null}
         <button type="button" className="app-sidebar-signout" onClick={() => void onSignOut()}>
           <LogOut className="h-4 w-4 shrink-0" aria-hidden />
