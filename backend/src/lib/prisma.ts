@@ -12,9 +12,11 @@ export const prisma = new PrismaClient({
 /** SQLite pragmas for single-instance desktop use: FK enforcement, WAL, busy timeout. */
 export async function configureSqlite(): Promise<void> {
   if (configured) return;
-  await prisma.$executeRawUnsafe('PRAGMA foreign_keys = ON');
-  await prisma.$executeRawUnsafe('PRAGMA journal_mode = WAL');
-  await prisma.$executeRawUnsafe('PRAGMA busy_timeout = 5000');
+  await prisma.$queryRawUnsafe('PRAGMA foreign_keys = ON');
+  // journal_mode SET returns the active mode as a row — must use queryRaw, not executeRaw
+  await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
+  // busy_timeout SET returns the previous timeout value as a row
+  await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
   configured = true;
 }
 
