@@ -56,9 +56,9 @@ export async function runHealthCheck(): Promise<HealthReport> {
     for (const m of movements) {
       const qty = m._sum.quantity ?? 0;
       const t = m.type;
-      if (t === 'SALE' || t === 'MANUAL_REDUCE' || t === 'DAMAGED' || t === 'PURCHASE_RETURN' || t === 'CANCELLATION') {
+      if (t === 'SALE' || t === 'MANUAL_REDUCE' || t === 'PURCHASE_RETURN' || t === 'CANCELLATION') {
         expected -= qty;
-      } else {
+      } else if (t !== 'DAMAGED') {
         expected += qty;
       }
     }

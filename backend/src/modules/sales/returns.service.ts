@@ -119,6 +119,64 @@ function restocksInventory(condition: ReturnCondition) {
   return condition === ReturnCondition.GOOD || condition === ReturnCondition.OTHER;
 }
 
+function computeRefundSplit(
+  invoice: Awaited<ReturnType<typeof loadReturnableInvoice>>,
+  refundTotal: number,
+  refundToCash?: boolean,
+) {
+  const invoiceTotal = Number(invoice.totalAmount);
+  const remaining = Number(invoice.remainingAmount);
+
+  let customerCredit = 0;
+  let cashCredit = refundTotal;
+
+  if (
+    invoice.customerId &&
+    invoice.customer?.accountId &&
+    remaining > 0.001 &&
+    refundToCash !== true
+  ) {
+    const udhaarShare = invoiceTotal > 0 ? remaining / invoiceTotal : 0;
+    customerCredit = roundMoney(refundTotal * udhaarShare);
+    cashCredit = roundMoney(refundTotal - customerCredit);
+  }
+
+  return { customerCredit, cashCredit };
+}
+
+async function applyRefundLegs(
+  tx: Prisma.TransactionClient,
+  invoice: Awaited<ReturnType<typeof loadReturnableInvoice>>,
+  customerCredit: number,
+  cashCredit: number,
+  refundMethod: PurchasePaymentMethod,
+) {
+  const legs: { accountId: number; type: LedgerEntryType; amount: number }[] = [];
+
+  if (customerCredit > 0.001) {
+    legs.push({
+      accountId: invoice.customer!.accountId!,
+      type: LedgerEntryType.CREDIT,
+      amount: customerCredit,
+    });
+    await tx.customer.update({
+      where: { id: invoice.customerId! },
+      data: { currentBalance: { decrement: customerCredit } },
+    });
+  }
+
+  if (cashCredit > 0.001) {
+    const paymentAccount = await ensurePaymentMethodAccount(tx, refundMethod);
+    legs.push({
+      accountId: paymentAccount.id,
+      type: LedgerEntryType.CREDIT,
+      amount: cashCredit,
+    });
+  }
+
+  return legs;
+}
+
 async function buildRefundLegs(
   tx: Prisma.TransactionClient,
   params: {
@@ -128,46 +186,80 @@ async function buildRefundLegs(
     refundToCash?: boolean;
   },
 ) {
-  const legs: { accountId: number; type: LedgerEntryType; amount: number }[] = [];
-  const invoiceTotal = Number(params.invoice.totalAmount);
-  const remaining = Number(params.invoice.remainingAmount);
+  const { customerCredit, cashCredit } = computeRefundSplit(
+    params.invoice,
+    params.refundTotal,
+    params.refundToCash,
+  );
+  const legs = await applyRefundLegs(
+    tx,
+    params.invoice,
+    customerCredit,
+    cashCredit,
+    params.refundMethod,
+  );
+  return { legs, customerCredit, cashCredit };
+}
 
-  let customerCredit = 0;
-  let cashCredit = params.refundTotal;
+async function adjustInvoiceAfterReturn(
+  tx: Prisma.TransactionClient,
+  invoice: { id: number; totalAmount: unknown; paidAmount: unknown; remainingAmount: unknown },
+  returnTotal: number,
+  customerCredit: number,
+  cashCredit: number,
+) {
+  const oldTotal = Number(invoice.totalAmount);
+  const oldPaid = Number(invoice.paidAmount);
+  const oldRemaining = Number(invoice.remainingAmount);
 
-  if (
-    params.invoice.customerId &&
-    params.invoice.customer?.accountId &&
-    remaining > 0.001 &&
-    params.refundToCash !== true
-  ) {
-    const udhaarShare = invoiceTotal > 0 ? remaining / invoiceTotal : 0;
-    customerCredit = roundMoney(params.refundTotal * udhaarShare);
-    cashCredit = roundMoney(params.refundTotal - customerCredit);
+  const newTotal = roundMoney(Math.max(0, oldTotal - returnTotal));
+  const newPaid = roundMoney(Math.max(0, oldPaid - cashCredit));
+  const newRemaining = roundMoney(Math.max(0, oldRemaining - customerCredit));
+
+  await tx.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      totalAmount: newTotal,
+      paidAmount: newPaid,
+      remainingAmount: newRemaining,
+    },
+  });
+}
+
+async function adjustInvoiceAfterExchange(
+  tx: Prisma.TransactionClient,
+  invoice: { id: number; totalAmount: unknown; paidAmount: unknown; remainingAmount: unknown },
+  returnTotal: number,
+  newSaleTotal: number,
+  customerCredit: number,
+  exchangePaidAmount: number,
+) {
+  const oldTotal = Number(invoice.totalAmount);
+  const oldPaid = Number(invoice.paidAmount);
+  const oldRemaining = Number(invoice.remainingAmount);
+
+  const newTotal = roundMoney(Math.max(0, oldTotal - returnTotal + newSaleTotal));
+  let newPaid: number;
+  let newRemaining: number;
+
+  if (oldRemaining > 0.001) {
+    newRemaining = roundMoney(
+      Math.max(0, oldRemaining - customerCredit + Math.max(0, newSaleTotal - exchangePaidAmount)),
+    );
+    newPaid = roundMoney(Math.max(0, newTotal - newRemaining));
+  } else {
+    newPaid = roundMoney(Math.max(0, oldPaid + exchangePaidAmount));
+    newRemaining = roundMoney(Math.max(0, newTotal - newPaid));
   }
 
-  if (customerCredit > 0.001) {
-    legs.push({
-      accountId: params.invoice.customer!.accountId!,
-      type: LedgerEntryType.CREDIT,
-      amount: customerCredit,
-    });
-    await tx.customer.update({
-      where: { id: params.invoice.customerId! },
-      data: { currentBalance: { decrement: customerCredit } },
-    });
-  }
-
-  if (cashCredit > 0.001) {
-    const paymentAccount = await ensurePaymentMethodAccount(tx, params.refundMethod);
-    legs.push({
-      accountId: paymentAccount.id,
-      type: LedgerEntryType.CREDIT,
-      amount: cashCredit,
-    });
-  }
-
-  return legs;
+  await tx.invoice.update({
+    where: { id: invoice.id },
+    data: {
+      totalAmount: newTotal,
+      paidAmount: newPaid,
+      remainingAmount: newRemaining,
+    },
+  });
 }
 
 function buildReturnAccountingLegs(
@@ -347,13 +439,21 @@ export async function createSaleReturn(input: CreateSaleReturnInput) {
     await applyReturnStock(tx, revalidated, sourceRef, `Return ${invoice.invoiceNumber}`);
 
     const accounts = await ensureRetailSystemAccounts(tx);
-    const refundLegs = await buildRefundLegs(tx, {
+    const refundResult = await buildRefundLegs(tx, {
       invoice,
       refundTotal: totalAmount,
       refundMethod,
       refundToCash: input.refundToCash,
     });
-    const { legs } = buildReturnAccountingLegs(accounts, revalidated, refundLegs);
+    const { legs } = buildReturnAccountingLegs(accounts, revalidated, refundResult.legs);
+
+    await adjustInvoiceAfterReturn(
+      tx,
+      invoice,
+      totalAmount,
+      refundResult.customerCredit,
+      refundResult.cashCredit,
+    );
 
     await createMultiLegVoucherInTx(tx, {
       type: VoucherType.SALE_RETURN,
@@ -597,13 +697,56 @@ export async function createExchange(input: CreateExchangeInput) {
       const paymentAccount = await ensurePaymentMethodAccount(tx, paymentMethod);
       legs.push({ accountId: paymentAccount.id, type: LedgerEntryType.DEBIT, amount: netAmountTx });
     } else if (netAmountTx < -0.001) {
-      const refundLegs = await buildRefundLegs(tx, {
+      const netRefund = computeRefundSplit(invoice, -netAmountTx, input.refundToCash);
+      const netRefundLegs = await applyRefundLegs(
+        tx,
         invoice,
-        refundTotal: -netAmountTx,
-        refundMethod: paymentMethod,
-        refundToCash: input.refundToCash,
+        netRefund.customerCredit,
+        netRefund.cashCredit,
+        paymentMethod,
+      );
+      legs.push(...netRefundLegs);
+    }
+
+    const returnRefund = computeRefundSplit(invoice, returnTotalTx, input.refundToCash);
+    await adjustInvoiceAfterExchange(
+      tx,
+      invoice,
+      returnTotalTx,
+      newSaleTotalTx,
+      returnRefund.customerCredit,
+      paidAmount,
+    );
+
+    if (returnRefund.customerCredit > 0.001) {
+      const returnRefundLegs = await applyRefundLegs(
+        tx,
+        invoice,
+        returnRefund.customerCredit,
+        0,
+        paymentMethod,
+      );
+      legs.push(...returnRefundLegs);
+    }
+
+    const udhaarOnNewItems = roundMoney(Math.max(0, newSaleTotalTx - paidAmount));
+    const netReceivableIncrease = roundMoney(
+      Math.max(0, udhaarOnNewItems - returnRefund.customerCredit),
+    );
+    if (
+      netReceivableIncrease > 0.001 &&
+      invoice.customerId &&
+      invoice.customer?.accountId
+    ) {
+      legs.push({
+        accountId: invoice.customer.accountId,
+        type: LedgerEntryType.DEBIT,
+        amount: netReceivableIncrease,
       });
-      legs.push(...refundLegs);
+      await tx.customer.update({
+        where: { id: invoice.customerId },
+        data: { currentBalance: { increment: udhaarOnNewItems } },
+      });
     }
 
     const voucherAmount = roundMoney(Math.max(returnTotalTx, newSaleTotalTx, Math.abs(netAmountTx)));

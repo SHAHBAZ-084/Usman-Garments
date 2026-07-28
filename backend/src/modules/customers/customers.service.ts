@@ -361,6 +361,30 @@ export async function createCustomerPayment(input: CreateCustomerPaymentInput) {
       ],
     });
 
+    let unallocated = amount;
+    const openInvoices = await tx.invoice.findMany({
+      where: {
+        customerId: customer.id,
+        status: 'ACTIVE',
+        remainingAmount: { gt: 0 },
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      select: { id: true, remainingAmount: true },
+    });
+    for (const inv of openInvoices) {
+      if (unallocated <= 0.001) break;
+      const owed = Number(inv.remainingAmount);
+      const apply = roundMoney(Math.min(unallocated, owed));
+      if (apply <= 0) continue;
+      await tx.invoice.update({
+        where: { id: inv.id },
+        data: {
+          remainingAmount: { decrement: apply },
+        },
+      });
+      unallocated = roundMoney(unallocated - apply);
+    }
+
     await tx.customer.update({
       where: { id: customer.id },
       data: { currentBalance: { decrement: amount } },

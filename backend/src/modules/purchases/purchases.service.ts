@@ -368,6 +368,28 @@ export async function createSupplierPayment(input: CreateSupplierPaymentInput) {
       ],
     });
 
+    let unallocated = amount;
+    const openPurchases = await tx.purchase.findMany({
+      where: {
+        supplierId: supplier.id,
+        status: PurchaseStatus.ACTIVE,
+        remainingAmount: { gt: 0 },
+      },
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      select: { id: true, remainingAmount: true },
+    });
+    for (const purchase of openPurchases) {
+      if (unallocated <= 0.001) break;
+      const owed = Number(purchase.remainingAmount);
+      const apply = roundMoney(Math.min(unallocated, owed));
+      if (apply <= 0) continue;
+      await tx.purchase.update({
+        where: { id: purchase.id },
+        data: { remainingAmount: { decrement: apply } },
+      });
+      unallocated = roundMoney(unallocated - apply);
+    }
+
     return payment.id;
   });
 
