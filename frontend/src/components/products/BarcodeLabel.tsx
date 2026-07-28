@@ -8,6 +8,7 @@ import {
   type ParsedLabelSize,
 } from '../../lib/barcodeLabels';
 import { formatMoney } from '../../lib/format';
+import { PRINT_SOFTWARE_CREDIT_LINE } from '../../config/printCredit';
 import { shortcutLabel } from '../../lib/shortcuts';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import { FieldLabel, PrimaryButton, SecondaryButton, TextInput } from '../ui/PageShell';
@@ -108,7 +109,7 @@ function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize): string {
           </div>`;
         })
         .join('');
-      pages.push(`<div class="page">${cells}</div>`);
+      pages.push(`<div class="page">${cells}</div><p class="sheet-credit">${escapeHtml(PRINT_SOFTWARE_CREDIT_LINE)}</p>`);
     }
 
     return `<!DOCTYPE html>
@@ -137,6 +138,8 @@ function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize): string {
   .price { font-size: ${compact ? '9pt' : '10pt'}; font-weight: 700; margin: 1mm 0 0; }
   .barcode-wrap { margin-top: auto; }
   .barcode-wrap svg { max-width: 100%; height: auto; }
+  .sheet-credit { font-size: 6pt; color: #888; text-align: center; margin: 2mm 0 0; page-break-after: always; }
+  .sheet-credit:last-child { page-break-after: auto; }
 </style></head><body>${pages.join('')}
 <script>window.onload = function() { window.print(); };<\/script></body></html>`;
   }
@@ -145,12 +148,17 @@ function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize): string {
   const cards = items
     .map((item) => {
       const variantLine = [item.size, item.colour].filter(Boolean).join(' · ');
+      const creditLine =
+        size.heightMm >= 30
+          ? `<p class="credit">${escapeHtml(PRINT_SOFTWARE_CREDIT_LINE)}</p>`
+          : '';
       return `<div class="label">
         <p class="shop">${escapeHtml(item.businessName)}</p>
         <p class="name">${escapeHtml(item.productName)}</p>
         ${variantLine ? `<p class="variant">${escapeHtml(variantLine)}</p>` : ''}
         <p class="price">Rs ${formatMoney(item.price)}</p>
         <div class="barcode-wrap">${barcodeSvgMarkup(item.barcode, barcodeHeight, barcodeWidth)}</div>
+        ${creditLine}
       </div>`;
     })
     .join('');
@@ -173,6 +181,7 @@ function buildPrintHtml(items: LabelItem[], size: ParsedLabelSize): string {
   .price { font-size: ${compact ? '9pt' : '11pt'}; font-weight: 700; margin: 1mm 0 0; }
   .barcode-wrap { margin-top: auto; }
   .barcode-wrap svg { max-width: 100%; height: auto; }
+  .credit { font-size: 5pt; color: #888; margin: 0.5mm 0 0; line-height: 1.1; }
 </style></head><body>${cards}
 <script>window.onload = function() { window.print(); };<\/script></body></html>`;
 }

@@ -1,4 +1,5 @@
 import { formatDate, formatMoney } from '../../lib/format';
+import { PRINT_SOFTWARE_CREDIT_LINE } from '../../config/printCredit';
 import type { BusinessSettings, Invoice } from '../../lib/api';
 
 function escapeHtml(text: string): string {
@@ -65,6 +66,7 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
       <hr />
       <p class="footer">${escapeHtml(settings.invoiceFooter)}</p>
       <p class="policy">${escapeHtml(settings.returnPolicy)}</p>
+      <p class="credit">${escapeHtml(PRINT_SOFTWARE_CREDIT_LINE)}</p>
     </div>`;
 
   if (isA4) {
@@ -85,6 +87,7 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
   .total { font-weight: 700; font-size: 13pt; }
   .due { color: #b45309; font-weight: 600; }
   .footer, .policy { font-size: 9pt; color: #555; margin-top: 8px; }
+  .credit { font-size: 7pt; color: #888; margin-top: 10px; text-align: center; }
 </style></head><body>${body}
 <script>window.onload=function(){window.print();};<\/script></body></html>`;
   }
@@ -105,6 +108,7 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
   .total { font-weight: 700; font-size: 12px; }
   .due { font-weight: 600; }
   .footer, .policy { font-size: 9px; color: #444; margin-top: 6px; text-align: center; word-wrap: break-word; }
+  .credit { font-size: 7px; color: #888; margin-top: 6px; text-align: center; }
   hr { border: none; border-top: 1px dashed #999; margin: 6px 0; }
 </style></head><body>${body}
 <script>window.onload=function(){window.print();};<\/script></body></html>`;
