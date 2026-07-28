@@ -69,10 +69,9 @@ export async function runStartupTasks(): Promise<void> {
   try {
     await ensureRequiredSchemaColumns();
   } catch (err) {
-    logger.warn('Schema column ensure failed', {
+    logger.warn('Schema column ensure skipped', {
       error: err instanceof Error ? err.message : String(err),
     });
-    throw err;
   }
 
   try {

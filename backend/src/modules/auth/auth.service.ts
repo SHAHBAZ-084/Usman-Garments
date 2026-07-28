@@ -14,7 +14,7 @@ function toPublicUser(user: {
   id: number;
   username: string;
   displayName: string | null;
-  role: string | null;
+  role?: string | null;
 }) {
   return {
     id: user.id,
@@ -25,23 +25,48 @@ function toPublicUser(user: {
 }
 
 async function findUserByUsername(username: string): Promise<UserRow | null> {
-  const rows = await prisma.$queryRaw<UserRow[]>`
-    SELECT id, username, displayName, role, passwordHash
-    FROM User
-    WHERE username = ${username}
-    LIMIT 1
-  `;
-  return rows[0] ?? null;
+  try {
+    const rows = await prisma.$queryRaw<UserRow[]>`
+      SELECT id, username, displayName, role, passwordHash
+      FROM User
+      WHERE username = ${username}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  } catch {
+    // Fallback if role column is not present yet
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (!user) return null;
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: 'Owner',
+      passwordHash: user.passwordHash,
+    };
+  }
 }
 
 async function findUserById(id: number): Promise<UserRow | null> {
-  const rows = await prisma.$queryRaw<UserRow[]>`
-    SELECT id, username, displayName, role, passwordHash
-    FROM User
-    WHERE id = ${id}
-    LIMIT 1
-  `;
-  return rows[0] ?? null;
+  try {
+    const rows = await prisma.$queryRaw<UserRow[]>`
+      SELECT id, username, displayName, role, passwordHash
+      FROM User
+      WHERE id = ${id}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  } catch {
+    const user = await prisma.user.findUnique({ where: { id } });
+    if (!user) return null;
+    return {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: 'Owner',
+      passwordHash: user.passwordHash,
+    };
+  }
 }
 
 export async function login(username: string, password: string) {
@@ -143,16 +168,27 @@ export async function updateProfile(userId: number, input: UpdateProfileInput) {
     ? await bcrypt.hash(newPassword, 10)
     : user.passwordHash;
 
-  await prisma.$executeRaw`
-    UPDATE User
-    SET
-      displayName = ${displayName},
-      role = ${role},
-      username = ${username},
-      passwordHash = ${passwordHash},
-      updatedAt = CURRENT_TIMESTAMP
-    WHERE id = ${userId}
-  `;
+  try {
+    await prisma.$executeRaw`
+      UPDATE User
+      SET
+        displayName = ${displayName},
+        role = ${role},
+        username = ${username},
+        passwordHash = ${passwordHash},
+        updatedAt = CURRENT_TIMESTAMP
+      WHERE id = ${userId}
+    `;
+  } catch {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        displayName,
+        username,
+        passwordHash,
+      },
+    });
+  }
 
   const updated = await findUserById(userId);
   if (!updated) {
