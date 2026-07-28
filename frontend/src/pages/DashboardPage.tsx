@@ -228,13 +228,13 @@ export function DashboardPage() {
             label="Customer Outstanding"
             value={dash ? formatMoney(dash.customerOutstanding) : '—'}
             to="/reports/customers/balances"
-            accent="warning"
+            accent="success"
           />
           <ClickableMetricTile
             label="Supplier Outstanding"
             value={dash ? formatMoney(dash.supplierOutstanding) : '—'}
             to="/reports/suppliers/outstanding"
-            accent="warning"
+            accent="danger"
           />
           <ClickableMetricTile
             label="Low Stock"

@@ -18,7 +18,7 @@ import {
   ensureSystemAccount,
 } from '../accounting/accounting.service';
 import { adjustStockInTx } from '../products/products.service';
-import { ensurePaymentMethodAccount } from '../purchases/purchases.service';
+import { resolvePaymentAccount } from '../purchases/purchases.service';
 
 function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
@@ -38,6 +38,7 @@ export type CreateSaleInput = {
   items: SaleItemInput[];
   paymentMethod: SalePaymentMethod;
   paidAmount: number;
+  paymentAccountId?: number | null;
   customerId?: number | null;
   discount?: number;
   date?: string;
@@ -159,9 +160,10 @@ async function resolveSaleLines(tx: Prisma.TransactionClient, items: SaleItemInp
   return resolved;
 }
 
-async function ensureSalePaymentAccount(
+async function resolveSalePaymentAccount(
   tx: Prisma.TransactionClient,
   method: Exclude<SalePaymentMethod, 'UDHAAR'>,
+  paymentAccountId?: number | null,
 ) {
   if (method === SalePaymentMethod.CASH) {
     await ensureRetailSystemAccounts(tx);
@@ -176,7 +178,7 @@ async function ensureSalePaymentAccount(
     JAZZCASH: PurchasePaymentMethod.JAZZCASH,
     BANK_TRANSFER: PurchasePaymentMethod.BANK_TRANSFER,
   };
-  return ensurePaymentMethodAccount(tx, purchaseMethodMap[method]);
+  return resolvePaymentAccount(tx, purchaseMethodMap[method], paymentAccountId);
 }
 
 export async function createSale(input: CreateSaleInput) {
@@ -274,7 +276,7 @@ export async function createSale(input: CreateSaleInput) {
         input.paymentMethod === SalePaymentMethod.UDHAAR
           ? SalePaymentMethod.CASH
           : input.paymentMethod;
-      const paymentAccount = await ensureSalePaymentAccount(tx, payMethod);
+      const paymentAccount = await resolveSalePaymentAccount(tx, payMethod, input.paymentAccountId);
       legs.push({ accountId: paymentAccount.id, type: LedgerEntryType.DEBIT, amount: paidAmount });
     }
 

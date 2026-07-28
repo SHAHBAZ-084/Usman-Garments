@@ -15,7 +15,7 @@ import {
   SALES_RETURN_ACCOUNT_NAME,
 } from '../accounting/accounting.service';
 import { adjustStockInTx, recordDamagedReturnInTx } from '../products/products.service';
-import { ensurePaymentMethodAccount } from '../purchases/purchases.service';
+import { resolvePaymentAccount } from '../purchases/purchases.service';
 import { resolveSaleLines, type SaleItemInput } from './sales.service';
 
 function roundMoney(n: number) {
@@ -166,7 +166,7 @@ async function applyRefundLegs(
   }
 
   if (cashCredit > 0.001) {
-    const paymentAccount = await ensurePaymentMethodAccount(tx, refundMethod);
+    const paymentAccount = await resolvePaymentAccount(tx, refundMethod);
     legs.push({
       accountId: paymentAccount.id,
       type: LedgerEntryType.CREDIT,
@@ -694,7 +694,7 @@ export async function createExchange(input: CreateExchangeInput) {
     }
 
     if (netAmountTx > 0.001) {
-      const paymentAccount = await ensurePaymentMethodAccount(tx, paymentMethod);
+      const paymentAccount = await resolvePaymentAccount(tx, paymentMethod);
       legs.push({ accountId: paymentAccount.id, type: LedgerEntryType.DEBIT, amount: netAmountTx });
     } else if (netAmountTx < -0.001) {
       const netRefund = computeRefundSplit(invoice, -netAmountTx, input.refundToCash);

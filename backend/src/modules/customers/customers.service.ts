@@ -12,7 +12,7 @@ import {
   createMultiLegVoucherInTx,
   ensureCustomersCategory,
 } from '../accounting/accounting.service';
-import { ensurePaymentMethodAccount } from '../purchases/purchases.service';
+import { resolvePaymentAccount } from '../purchases/purchases.service';
 
 function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
@@ -312,6 +312,7 @@ export type CreateCustomerPaymentInput = {
   customerId: number;
   amount: number;
   paymentMethod: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
   date: string;
   note?: string | null;
   createdById: number;
@@ -345,7 +346,7 @@ export async function createCustomerPayment(input: CreateCustomerPaymentInput) {
       },
     });
 
-    const paymentAccount = await ensurePaymentMethodAccount(tx, input.paymentMethod);
+    const paymentAccount = await resolvePaymentAccount(tx, input.paymentMethod, input.paymentAccountId);
 
     await createMultiLegVoucherInTx(tx, {
       type: VoucherType.CUSTOMER_PAYMENT,

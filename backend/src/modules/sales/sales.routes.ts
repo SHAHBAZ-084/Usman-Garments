@@ -22,6 +22,7 @@ const createSaleSchema = z.object({
   items: z.array(itemSchema).min(1),
   paymentMethod: z.nativeEnum(SalePaymentMethod),
   paidAmount: z.number().min(0),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
   customerId: z.number().int().positive().nullable().optional(),
   discount: z.number().min(0).optional(),
   date: z.string().min(1).optional(),

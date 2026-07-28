@@ -83,6 +83,29 @@ accountingRouter.get(
 );
 
 accountingRouter.get(
+  '/finance-overview',
+  asyncHandler(async (req, res) => {
+    const preset = req.query.preset as string | undefined;
+    const fromDate = req.query.fromDate as string | undefined;
+    const toDate = req.query.toDate as string | undefined;
+    const overview = await accountingService.getFinanceCommandCenter({
+      preset: preset as 'today' | 'week' | 'month' | 'year' | 'custom' | 'lifetime' | undefined,
+      fromDate,
+      toDate,
+    });
+    res.json(overview);
+  }),
+);
+
+accountingRouter.get(
+  '/bank-accounts',
+  asyncHandler(async (_req, res) => {
+    const { listBankAccounts } = await import('../purchases/purchases.service');
+    res.json(await listBankAccounts());
+  }),
+);
+
+accountingRouter.get(
   '/vouchers/next-number',
   asyncHandler(async (_req, res) => {
     const preview = await accountingService.previewNextVoucherNumber();

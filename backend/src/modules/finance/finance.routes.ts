@@ -18,6 +18,7 @@ const expenseSchema = z.object({
   date: z.string().min(1),
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PurchasePaymentMethod),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
   description: z.string().min(1).max(500),
   paidTo: z.string().max(200).nullable().optional(),
   note: z.string().max(500).nullable().optional(),
@@ -28,6 +29,7 @@ const otherIncomeSchema = z.object({
   date: z.string().min(1),
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PurchasePaymentMethod),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
   description: z.string().min(1).max(500),
   note: z.string().max(500).nullable().optional(),
 });

@@ -13,7 +13,7 @@ import {
   ensureSystemAccount,
   INCOME_CATEGORY_NAME,
 } from '../accounting/accounting.service';
-import { ensurePaymentMethodAccount } from '../purchases/purchases.service';
+import { resolvePaymentAccount } from '../purchases/purchases.service';
 
 function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
@@ -164,6 +164,7 @@ export type CreateExpenseInput = {
   date: string;
   amount: number;
   paymentMethod: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
   description: string;
   paidTo?: string | null;
   note?: string | null;
@@ -195,7 +196,7 @@ export async function createExpense(input: CreateExpenseInput) {
       },
     });
 
-    const paymentAccount = await ensurePaymentMethodAccount(tx, input.paymentMethod);
+    const paymentAccount = await resolvePaymentAccount(tx, input.paymentMethod, input.paymentAccountId);
 
     await createMultiLegVoucherInTx(tx, {
       type: VoucherType.EXPENSE,
@@ -274,6 +275,7 @@ export type CreateOtherIncomeInput = {
   date: string;
   amount: number;
   paymentMethod: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
   description: string;
   note?: string | null;
   createdById: number;
@@ -303,7 +305,7 @@ export async function createOtherIncome(input: CreateOtherIncomeInput) {
       },
     });
 
-    const paymentAccount = await ensurePaymentMethodAccount(tx, input.paymentMethod);
+    const paymentAccount = await resolvePaymentAccount(tx, input.paymentMethod, input.paymentAccountId);
 
     await createMultiLegVoucherInTx(tx, {
       type: VoucherType.OTHER_INCOME,

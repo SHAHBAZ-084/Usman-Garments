@@ -1790,6 +1790,70 @@ export async function getDashboardSummary() {
   };
 }
 
+/** Finance Command Center: liquid positions + outstanding + trial balance status + recent activity. */
+export async function getFinanceCommandCenter(range?: {
+  preset?: import('../reports/date-range').DateRangePreset;
+  fromDate?: string;
+  toDate?: string;
+}) {
+  await ensureRetailSystemAccounts(prisma);
+
+  const { getFinancialSummary } = await import('../reports/financial-summary.service');
+  const preset = range?.preset ?? 'month';
+  const financial = await getFinancialSummary(preset, range?.fromDate, range?.toDate);
+
+  const accounts = await prisma.account.findMany({
+    where: { isActive: true },
+    include: { category: true, ledger: true },
+    orderBy: { name: 'asc' },
+  });
+
+  const cashAccounts = accounts
+    .filter((a) => a.category && a.category.name.trim().toLowerCase() === 'cash')
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      code: a.code,
+      balance: a.ledger ? Number(a.ledger.balance) : 0,
+    }));
+
+  const bankAccounts = accounts
+    .filter((a) => a.category && a.category.name.trim().toLowerCase() === 'bank')
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      code: a.code,
+      balance: a.ledger ? Number(a.ledger.balance) : 0,
+    }));
+
+  const cashInHand =
+    cashAccounts.find((a) => a.name === CASH_IN_HAND_ACCOUNT_NAME)?.balance ??
+    cashAccounts.reduce((s, a) => s + a.balance, 0);
+  const bankTotal = bankAccounts.reduce((s, a) => s + a.balance, 0);
+  const liquidTotal = cashInHand + bankTotal;
+
+  const trialBalance = await getTrialBalance();
+  const dashboard = await getDashboardSummary();
+
+  return {
+    cashInHand,
+    cashAccounts,
+    bankAccounts,
+    bankTotal,
+    liquidTotal,
+    totalRevenue: financial.netSales,
+    financialSummary: financial,
+    customerOutstanding: financial.customerOutstanding,
+    supplierOutstanding: financial.supplierOutstanding,
+    trialBalance: {
+      totalDebit: trialBalance.totalDebit,
+      totalCredit: trialBalance.totalCredit,
+      isBalanced: trialBalance.isBalanced,
+    },
+    recentActivity: dashboard.recentVouchers,
+  };
+}
+
 async function batchOpeningBalanceSnapshots(
   db: DbClient,
   accountIds: number[],

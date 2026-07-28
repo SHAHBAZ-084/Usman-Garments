@@ -24,6 +24,7 @@ const createPurchaseSchema = z.object({
   items: z.array(itemSchema).min(1),
   paidAmount: z.number().min(0),
   paymentMethod: z.nativeEnum(PurchasePaymentMethod),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
 });
 
@@ -31,6 +32,7 @@ const paymentSchema = z.object({
   supplierId: z.number().int().positive(),
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PurchasePaymentMethod),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
   date: z.string().min(1),
   note: z.string().max(500).nullable().optional(),
 });

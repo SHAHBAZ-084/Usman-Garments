@@ -61,33 +61,9 @@ export const TOP_NAV: NavGroup[] = [
   {
     label: 'Accounts',
     children: [
-      {
-        kind: 'submenu',
-        label: 'Category',
-        children: [
-          { label: 'Add Category', to: '/accounts/categories/add' },
-          { label: 'Edit Category', to: '/accounts/categories/edit' },
-          { label: 'Remove Category', to: '/accounts/categories/remove' },
-        ],
-      },
-      {
-        kind: 'submenu',
-        label: 'Account',
-        children: [
-          { label: 'Add Account', to: '/accounts/manage/add' },
-          { label: 'Edit Account', to: '/accounts/manage/edit' },
-          { label: 'Remove Account', to: '/accounts/manage/remove' },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Voucher',
-    children: [
-      { kind: 'link', label: 'Payment Voucher', to: '/vouchers/payment' },
-      { kind: 'link', label: 'Journal Voucher', to: '/vouchers/journal' },
-      { kind: 'link', label: 'Receipt Voucher', to: '/vouchers/receipt' },
-      { kind: 'link', label: 'View Voucher', to: '/vouchers/view' },
+      { kind: 'link', label: 'Finance Overview', to: '/accounts' },
+      { kind: 'link', label: 'Chart of Accounts', to: '/accounts/chart' },
+      { kind: 'link', label: 'Add Bank Account', to: '/accounts/manage/add?bank=1' },
     ],
   },
   {

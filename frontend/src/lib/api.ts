@@ -198,6 +198,17 @@ export const api = {
       }[];
     }>('/api/accounting/dashboard-summary');
   },
+  getFinanceOverview(params?: { preset?: DateRangePreset; fromDate?: string; toDate?: string }) {
+    const query = new URLSearchParams();
+    if (params?.preset) query.set('preset', params.preset);
+    if (params?.fromDate) query.set('fromDate', params.fromDate);
+    if (params?.toDate) query.set('toDate', params.toDate);
+    const suffix = query.toString() ? `?${query}` : '';
+    return request<FinanceOverview>(`/api/accounting/finance-overview${suffix}`);
+  },
+  listBankAccounts() {
+    return request<BankAccountOption[]>('/api/accounting/bank-accounts');
+  },
   getNextVoucherNumber() {
     return request<{ number: number; financialYearId: number }>('/api/accounting/vouchers/next-number');
   },
@@ -463,6 +474,7 @@ export const api = {
     paymentMethod: PurchasePaymentMethod;
     date: string;
     note?: string | null;
+    paymentAccountId?: number | null;
   }) {
     return request<SupplierPaymentResult>('/api/purchases/payments', {
       method: 'POST',
@@ -522,6 +534,7 @@ export const api = {
     paymentMethod: PurchasePaymentMethod;
     date: string;
     note?: string | null;
+    paymentAccountId?: number | null;
   }) {
     return request<CustomerPaymentResult>('/api/customers/payments', {
       method: 'POST',
@@ -587,6 +600,7 @@ export const api = {
     description: string;
     paidTo?: string | null;
     note?: string | null;
+    paymentAccountId?: number | null;
   }) {
     return request<ExpenseRecord & { confirmation: { message: string } }>('/api/finance/expenses', {
       method: 'POST',
@@ -616,6 +630,7 @@ export const api = {
     paymentMethod: PurchasePaymentMethod;
     description: string;
     note?: string | null;
+    paymentAccountId?: number | null;
   }) {
     return request<OtherIncomeRecord & { confirmation: { message: string } }>('/api/finance/other-income', {
       method: 'POST',
@@ -873,6 +888,7 @@ export type CreatePurchaseInput = {
   paidAmount: number;
   paymentMethod: PurchasePaymentMethod;
   notes?: string | null;
+  paymentAccountId?: number | null;
 };
 
 export type Purchase = {
@@ -1059,6 +1075,7 @@ export type CreateSaleInput = {
   discount?: number;
   date?: string;
   notes?: string | null;
+  paymentAccountId?: number | null;
 };
 
 export type ReturnCondition = 'GOOD' | 'DAMAGED' | 'OTHER';
@@ -1196,6 +1213,37 @@ export type OtherIncomeRecord = {
 };
 
 export type DateRangePreset = 'today' | 'week' | 'month' | 'year' | 'custom' | 'lifetime';
+
+export type BankAccountOption = {
+  id: number;
+  name: string;
+  code: string;
+  categoryId: number;
+  categoryName: string;
+  balance: number;
+};
+
+export type FinanceOverview = {
+  cashInHand: number;
+  cashAccounts: { id: number; name: string; code: string; balance: number }[];
+  bankAccounts: { id: number; name: string; code: string; balance: number }[];
+  bankTotal: number;
+  liquidTotal: number;
+  totalRevenue: number;
+  financialSummary: FinancialSummary;
+  customerOutstanding: number;
+  supplierOutstanding: number;
+  trialBalance: { totalDebit: number; totalCredit: number; isBalanced: boolean };
+  recentActivity: {
+    id: number;
+    number: number;
+    type: string;
+    amount: number;
+    date: string;
+    status: string;
+    accountLabel: string;
+  }[];
+};
 
 export type FinancialSummary = {
   range: { preset: DateRangePreset; label: string };

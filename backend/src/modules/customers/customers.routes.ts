@@ -28,6 +28,7 @@ const paymentSchema = z.object({
   customerId: z.number().int().positive(),
   amount: z.number().positive(),
   paymentMethod: z.nativeEnum(PurchasePaymentMethod),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
   date: z.string().min(1),
   note: z.string().max(500).nullable().optional(),
 });

@@ -21,6 +21,7 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
+import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
 
 const PAYMENT_METHODS: { value: PurchasePaymentMethod; label: string }[] = [
   { value: 'CASH', label: 'Cash' },
@@ -55,6 +56,7 @@ export function PurchaseEntryPage() {
   const [date, setDate] = useState(todayInput());
   const [invoiceNo, setInvoiceNo] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [notes, setNotes] = useState('');
   const [productSearch, setProductSearch] = useState('');
@@ -137,6 +139,7 @@ export function PurchaseEntryPage() {
         paymentMethod,
         paidAmount: paid,
         notes: notes.trim() || null,
+        paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
         items: lines.map((l) => ({
           productId: l.productId,
           variantId: l.variantId,
@@ -333,6 +336,11 @@ export function PurchaseEntryPage() {
               ))}
             </select>
           </div>
+          <PaymentBankAccountSelect
+            paymentMethod={paymentMethod}
+            value={paymentAccountId}
+            onChange={setPaymentAccountId}
+          />
           <div>
             <FieldLabel>Paid now</FieldLabel>
             <TextInput
@@ -567,6 +575,7 @@ export function SupplierPaymentPage() {
   );
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [date, setDate] = useState(todayInput());
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -595,6 +604,7 @@ export function SupplierPaymentPage() {
         paymentMethod,
         date,
         note: note.trim() || null,
+        paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
       });
       setMessage(result.confirmation.message);
       setAmount('');
@@ -653,6 +663,11 @@ export function SupplierPaymentPage() {
               ))}
             </select>
           </div>
+          <PaymentBankAccountSelect
+            paymentMethod={paymentMethod}
+            value={paymentAccountId}
+            onChange={setPaymentAccountId}
+          />
           <div>
             <FieldLabel>Date</FieldLabel>
             <TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />

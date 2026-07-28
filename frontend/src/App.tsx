@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AccountManagePage } from './pages/accounts/AccountManagePage';
+import { AccountsFinancePage } from './pages/accounts/AccountsFinancePage';
 import { CategoryManagePage } from './pages/accounts/CategoryManagePage';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -112,6 +113,8 @@ export default function App() {
               <Route path="/customers/:id/edit" element={<CustomerFormPage mode="edit" />} />
               <Route path="/customers/:id" element={<CustomerDetailPage />} />
 
+              <Route path="/accounts" element={<AccountsFinancePage />} />
+              <Route path="/accounts/chart" element={<AccountsFinancePage />} />
               <Route path="/accounts/categories/add" element={<CategoryManagePage mode="add" />} />
               <Route path="/accounts/categories/edit" element={<CategoryManagePage mode="edit" />} />
               <Route path="/accounts/categories/remove" element={<CategoryManagePage mode="remove" />} />
@@ -119,6 +122,7 @@ export default function App() {
               <Route path="/accounts/manage/edit" element={<AccountManagePage mode="edit" />} />
               <Route path="/accounts/manage/remove" element={<AccountManagePage mode="remove" />} />
 
+              {/* Voucher routes kept unlinked from nav for debug / direct URL access */}
               <Route path="/vouchers/payment" element={<VoucherFormPage kind="payment" />} />
               <Route path="/vouchers/journal" element={<VoucherFormPage kind="journal" />} />
               <Route path="/vouchers/receipt" element={<VoucherFormPage kind="receipt" />} />

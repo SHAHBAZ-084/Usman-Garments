@@ -30,6 +30,15 @@ const PAYMENT_ACCOUNT_NAMES: Record<PurchasePaymentMethod, string> = {
   BANK_TRANSFER: 'Bank Transfer',
 };
 
+/** Card and bank-transfer postings require an explicit Bank-category account. */
+export function paymentMethodNeedsBankAccount(method: PurchasePaymentMethod | string): boolean {
+  return method === PurchasePaymentMethod.CARD || method === PurchasePaymentMethod.BANK_TRANSFER;
+}
+
+function isBankCategoryName(name: string) {
+  return name.trim().toLowerCase() === 'bank';
+}
+
 export async function ensurePaymentMethodAccount(
   tx: Prisma.TransactionClient,
   method: PurchasePaymentMethod,
@@ -44,6 +53,60 @@ export async function ensurePaymentMethodAccount(
     PAYMENT_ACCOUNT_NAMES[method],
     AccountType.ASSET,
   );
+}
+
+/**
+ * Resolve the cash/bank GL account for a payment.
+ * Cash always uses Cash in Hand. Card / Bank Transfer require paymentAccountId
+ * pointing at an active Bank-category account. Other methods keep legacy named accounts
+ * unless paymentAccountId is provided.
+ */
+export async function resolvePaymentAccount(
+  tx: Prisma.TransactionClient,
+  method: PurchasePaymentMethod,
+  paymentAccountId?: number | null,
+) {
+  if (method === PurchasePaymentMethod.CASH) {
+    return ensurePaymentMethodAccount(tx, method);
+  }
+
+  if (paymentAccountId != null) {
+    const account = await tx.account.findFirst({
+      where: { id: paymentAccountId, isActive: true },
+      include: { category: true },
+    });
+    if (!account?.category) throw new AppError(400, 'Payment account not found');
+    if (!isBankCategoryName(account.category.name)) {
+      throw new AppError(400, 'Selected account must be a Bank account');
+    }
+    return account;
+  }
+
+  if (paymentMethodNeedsBankAccount(method)) {
+    throw new AppError(400, 'Select a bank account for card or bank transfer');
+  }
+
+  return ensurePaymentMethodAccount(tx, method);
+}
+
+export async function listBankAccounts() {
+  await ensureRetailSystemAccounts(prisma);
+  const accounts = await prisma.account.findMany({
+    where: {
+      isActive: true,
+      category: { isActive: true, name: { equals: 'Bank' } },
+    },
+    include: { category: true, ledger: true },
+    orderBy: { name: 'asc' },
+  });
+  return accounts.map((a) => ({
+    id: a.id,
+    name: a.name,
+    code: a.code,
+    categoryId: a.categoryId,
+    categoryName: a.category.name,
+    balance: a.ledger ? Number(a.ledger.balance) : 0,
+  }));
 }
 
 export type PurchaseItemInput = {
@@ -61,6 +124,7 @@ export type CreatePurchaseInput = {
   items: PurchaseItemInput[];
   paidAmount: number;
   paymentMethod: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
   notes?: string | null;
   createdById: number;
 };
@@ -184,7 +248,9 @@ export async function createPurchase(input: CreatePurchaseInput) {
 
     const inventory = await ensureInventoryAccount(tx);
     const paymentAccount =
-      paidAmount > 0 ? await ensurePaymentMethodAccount(tx, input.paymentMethod) : null;
+      paidAmount > 0
+        ? await resolvePaymentAccount(tx, input.paymentMethod, input.paymentAccountId)
+        : null;
 
     const legs: { accountId: number; type: LedgerEntryType; amount: number }[] = [
       { accountId: inventory.id, type: LedgerEntryType.DEBIT, amount: totalAmount },
@@ -319,6 +385,7 @@ export type CreateSupplierPaymentInput = {
   supplierId: number;
   amount: number;
   paymentMethod: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
   date: string;
   note?: string | null;
   createdById: number;
@@ -352,7 +419,7 @@ export async function createSupplierPayment(input: CreateSupplierPaymentInput) {
       },
     });
 
-    const paymentAccount = await ensurePaymentMethodAccount(tx, input.paymentMethod);
+    const paymentAccount = await resolvePaymentAccount(tx, input.paymentMethod, input.paymentAccountId);
 
     await createMultiLegVoucherInTx(tx, {
       type: VoucherType.SUPPLIER_PAYMENT,

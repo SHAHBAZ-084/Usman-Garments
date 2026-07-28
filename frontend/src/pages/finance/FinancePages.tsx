@@ -20,6 +20,7 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
+import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
 
 const SELECT_CLASS = 'w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm';
 
@@ -85,6 +86,7 @@ export function ExpenseEntryPage() {
   const [date, setDate] = useState(todayInput());
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [description, setDescription] = useState('');
   const [paidTo, setPaidTo] = useState('');
   const [note, setNote] = useState('');
@@ -119,6 +121,7 @@ export function ExpenseEntryPage() {
         description,
         paidTo: paidTo.trim() || null,
         note: note.trim() || null,
+        paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
       });
       setMessage(result.confirmation.message);
       setAmount('');
@@ -199,6 +202,11 @@ export function ExpenseEntryPage() {
               ))}
             </select>
           </div>
+          <PaymentBankAccountSelect
+            paymentMethod={paymentMethod}
+            value={paymentAccountId}
+            onChange={setPaymentAccountId}
+          />
           <div>
             <FieldLabel>Description</FieldLabel>
             <TextInput value={description} onChange={(e) => setDescription(e.target.value)} required />
@@ -305,6 +313,7 @@ export function OtherIncomeEntryPage() {
   const [date, setDate] = useState(todayInput());
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [description, setDescription] = useState('');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -336,6 +345,7 @@ export function OtherIncomeEntryPage() {
         paymentMethod,
         description,
         note: note.trim() || null,
+        paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
       });
       setMessage(result.confirmation.message);
       setAmount('');
@@ -400,6 +410,11 @@ export function OtherIncomeEntryPage() {
               ))}
             </select>
           </div>
+          <PaymentBankAccountSelect
+            paymentMethod={paymentMethod}
+            value={paymentAccountId}
+            onChange={setPaymentAccountId}
+          />
           <div>
             <FieldLabel>Description</FieldLabel>
             <TextInput value={description} onChange={(e) => setDescription(e.target.value)} required />

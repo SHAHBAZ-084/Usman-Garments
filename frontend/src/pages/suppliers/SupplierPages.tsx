@@ -97,7 +97,7 @@ export function SuppliersListPage() {
                   </Link>
                 </td>
                 <td className="px-2 py-2">{s.phone || '—'}</td>
-                <td className="px-2 py-2 text-right">Rs {formatMoney(s.payable)}</td>
+                <td className="px-2 py-2 text-right text-danger">Rs {formatMoney(s.payable)}</td>
                 <td className="px-2 py-2">{s.isActive ? 'Active' : 'Inactive'}</td>
               </tr>
             ))}
@@ -317,7 +317,7 @@ export function SupplierDetailPage() {
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Panel>
           <p className="text-xs text-textSecondary">Amount you owe</p>
-          <p className="mt-1 text-2xl font-semibold text-textPrimary">Rs {formatMoney(supplier.payable)}</p>
+          <p className="mt-1 text-2xl font-semibold text-danger">Rs {formatMoney(supplier.payable)}</p>
         </Panel>
         <Panel>
           <p className="text-xs text-textSecondary">Opening balance</p>

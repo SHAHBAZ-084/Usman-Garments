@@ -19,6 +19,7 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
+import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
 
 const PAYMENT_METHODS: { value: PurchasePaymentMethod; label: string }[] = [
   { value: 'CASH', label: 'Cash' },
@@ -116,7 +117,7 @@ export function CustomersListPage() {
                   </Link>
                 </td>
                 <td className="px-2 py-2">{c.phone || '—'}</td>
-                <td className="px-2 py-2 text-right">Rs {formatMoney(c.receivable)}</td>
+                <td className="px-2 py-2 text-right text-success">Rs {formatMoney(c.receivable)}</td>
                 <td className="px-2 py-2">{c.isActive ? 'Active' : 'Inactive'}</td>
               </tr>
             ))}
@@ -332,7 +333,7 @@ export function CustomerDetailPage() {
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
         <Panel>
           <p className="text-xs text-textSecondary">Customer owes</p>
-          <p className="mt-1 text-2xl font-semibold text-textPrimary">Rs {formatMoney(customer.receivable)}</p>
+          <p className="mt-1 text-2xl font-semibold text-success">Rs {formatMoney(customer.receivable)}</p>
         </Panel>
         <Panel>
           <p className="text-xs text-textSecondary">Address</p>
@@ -451,6 +452,7 @@ export function CustomerPaymentPage() {
   );
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [date, setDate] = useState(todayInput());
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -479,6 +481,7 @@ export function CustomerPaymentPage() {
         paymentMethod,
         date,
         note: note.trim() || null,
+        paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
       });
       setMessage(result.confirmation.message);
       setAmount('');
@@ -544,6 +547,11 @@ export function CustomerPaymentPage() {
               ))}
             </select>
           </div>
+          <PaymentBankAccountSelect
+            paymentMethod={paymentMethod}
+            value={paymentAccountId}
+            onChange={setPaymentAccountId}
+          />
           <div>
             <FieldLabel>Date</FieldLabel>
             <TextInput type="date" value={date} onChange={(e) => setDate(e.target.value)} required />

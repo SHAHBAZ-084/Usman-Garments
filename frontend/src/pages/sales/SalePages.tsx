@@ -27,6 +27,7 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
+import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
 import { BarcodeScanField } from '../products/BarcodeScanPage';
 
 type CartLine = {
@@ -108,6 +109,7 @@ export function NewSalePage() {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [overallDiscount, setOverallDiscount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>('CASH');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [customerId, setCustomerId] = useState<string>('');
   const [newCustomerName, setNewCustomerName] = useState('');
@@ -230,6 +232,7 @@ export function NewSalePage() {
         paidAmount: Math.min(received, total),
         customerId: resolvedCustomerId,
         discount: discount > 0 ? discount : undefined,
+        paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
       };
       const invoice = await api.createSale(payload);
       setCompletedInvoice(invoice);
@@ -463,6 +466,12 @@ export function NewSalePage() {
                 <option value="BANK_TRANSFER">Bank transfer</option>
               </select>
             </div>
+
+            <PaymentBankAccountSelect
+              paymentMethod={paymentMethod}
+              value={paymentAccountId}
+              onChange={setPaymentAccountId}
+            />
 
             <div>
               <FieldLabel>Amount received</FieldLabel>

@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { formatLedgerBalance } from '../../lib/format';
 import { api, type Account, type AccountCategory } from '../../lib/api';
 import { FieldLabel, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput } from '../../components/ui/PageShell';
@@ -20,6 +21,8 @@ function defaultOpeningSideForCategory(categoryId: number, accounts: Account[]):
 }
 
 export function AccountManagePage({ mode }: { mode: Mode }) {
+  const [searchParams] = useSearchParams();
+  const preferBank = searchParams.get('bank') === '1';
   const [categories, setCategories] = useState<AccountCategory[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categoryId, setCategoryId] = useState<number | ''>('');
@@ -31,9 +34,20 @@ export function AccountManagePage({ mode }: { mode: Mode }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    api.listCategories().then(setCategories).catch(() => setCategories([]));
-    api.listAccounts().then(setAccounts).catch(() => setAccounts([]));
-  }, []);
+    Promise.all([api.listCategories(), api.listAccounts()])
+      .then(([cats, accts]) => {
+        setCategories(cats);
+        setAccounts(accts);
+        if (mode === 'add' && preferBank) {
+          const bank = cats.find((c) => c.name.trim().toLowerCase() === 'bank' && c.isActive);
+          if (bank) setCategoryId(bank.id);
+        }
+      })
+      .catch(() => {
+        setCategories([]);
+        setAccounts([]);
+      });
+  }, [mode, preferBank]);
 
   useEffect(() => {
     if (mode === 'edit' && selectedId) {
