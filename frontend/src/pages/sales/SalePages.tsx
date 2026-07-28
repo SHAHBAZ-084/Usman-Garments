@@ -1,6 +1,7 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { printInvoice } from '../../components/sales/InvoicePrint';
+import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import {
   api,
   type BarcodeLookupResult,
@@ -12,6 +13,7 @@ import {
   type SalePaymentMethod,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { shortcutLabel } from '../../lib/shortcuts';
 import { Printer, Trash2 } from 'lucide-react';
 import {
   DangerButton,
@@ -115,6 +117,7 @@ export function NewSalePage() {
   const [completedInvoice, setCompletedInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const checkoutFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     Promise.all([api.getSettings(), api.listCustomers()])
@@ -251,6 +254,16 @@ export function NewSalePage() {
     setCustomerId('');
   }
 
+  useFormShortcuts({
+    onSave: () => checkoutFormRef.current?.requestSubmit(),
+    onPrint: completedInvoice && settings ? () => printInvoice(completedInvoice, settings) : undefined,
+    onClear: clearBill,
+    onCancel: completedInvoice ? () => setCompletedInvoice(null) : undefined,
+    saveEnabled: !saving && cart.length > 0 && stockErrors.length === 0,
+    printEnabled: Boolean(completedInvoice && settings),
+    cancelEnabled: Boolean(completedInvoice),
+  });
+
   return (
     <PageShell
       title="New Sale"
@@ -261,7 +274,7 @@ export function NewSalePage() {
             <SecondaryButton type="button">Recent invoices</SecondaryButton>
           </Link>
           <SecondaryButton type="button" onClick={clearBill}>
-            Clear bill
+            {shortcutLabel('Clear bill', 'F5')}
           </SecondaryButton>
         </div>
       }
@@ -414,7 +427,7 @@ export function NewSalePage() {
         </div>
 
         <Panel>
-          <form className="space-y-4" onSubmit={completeSale}>
+          <form ref={checkoutFormRef} className="space-y-4" onSubmit={completeSale}>
             <div className="space-y-1 text-sm">
               <div className="flex justify-between">
                 <span>Subtotal</span>
@@ -507,7 +520,7 @@ export function NewSalePage() {
             {error ? <Feedback variant="error">{error}</Feedback> : null}
 
             <PrimaryButton type="submit" disabled={saving || cart.length === 0 || stockErrors.length > 0}>
-              {saving ? 'Processing…' : 'Complete Sale'}
+              {saving ? 'Processing…' : shortcutLabel('Complete Sale', 'F9')}
             </PrimaryButton>
           </form>
         </Panel>
@@ -523,7 +536,7 @@ export function NewSalePage() {
             <div className="mt-4 flex flex-wrap gap-2">
               <PrimaryButton type="button" onClick={() => printInvoice(completedInvoice, settings)}>
                 <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
-                Print Invoice
+                {shortcutLabel('Print Invoice', 'F10')}
               </PrimaryButton>
               <SecondaryButton
                 type="button"
@@ -681,7 +694,7 @@ export function InvoiceDetailPage() {
           {settings ? (
             <PrimaryButton type="button" onClick={() => printInvoice(invoice, settings)}>
               <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
-              Print Invoice
+              {shortcutLabel('Print Invoice', 'F10')}
             </PrimaryButton>
           ) : null}
           {invoice.status === 'ACTIVE' ? (

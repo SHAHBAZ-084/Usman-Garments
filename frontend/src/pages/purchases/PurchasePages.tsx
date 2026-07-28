@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import {
   api,
   type Product,
@@ -8,6 +9,7 @@ import {
   type Supplier,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { shortcutLabel } from '../../lib/shortcuts';
 import { Trash2 } from 'lucide-react';
 import {
   Feedback,
@@ -60,6 +62,7 @@ export function PurchaseEntryPage() {
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmation, setConfirmation] = useState<Purchase | null>(null);
+  const purchaseFormRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     api.listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
@@ -149,6 +152,20 @@ export function PurchaseEntryPage() {
     }
   }
 
+  function clearPurchaseForm() {
+    setLines([]);
+    setPaidAmount('');
+    setNotes('');
+    setInvoiceNo('');
+    setError('');
+  }
+
+  useFormShortcuts({
+    onSave: () => purchaseFormRef.current?.requestSubmit(),
+    onClear: clearPurchaseForm,
+    saveEnabled: !saving && Boolean(supplierId) && lines.length > 0,
+  });
+
   if (confirmation) {
     return (
       <PageShell title="Purchase saved" subtitle="Stock and balances updated">
@@ -185,7 +202,7 @@ export function PurchaseEntryPage() {
         </Link>
       }
     >
-      <form className="grid gap-6 lg:grid-cols-2" onSubmit={onSubmit}>
+      <form ref={purchaseFormRef} className="grid gap-6 lg:grid-cols-2" onSubmit={onSubmit}>
         <Panel className="space-y-4">
           <div>
             <FieldLabel>Supplier</FieldLabel>
@@ -348,7 +365,7 @@ export function PurchaseEntryPage() {
           </div>
           {error ? <Feedback variant="error">{error}</Feedback> : null}
           <PrimaryButton type="submit" disabled={saving}>
-            {saving ? 'Saving…' : 'Save Purchase'}
+            {saving ? 'Saving…' : shortcutLabel('Save Purchase', 'F9')}
           </PrimaryButton>
         </Panel>
       </form>

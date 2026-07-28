@@ -15,10 +15,13 @@ import { createProduct, updateProduct } from '../products/products.service';
 import { createSaleReturn } from '../sales/returns.service';
 import { createSale } from '../sales/sales.service';
 import {
+  computeChangePercent,
+  getDashboardPayload,
   getFinancialSummary,
   getInvoiceWiseProfit,
   getProductWiseProfit,
   resolveDateRange,
+  resolvePreviousDateRange,
 } from './financial-summary.service';
 
 const PREFIX = 'TEST-P11-';
@@ -288,5 +291,46 @@ describe('Financial summary service (Phase 11)', () => {
     const summary = await getFinancialSummary('custom', testDate, testDate);
     expect(summary.grossSales).toBe(0);
     expect(summary.invoiceCount).toBe(0);
+  });
+
+  it('computeChangePercent handles zero and growth', () => {
+    expect(computeChangePercent(0, 0)).toBe(0);
+    expect(computeChangePercent(150, 100)).toBe(50);
+    expect(computeChangePercent(80, 100)).toBe(-20);
+    expect(computeChangePercent(100, 0)).toBeNull();
+  });
+
+  it('resolvePreviousDateRange returns equal-length prior window', () => {
+    const range = resolveDateRange('week');
+    const prev = resolvePreviousDateRange(range);
+    expect(prev).not.toBeNull();
+    expect(prev!.to!.getTime()).toBeLessThan(range.from!.getTime());
+    const currentMs = range.to!.getTime() - range.from!.getTime();
+    const prevMs = prev!.to!.getTime() - prev!.from!.getTime();
+    expect(Math.abs(prevMs - currentMs)).toBeLessThan(24 * 60 * 60 * 1000);
+  });
+
+  it('dashboard payload includes comparisons and payment breakdown', async () => {
+    const testDate = await isolatedTestDate();
+    const product = await createProduct({
+      name: `${PREFIX}Dash ${runId}`,
+      salePrice: 200,
+      purchasePrice: 80,
+      openingStock: 10,
+    });
+
+    await createSale({
+      items: [{ productId: product.id, quantity: 1, rate: 200 }],
+      paymentMethod: SalePaymentMethod.CASH,
+      paidAmount: 200,
+      date: testDate,
+      createdById: userId,
+    });
+
+    const payload = await getDashboardPayload('custom', testDate, testDate);
+    expect(payload.netSales).toBe(200);
+    expect(payload.comparisons).not.toBeNull();
+    expect(payload.comparisons!.netSales.current).toBe(200);
+    expect(payload.paymentMethodBreakdown.some((r) => r.paymentMethod === 'CASH')).toBe(true);
   });
 });

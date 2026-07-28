@@ -64,16 +64,17 @@ export function buildReturnReceiptHtml(
 
   return `<!DOCTYPE html><html><head><title>${title}</title>
 <style>
-  @page { size: 80mm auto; margin: 3mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0; }
-  h1 { font-size: 14px; text-align: center; margin: 0 0 4px; }
-  .meta { text-align: center; font-size: 10px; color: #444; margin: 2px 0; }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10px; }
-  th, td { padding: 3px 0; border-bottom: 1px dashed #ccc; }
-  .num { text-align: right; }
-  .row { display: flex; justify-content: space-between; margin: 3px 0; }
+  * { box-sizing: border-box; }
+  @page { size: 80mm auto; margin: 2mm; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0 auto; width: 76mm; max-width: 76mm; overflow-x: hidden; }
+  h1 { font-size: 14px; text-align: center; margin: 0 0 4px; word-wrap: break-word; }
+  .meta { text-align: center; font-size: 10px; color: #444; margin: 2px 0; word-wrap: break-word; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10px; table-layout: fixed; }
+  th, td { padding: 3px 1px; border-bottom: 1px dashed #ccc; word-wrap: break-word; overflow-wrap: anywhere; }
+  .num { text-align: right; white-space: nowrap; }
+  .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
   .total { font-weight: 700; font-size: 12px; }
-  .footer { text-align: center; font-size: 9px; color: #555; margin-top: 10px; }
+  .footer { text-align: center; font-size: 9px; color: #555; margin-top: 10px; word-wrap: break-word; }
 </style></head><body>
   <h1>${escapeHtml(settings.businessName)}</h1>
   <p class="meta">${title}</p>

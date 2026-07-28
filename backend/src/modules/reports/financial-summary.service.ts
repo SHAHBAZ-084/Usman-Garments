@@ -20,7 +20,13 @@
 import { InvoiceStatus, Prisma, PurchaseStatus } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { multiplyMoney, roundMoney, sumMoney, toNumber } from '../../utils/money';
-import { dateFilter, resolveDateRange, type DateRangePreset, type ResolvedDateRange } from './date-range';
+import {
+  dateFilter,
+  resolveDateRange,
+  resolvePreviousDateRange,
+  type DateRangePreset,
+  type ResolvedDateRange,
+} from './date-range';
 
 export type FinancialSummary = {
   range: ResolvedDateRange;
@@ -50,7 +56,31 @@ export type PurchasePeriodTotals = {
   lifetime: number;
 };
 
+export type MetricComparison = {
+  current: number;
+  previous: number;
+  changePercent: number | null;
+};
+
+export type DashboardComparisons = {
+  netSales: MetricComparison;
+  netProfit: MetricComparison;
+  grossSales: MetricComparison;
+  cashReceived: MetricComparison;
+  expenses: MetricComparison;
+  invoiceCount: MetricComparison;
+};
+
+export type PaymentMethodBreakdownRow = {
+  paymentMethod: string;
+  invoiceCount: number;
+  totalAmount: number;
+  paidAmount: number;
+};
+
 export type DashboardPayload = FinancialSummary & {
+  comparisons: DashboardComparisons | null;
+  paymentMethodBreakdown: PaymentMethodBreakdownRow[];
   purchases: PurchasePeriodTotals;
   lowStockCount: number;
   outOfStockCount: number;
@@ -270,6 +300,57 @@ async function countInvoices(from: Date | null, to: Date | null): Promise<number
       ...(dateCond ? { date: dateCond } : {}),
     },
   });
+}
+
+export function computeChangePercent(current: number, previous: number): number | null {
+  if (previous === 0) {
+    if (current === 0) return 0;
+    return null;
+  }
+  return roundMoney(((current - previous) / Math.abs(previous)) * 100);
+}
+
+function buildComparison(current: number, previous: number): MetricComparison {
+  return {
+    current,
+    previous,
+    changePercent: computeChangePercent(current, previous),
+  };
+}
+
+function buildDashboardComparisons(
+  current: FinancialSummary,
+  previous: FinancialSummary | null,
+): DashboardComparisons | null {
+  if (!previous) return null;
+  return {
+    netSales: buildComparison(current.netSales, previous.netSales),
+    netProfit: buildComparison(current.netProfit, previous.netProfit),
+    grossSales: buildComparison(current.grossSales, previous.grossSales),
+    cashReceived: buildComparison(current.cashReceived, previous.cashReceived),
+    expenses: buildComparison(current.expenses, previous.expenses),
+    invoiceCount: buildComparison(current.invoiceCount, previous.invoiceCount),
+  };
+}
+
+async function getPaymentMethodBreakdown(from: Date | null, to: Date | null): Promise<PaymentMethodBreakdownRow[]> {
+  const dateCond = dateFilter(from, to);
+  const grouped = await prisma.invoice.groupBy({
+    by: ['paymentMethod'],
+    where: {
+      status: InvoiceStatus.ACTIVE,
+      ...(dateCond ? { date: dateCond } : {}),
+    },
+    _sum: { totalAmount: true, paidAmount: true },
+    _count: { id: true },
+  });
+
+  return grouped.map((g) => ({
+    paymentMethod: g.paymentMethod,
+    invoiceCount: g._count.id,
+    totalAmount: toNumber(g._sum.totalAmount ?? 0),
+    paidAmount: toNumber(g._sum.paidAmount ?? 0),
+  }));
 }
 
 /** Core profit/sales summary for any date range. */
@@ -529,10 +610,14 @@ export async function getDashboardPayload(
   toDate?: string,
 ): Promise<DashboardPayload> {
   const range = resolveDateRange(preset, fromDate, toDate);
-  const summary = await getFinancialSummary(preset, fromDate, toDate);
+  const prevRange = resolvePreviousDateRange(range);
+  const prevFrom = prevRange?.from?.toISOString().slice(0, 10);
+  const prevTo = prevRange?.to?.toISOString().slice(0, 10);
 
-  const [purchases, stockCounts, recentSales, recentExpenses, lowStockProducts, topSellingProducts, salesChart] =
+  const [summary, prevSummary, purchases, stockCounts, recentSales, recentExpenses, lowStockProducts, topSellingProducts, salesChart, paymentMethodBreakdown] =
     await Promise.all([
+      getFinancialSummary(preset, fromDate, toDate),
+      prevRange ? getFinancialSummary('custom', prevFrom, prevTo) : Promise.resolve(null),
       getPurchasePeriodTotals(),
       getStockCounts(),
       getRecentSales(),
@@ -540,10 +625,15 @@ export async function getDashboardPayload(
       getLowStockProducts(),
       getTopSellingProducts(range.from, range.to),
       getSalesChart(range.from, range.to),
+      getPaymentMethodBreakdown(range.from, range.to),
     ]);
+
+  const comparisons = buildDashboardComparisons(summary, prevSummary);
 
   return {
     ...summary,
+    comparisons,
+    paymentMethodBreakdown,
     purchases,
     ...stockCounts,
     recentSales,
@@ -659,4 +749,4 @@ export async function getInvoiceWiseProfit(from: Date | null, to: Date | null) {
   });
 }
 
-export { resolveDateRange, type DateRangePreset, type ResolvedDateRange };
+export { resolveDateRange, resolvePreviousDateRange, type DateRangePreset, type ResolvedDateRange };

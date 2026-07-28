@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import {
   api,
   type ExpenseCategory,
@@ -9,6 +10,7 @@ import {
   type PurchasePaymentMethod,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { shortcutLabel } from '../../lib/shortcuts';
 import {
   Feedback,
   FieldLabel,
@@ -89,6 +91,7 @@ export function ExpenseEntryPage() {
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const expenseFormRef = useRef<HTMLFormElement>(null);
 
   async function loadCategories() {
     setCategories(await api.listExpenseCategories());
@@ -129,6 +132,21 @@ export function ExpenseEntryPage() {
     }
   }
 
+  function clearExpenseForm() {
+    setAmount('');
+    setDescription('');
+    setPaidTo('');
+    setNote('');
+    setError('');
+    setMessage('');
+  }
+
+  useFormShortcuts({
+    onSave: () => expenseFormRef.current?.requestSubmit(),
+    onClear: clearExpenseForm,
+    saveEnabled: !saving && Boolean(categoryId) && Boolean(description.trim()) && Boolean(amount),
+  });
+
   return (
     <PageShell
       title="Record Expense"
@@ -140,7 +158,7 @@ export function ExpenseEntryPage() {
       }
     >
       <Panel className="max-w-lg">
-        <form className="space-y-4" onSubmit={onSubmit}>
+        <form ref={expenseFormRef} className="space-y-4" onSubmit={onSubmit}>
           <div>
             <FieldLabel>Category</FieldLabel>
             <select
@@ -195,7 +213,7 @@ export function ExpenseEntryPage() {
           </div>
           {message ? <Feedback variant="success">{message}</Feedback> : null}
           {error ? <Feedback variant="error">{error}</Feedback> : null}
-          <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save expense'}</PrimaryButton>
+          <PrimaryButton type="submit" disabled={saving}>{saving ? 'Saving…' : shortcutLabel('Save expense', 'F9')}</PrimaryButton>
         </form>
       </Panel>
     </PageShell>

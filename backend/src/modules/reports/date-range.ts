@@ -66,6 +66,22 @@ export function resolveDateRange(
   }
 }
 
+/** Same-length period immediately before the given range (null for lifetime / open-ended). */
+export function resolvePreviousDateRange(range: ResolvedDateRange): ResolvedDateRange | null {
+  if (range.preset === 'lifetime' || !range.from || !range.to) return null;
+
+  const durationMs = range.to.getTime() - range.from.getTime();
+  const prevTo = endOfDay(new Date(range.from.getTime() - 1));
+  const prevFrom = startOfDay(new Date(prevTo.getTime() - durationMs));
+
+  return {
+    preset: range.preset,
+    from: prevFrom,
+    to: prevTo,
+    label: 'Previous period',
+  };
+}
+
 export function dateFilter(from: Date | null, to: Date | null) {
   if (!from && !to) return undefined;
   if (from && to) return { gte: from, lte: to };

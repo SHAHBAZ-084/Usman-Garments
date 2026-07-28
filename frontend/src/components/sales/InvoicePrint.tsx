@@ -91,19 +91,20 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
 
   return `<!DOCTYPE html><html><head><title>Invoice</title>
 <style>
+  * { box-sizing: border-box; }
   @page { size: ${widthMm}mm auto; margin: 2mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0; width: ${widthMm - 4}mm; }
-  h1 { font-size: 14px; margin: 0 0 2px; text-align: center; }
-  .tagline, .address, .phone, .customer, .date, .inv-no { text-align: center; margin: 2px 0; }
-  .logo { display: block; max-height: 36px; margin: 0 auto 4px; }
-  table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 10px; }
-  th, td { padding: 2px 0; text-align: left; vertical-align: top; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0 auto; width: ${widthMm - 4}mm; max-width: ${widthMm - 4}mm; overflow-x: hidden; }
+  h1 { font-size: 14px; margin: 0 0 2px; text-align: center; word-wrap: break-word; }
+  .tagline, .address, .phone, .customer, .date, .inv-no { text-align: center; margin: 2px 0; word-wrap: break-word; }
+  .logo { display: block; max-height: 36px; max-width: 100%; margin: 0 auto 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 10px; table-layout: fixed; }
+  th, td { padding: 2px 1px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
   th { border-bottom: 1px dashed #999; }
-  .num { text-align: right; }
-  .row { display: flex; justify-content: space-between; margin: 2px 0; }
+  .num { text-align: right; white-space: nowrap; }
+  .row { display: flex; justify-content: space-between; margin: 2px 0; gap: 4px; }
   .total { font-weight: 700; font-size: 12px; }
   .due { font-weight: 600; }
-  .footer, .policy { font-size: 9px; color: #444; margin-top: 6px; text-align: center; }
+  .footer, .policy { font-size: 9px; color: #444; margin-top: 6px; text-align: center; word-wrap: break-word; }
   hr { border: none; border-top: 1px dashed #999; margin: 6px 0; }
 </style></head><body>${body}
 <script>window.onload=function(){window.print();};<\/script></body></html>`;

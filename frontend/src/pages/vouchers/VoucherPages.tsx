@@ -1,8 +1,9 @@
 import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Pencil, Trash2 } from 'lucide-react';
 import { formatDate, formatLedgerAmount, formatLedgerBalance, formatVoucherNumber, formatVoucherTypeLabel, voucherTypeColorClass } from '../../lib/format';
 import { api, Account, AccountCategory, Voucher, VoucherAccount, VoucherUser } from '../../lib/api';
-import { DangerButton, FieldLabel, FinancialButton, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput, Tile } from '../../components/ui/PageShell';
+import { FieldLabel, FinancialButton, IconButton, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput, Tile } from '../../components/ui/PageShell';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
@@ -540,14 +541,20 @@ export function VoucherDetailCard({
         {!isCancelled && (
           <div className="flex gap-2">
             {!isMultiLeg && !editingAmount && (
-              <SecondaryButton onClick={() => setEditingAmount(true)}>Update Amount</SecondaryButton>
+              <IconButton icon={Pencil} label="Update amount" variant="accent" size="md" onClick={() => setEditingAmount(true)}>
+                Update Amount
+              </IconButton>
             )}
-            <DangerButton
+            <IconButton
+              icon={Trash2}
+              label="Cancel voucher"
+              variant="danger"
+              size="md"
               disabled={cancelling || editingAmount}
               onClick={onCancel}
             >
               {cancelling ? 'Cancelling…' : 'Cancel'}
-            </DangerButton>
+            </IconButton>
           </div>
         )}
       </div>

@@ -1195,7 +1195,31 @@ export type FinancialSummary = {
   invoiceCount: number;
 };
 
+export type MetricComparison = {
+  current: number;
+  previous: number;
+  changePercent: number | null;
+};
+
+export type DashboardComparisons = {
+  netSales: MetricComparison;
+  netProfit: MetricComparison;
+  grossSales: MetricComparison;
+  cashReceived: MetricComparison;
+  expenses: MetricComparison;
+  invoiceCount: MetricComparison;
+};
+
+export type PaymentMethodBreakdownRow = {
+  paymentMethod: string;
+  invoiceCount: number;
+  totalAmount: number;
+  paidAmount: number;
+};
+
 export type DashboardPayload = FinancialSummary & {
+  comparisons: DashboardComparisons | null;
+  paymentMethodBreakdown: PaymentMethodBreakdownRow[];
   purchases: { today: number; month: number; year: number; lifetime: number };
   lowStockCount: number;
   outOfStockCount: number;

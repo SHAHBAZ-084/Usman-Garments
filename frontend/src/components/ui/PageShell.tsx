@@ -59,12 +59,39 @@ export function Tile({ children, className = '' }: { children: ReactNode; classN
   );
 }
 
+type MetricComparison = {
+  current: number;
+  previous: number;
+  changePercent: number | null;
+};
+
+export function GrowthIndicator({ comparison }: { comparison?: MetricComparison | null }) {
+  if (!comparison) return null;
+  const { changePercent, current, previous } = comparison;
+  if (changePercent === null) {
+    if (current > 0 && previous === 0) {
+      return <span className="text-xs font-medium text-success">↑ New</span>;
+    }
+    return null;
+  }
+  if (changePercent === 0) {
+    return <span className="text-xs font-medium text-textMuted">— 0%</span>;
+  }
+  const up = changePercent > 0;
+  return (
+    <span className={`text-xs font-medium ${up ? 'text-success' : 'text-danger'}`}>
+      {up ? '↑' : '↓'} {Math.abs(changePercent).toFixed(1)}%
+    </span>
+  );
+}
+
 type ClickableMetricTileProps = {
   label: string;
   value: string;
   sub?: string;
   to: string;
   accent?: 'default' | 'success' | 'warning' | 'danger' | 'info';
+  comparison?: MetricComparison | null;
 };
 
 const KPI_ACCENT: Record<NonNullable<ClickableMetricTileProps['accent']>, string> = {
@@ -76,10 +103,13 @@ const KPI_ACCENT: Record<NonNullable<ClickableMetricTileProps['accent']>, string
 };
 
 /** Dashboard KPI card — navigates to a related report on click. */
-export function ClickableMetricTile({ label, value, sub, to, accent = 'default' }: ClickableMetricTileProps) {
+export function ClickableMetricTile({ label, value, sub, to, accent = 'default', comparison }: ClickableMetricTileProps) {
   return (
     <Link to={to} className={`kpi-card block border-l-4 ${KPI_ACCENT[accent]}`}>
-      <p className="text-xs font-medium text-textSecondary">{label}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-medium text-textSecondary">{label}</p>
+        <GrowthIndicator comparison={comparison} />
+      </div>
       <p className="mt-1 text-lg font-semibold text-textPrimary">{value}</p>
       {sub ? <p className="mt-0.5 text-[10px] text-textMuted">{sub}</p> : null}
       <p className="mt-1 text-[10px] text-accent">View details →</p>

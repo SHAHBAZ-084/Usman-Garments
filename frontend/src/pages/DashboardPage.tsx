@@ -1,15 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from 'recharts';
 import {
+  ChevronDown,
+  ChevronUp,
   HandCoins,
   Package,
   Plus,
@@ -50,9 +55,38 @@ const QUICK_ACTIONS = [
   { label: 'Pay Supplier', to: '/purchases/pay', icon: Receipt },
 ] as const;
 
+const PAYMENT_COLORS: Record<string, string> = {
+  CASH: '#1E5C4A',
+  CARD: '#1A6B7A',
+  EASYPAISA: '#C99618',
+  JAZZCASH: '#9A5B00',
+  BANK_TRANSFER: '#5A5A5A',
+  UDHAAR: '#A32D2D',
+};
+
+function paymentLabel(method: string): string {
+  const labels: Record<string, string> = {
+    CASH: 'Cash',
+    CARD: 'Card',
+    EASYPAISA: 'Easypaisa',
+    JAZZCASH: 'JazzCash',
+    BANK_TRANSFER: 'Bank Transfer',
+    UDHAAR: 'Udhaar',
+  };
+  return labels[method] ?? method;
+}
+
 function todayInput() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function salesLabel(preset: DateRangePreset): string {
+  if (preset === 'today') return "Today's Sales";
+  if (preset === 'week') return 'Week Sales';
+  if (preset === 'month') return 'Month Sales';
+  if (preset === 'year') return 'Year Sales';
+  return 'Net Sales';
 }
 
 export function DashboardPage() {
@@ -63,6 +97,7 @@ export function DashboardPage() {
   const [backupStatus, setBackupStatus] = useState<{ lastBackupAt: string | null; ok: boolean } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -95,6 +130,18 @@ export function DashboardPage() {
   }, [load]);
 
   const dash = data;
+  const comparisons = dash?.comparisons ?? null;
+
+  const paymentChartData = useMemo(() => {
+    if (!dash?.paymentMethodBreakdown.length) return [];
+    return dash.paymentMethodBreakdown
+      .filter((row) => row.totalAmount > 0)
+      .map((row) => ({
+        name: paymentLabel(row.paymentMethod),
+        value: row.totalAmount,
+        method: row.paymentMethod,
+      }));
+  }, [dash?.paymentMethodBreakdown]);
 
   return (
     <PageShell title="Dashboard" subtitle="Shop overview — tap any figure to open its report">
@@ -107,6 +154,25 @@ export function DashboardPage() {
           </Link>
         </Feedback>
       ) : null}
+
+      <Panel className="mb-4">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-textMuted">Quick actions</p>
+        <div className="flex flex-wrap gap-2">
+          {QUICK_ACTIONS.map((a) => {
+            const Icon = a.icon;
+            return (
+              <Link
+                key={a.to}
+                to={a.to}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2 text-sm font-medium text-textPrimary shadow-sm transition hover:border-accent hover:bg-bgAccent"
+              >
+                <Icon className="h-4 w-4 text-accent" aria-hidden />
+                {a.label}
+              </Link>
+            );
+          })}
+        </div>
+      </Panel>
 
       <Panel className="mb-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -141,35 +207,77 @@ export function DashboardPage() {
       </Panel>
 
       {loading && !dash ? (
-        <MetricSkeletonGrid count={18} />
+        <MetricSkeletonGrid count={5} />
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          <ClickableMetricTile label="Gross Sales" value={dash ? formatMoney(dash.grossSales) : '—'} to="/reports/sales/range" />
-          <ClickableMetricTile label="Discounts" value={dash ? formatMoney(dash.discounts) : '—'} to="/reports/sales/range" accent="info" />
-          <ClickableMetricTile label="Returns" value={dash ? formatMoney(dash.saleReturns) : '—'} to="/reports/sales/returns-exchanges" accent="warning" />
-          <ClickableMetricTile label="Net Sales" value={dash ? formatMoney(dash.netSales) : '—'} to="/reports/sales/range" accent="success" />
-          <ClickableMetricTile label="COGS" value={dash ? formatMoney(dash.costOfGoodsSold) : '—'} to="/reports/sales/product-profit" />
-          <ClickableMetricTile label="Gross Profit" value={dash ? formatMoney(dash.grossProfit) : '—'} to="/reports/sales/product-profit" accent="success" />
-          <ClickableMetricTile label="Expenses" value={dash ? formatMoney(dash.expenses) : '—'} to="/reports/expenses/range" accent="warning" />
-          <ClickableMetricTile label="Other Income" value={dash ? formatMoney(dash.otherIncome) : '—'} to="/reports/other-income" accent="success" />
-          <ClickableMetricTile label="Net Profit" value={dash ? formatMoney(dash.netProfit) : '—'} to="/reports/sales/product-profit" accent={dash && dash.netProfit >= 0 ? 'success' : 'danger'} />
-          <ClickableMetricTile label="Cash Received" value={dash ? formatMoney(dash.cashReceived) : '—'} to="/reports/sales/payment-methods" accent="success" />
-          <ClickableMetricTile label="Udhaar Sales" value={dash ? formatMoney(dash.udhaarSales) : '—'} to="/reports/sales/udhaar" accent="warning" />
-          <ClickableMetricTile label="Customer Outstanding" value={dash ? formatMoney(dash.customerOutstanding) : '—'} to="/reports/customers/balances" accent="warning" />
-          <ClickableMetricTile label="Supplier Outstanding" value={dash ? formatMoney(dash.supplierOutstanding) : '—'} to="/reports/suppliers/outstanding" accent="warning" />
-          <ClickableMetricTile label="Stock Cost Value" value={dash ? formatMoney(dash.stockCostValue) : '—'} to="/reports/stock/valuation" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
           <ClickableMetricTile
-            label="Expected Selling Value"
-            value={dash ? formatMoney(dash.expectedSellingValue) : '—'}
-            sub="Potential margin on unsold inventory — not actual profit"
-            to="/reports/stock/valuation"
-            accent="info"
+            label={salesLabel(preset)}
+            value={dash ? formatMoney(dash.netSales) : '—'}
+            to="/reports/sales/range"
+            accent="success"
+            comparison={comparisons?.netSales}
           />
-          <ClickableMetricTile label="Invoices" value={dash ? String(dash.invoiceCount) : '—'} to="/sales" />
-          <ClickableMetricTile label="Low Stock" value={dash ? String(dash.lowStockCount) : '—'} to="/reports/stock/low" accent="warning" />
-          <ClickableMetricTile label="Out of Stock" value={dash ? String(dash.outOfStockCount) : '—'} to="/reports/stock/out" accent="danger" />
+          <ClickableMetricTile
+            label="Net Profit"
+            value={dash ? formatMoney(dash.netProfit) : '—'}
+            to="/reports/sales/product-profit"
+            accent={dash && dash.netProfit >= 0 ? 'success' : 'danger'}
+            comparison={comparisons?.netProfit}
+          />
+          <ClickableMetricTile
+            label="Customer Outstanding"
+            value={dash ? formatMoney(dash.customerOutstanding) : '—'}
+            to="/reports/customers/balances"
+            accent="warning"
+          />
+          <ClickableMetricTile
+            label="Supplier Outstanding"
+            value={dash ? formatMoney(dash.supplierOutstanding) : '—'}
+            to="/reports/suppliers/outstanding"
+            accent="warning"
+          />
+          <ClickableMetricTile
+            label="Low Stock"
+            value={dash ? String(dash.lowStockCount) : '—'}
+            to="/reports/stock/low"
+            accent="warning"
+          />
         </div>
       )}
+
+      <Panel className="mt-4">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between text-left text-sm font-semibold text-textPrimary"
+          onClick={() => setMoreOpen((v) => !v)}
+        >
+          More details
+          {moreOpen ? <ChevronUp className="h-4 w-4 text-textMuted" /> : <ChevronDown className="h-4 w-4 text-textMuted" />}
+        </button>
+        {moreOpen ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <ClickableMetricTile label="Gross Sales" value={dash ? formatMoney(dash.grossSales) : '—'} to="/reports/sales/range" comparison={comparisons?.grossSales} />
+            <ClickableMetricTile label="Discounts" value={dash ? formatMoney(dash.discounts) : '—'} to="/reports/sales/range" accent="info" />
+            <ClickableMetricTile label="Returns" value={dash ? formatMoney(dash.saleReturns) : '—'} to="/reports/sales/returns-exchanges" accent="warning" />
+            <ClickableMetricTile label="COGS" value={dash ? formatMoney(dash.costOfGoodsSold) : '—'} to="/reports/sales/product-profit" />
+            <ClickableMetricTile label="Gross Profit" value={dash ? formatMoney(dash.grossProfit) : '—'} to="/reports/sales/product-profit" accent="success" />
+            <ClickableMetricTile label="Expenses" value={dash ? formatMoney(dash.expenses) : '—'} to="/reports/expenses/range" accent="warning" comparison={comparisons?.expenses} />
+            <ClickableMetricTile label="Other Income" value={dash ? formatMoney(dash.otherIncome) : '—'} to="/reports/other-income" accent="success" />
+            <ClickableMetricTile label="Cash Received" value={dash ? formatMoney(dash.cashReceived) : '—'} to="/reports/sales/payment-methods" accent="success" comparison={comparisons?.cashReceived} />
+            <ClickableMetricTile label="Udhaar Sales" value={dash ? formatMoney(dash.udhaarSales) : '—'} to="/reports/sales/udhaar" accent="warning" />
+            <ClickableMetricTile label="Stock Cost Value" value={dash ? formatMoney(dash.stockCostValue) : '—'} to="/reports/stock/valuation" />
+            <ClickableMetricTile
+              label="Expected Selling Value"
+              value={dash ? formatMoney(dash.expectedSellingValue) : '—'}
+              sub="Potential margin on unsold inventory — not actual profit"
+              to="/reports/stock/valuation"
+              accent="info"
+            />
+            <ClickableMetricTile label="Invoices" value={dash ? String(dash.invoiceCount) : '—'} to="/sales" comparison={comparisons?.invoiceCount} />
+            <ClickableMetricTile label="Out of Stock" value={dash ? String(dash.outOfStockCount) : '—'} to="/reports/stock/out" accent="danger" />
+          </div>
+        ) : null}
+      </Panel>
 
       {dash ? (
         <Panel className="mt-4">
@@ -184,6 +292,63 @@ export function DashboardPage() {
       ) : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <Panel>
+          <h2 className="mb-3 text-sm font-semibold">Sales by payment method</h2>
+          {paymentChartData.length ? (
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie
+                    data={paymentChartData}
+                    dataKey="value"
+                    nameKey="name"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={80}
+                    paddingAngle={2}
+                  >
+                    {paymentChartData.map((entry) => (
+                      <Cell key={entry.method} fill={PAYMENT_COLORS[entry.method] ?? '#888888'} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => formatMoney(v)} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="mt-3 flex flex-wrap gap-4 border-t border-border pt-3 text-sm">
+                <div>
+                  <p className="text-xs text-textMuted">Total sales</p>
+                  <p className="font-semibold text-textPrimary">Rs {formatMoney(dash?.netSales ?? 0)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-textMuted">Net profit</p>
+                  <p className={`font-semibold ${dash && dash.netProfit >= 0 ? 'text-success' : 'text-danger'}`}>
+                    Rs {formatMoney(dash?.netProfit ?? 0)}
+                  </p>
+                </div>
+              </div>
+              <ul className="mt-3 space-y-1 text-xs text-textSecondary">
+                {paymentChartData.map((row) => (
+                  <li key={row.method} className="flex justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <span
+                        className="inline-block h-2.5 w-2.5 rounded-full"
+                        style={{ backgroundColor: PAYMENT_COLORS[row.method] ?? '#888' }}
+                      />
+                      {row.name}
+                    </span>
+                    <span>{formatMoney(row.value)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : loading ? (
+            <LoadingState />
+          ) : (
+            <p className="text-sm text-textMuted">No sales in selected period.</p>
+          )}
+        </Panel>
+
         <Panel>
           <h2 className="mb-3 text-sm font-semibold">Sales chart</h2>
           {dash?.salesChart.length ? (
@@ -202,7 +367,9 @@ export function DashboardPage() {
             <p className="text-sm text-textMuted">No sales in selected period.</p>
           )}
         </Panel>
+      </div>
 
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Panel>
           <h2 className="mb-3 text-sm font-semibold">Top selling products</h2>
           {dash?.topSellingProducts.length ? (
@@ -228,9 +395,27 @@ export function DashboardPage() {
             <p className="text-sm text-textMuted">No sales data.</p>
           )}
         </Panel>
+
+        <Panel>
+          <h2 className="mb-3 text-sm font-semibold">Low stock</h2>
+          {dash?.lowStockProducts.length ? (
+            <ul className="space-y-2 text-sm">
+              {dash.lowStockProducts.map((p) => (
+                <li key={p.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
+                  <Link to={`/products/${p.id}`} className="truncate hover:underline">
+                    {p.name}
+                  </Link>
+                  <span className="font-medium text-warning">{p.currentStock} left</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-success">All stocked up.</p>
+          )}
+        </Panel>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Panel>
           <h2 className="mb-3 text-sm font-semibold">Recent sales</h2>
           {dash?.recentSales.length ? (
@@ -264,43 +449,6 @@ export function DashboardPage() {
             <p className="text-sm text-textMuted">No recent expenses.</p>
           )}
         </Panel>
-
-        <Panel>
-          <h2 className="mb-3 text-sm font-semibold">Low stock</h2>
-          {dash?.lowStockProducts.length ? (
-            <ul className="space-y-2 text-sm">
-              {dash.lowStockProducts.map((p) => (
-                <li key={p.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
-                  <Link to={`/products/${p.id}`} className="truncate hover:underline">
-                    {p.name}
-                  </Link>
-                  <span className="font-medium text-warning">{p.currentStock} left</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-sm text-success">All stocked up.</p>
-          )}
-        </Panel>
-      </div>
-
-      <div className="mt-6">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-textMuted">Quick actions</h2>
-        <div className="flex flex-wrap gap-2">
-          {QUICK_ACTIONS.map((a) => {
-            const Icon = a.icon;
-            return (
-              <Link
-                key={a.to}
-                to={a.to}
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-surface2 px-3 py-2 text-sm font-medium text-textPrimary shadow-sm transition hover:border-accent hover:bg-bgAccent"
-              >
-                <Icon className="h-4 w-4 text-accent" aria-hidden />
-                {a.label}
-              </Link>
-            );
-          })}
-        </div>
       </div>
     </PageShell>
   );

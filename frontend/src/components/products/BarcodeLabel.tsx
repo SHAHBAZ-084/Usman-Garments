@@ -8,6 +8,8 @@ import {
   type ParsedLabelSize,
 } from '../../lib/barcodeLabels';
 import { formatMoney } from '../../lib/format';
+import { shortcutLabel } from '../../lib/shortcuts';
+import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import { FieldLabel, PrimaryButton, SecondaryButton, TextInput } from '../ui/PageShell';
 
 export type LabelItem = {
@@ -220,6 +222,12 @@ export function BarcodeLabelModal({
     if (labelSizeKey) setSizeKey(labelSizeKey);
   }, [labelSizeKey]);
 
+  useFormShortcuts({
+    onPrint: () => printBarcodeLabels(printable, sizeKey),
+    onCancel: onClose,
+    printEnabled: printable.length > 0,
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <div className="max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-border bg-surface2 p-5 shadow-lg">
@@ -285,10 +293,10 @@ export function BarcodeLabelModal({
 
         <div className="mt-6 flex flex-wrap justify-end gap-2">
           <SecondaryButton type="button" onClick={onClose}>
-            Done
+            Done (Esc)
           </SecondaryButton>
           <PrimaryButton type="button" onClick={() => printBarcodeLabels(printable, sizeKey)}>
-            Print Label{printable.length > 1 ? 's' : ''}
+            {shortcutLabel(printable.length > 1 ? 'Print Labels' : 'Print Label', 'F10')}
           </PrimaryButton>
         </div>
       </div>

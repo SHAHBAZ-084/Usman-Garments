@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { api, type DateRangePreset, type PaginatedResult } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
-import { downloadCsv, downloadExcel, downloadPdf } from '../../lib/reportExport';
+import { downloadCsv, downloadExcel, downloadPdf, type ReportExportMeta } from '../../lib/reportExport';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
 import { Printer } from 'lucide-react';
@@ -57,6 +57,7 @@ type ReportShellProps = {
   totalPages?: number;
   onPage?: (p: number) => void;
   summary?: ReactNode;
+  exportMeta?: ReportExportMeta;
 };
 
 export function ReportShell({
@@ -81,20 +82,43 @@ export function ReportShell({
   totalPages,
   onPage,
   summary,
+  exportMeta,
 }: ReportShellProps) {
+  const [businessMeta, setBusinessMeta] = useState<ReportExportMeta>({});
+
+  useEffect(() => {
+    api
+      .getSettings()
+      .then((settings) => setBusinessMeta({ businessName: settings.businessName }))
+      .catch(() => undefined);
+  }, []);
+
+  const meta: ReportExportMeta = {
+    ...businessMeta,
+    ...exportMeta,
+    generatedAt: exportMeta?.generatedAt ?? new Date().toLocaleString(),
+  };
+
   function exportReport(format: 'pdf' | 'excel' | 'csv') {
     const base = title.replace(/\s+/g, '-').toLowerCase();
-    if (format === 'pdf') downloadPdf(`${base}.pdf`, title, headers, rows);
-    else if (format === 'excel') downloadExcel(`${base}.xlsx`, title.slice(0, 31), headers, rows);
-    else downloadCsv(`${base}.csv`, headers, rows);
+    if (format === 'pdf') downloadPdf(`${base}.pdf`, title, headers, rows, meta);
+    else if (format === 'excel') downloadExcel(`${base}.xlsx`, title.slice(0, 31), headers, rows, meta);
+    else downloadCsv(`${base}.csv`, headers, rows, meta);
   }
 
   function printReport() {
+    const headerBlock = [
+      meta.businessName ? `<h2 style="margin:0 0 4px">${meta.businessName}</h2>` : '',
+      meta.dateRange ? `<p style="margin:0 0 8px;color:#666">Period: ${meta.dateRange}</p>` : '',
+    ].join('');
     const html = `<html><head><title>${title}</title><style>
-      body{font-family:sans-serif;padding:16px} table{border-collapse:collapse;width:100%}
+      body{font-family:Arial,sans-serif;padding:16px;color:#111}
+      table{border-collapse:collapse;width:100%;margin-top:12px}
       th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;font-size:12px}
-      th{background:#f5f5f4}
-    </style></head><body><h1>${title}</h1>
+      th{background:#111;color:#fff}
+      tr:nth-child(even){background:#f7f7f7}
+      .num{text-align:right}
+    </style></head><body>${headerBlock}<h1 style="margin:0 0 8px;font-size:18px">${title}</h1>
     <table><thead><tr>${headers.map((h) => `<th>${h}</th>`).join('')}</tr></thead>
     <tbody>${rows.map((row) => `<tr>${row.map((c) => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></body></html>`;
     const w = window.open('', '_blank');
@@ -272,6 +296,19 @@ function usePaginatedReport<T extends Record<string, unknown>>(
   };
 }
 
+function reportDateRangeLabel(preset: DateRangePreset, fromDate: string, toDate: string): string {
+  if (preset === 'custom') return `${fromDate} – ${toDate}`;
+  const labels: Record<DateRangePreset, string> = {
+    today: 'Today',
+    week: 'This Week',
+    month: 'This Month',
+    year: 'This Year',
+    lifetime: 'Lifetime',
+    custom: `${fromDate} – ${toDate}`,
+  };
+  return labels[preset] ?? preset;
+}
+
 function bindPaginatedReport(
   r: ReturnType<typeof usePaginatedReport>,
   overrides: Partial<ReportShellProps> = {},
@@ -294,6 +331,7 @@ function bindPaginatedReport(
     headers: r.headers,
     rows: r.rows,
     title: '',
+    exportMeta: { dateRange: reportDateRangeLabel(r.preset, r.fromDate, r.toDate) },
     ...overrides,
   };
 }

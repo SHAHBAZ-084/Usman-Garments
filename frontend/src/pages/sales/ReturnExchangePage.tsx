@@ -1,6 +1,7 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { printReturnReceipt } from '../../components/sales/ReturnReceiptPrint';
+import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import { BarcodeScanField } from '../products/BarcodeScanPage';
 import {
   api,
@@ -12,6 +13,7 @@ import {
   type ReturnCondition,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { shortcutLabel } from '../../lib/shortcuts';
 import { Trash2 } from 'lucide-react';
 import {
   Feedback,
@@ -89,6 +91,8 @@ export function ReturnExchangePage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
+  const returnFormRef = useRef<HTMLFormElement>(null);
+  const lastPrintRef = useRef<{ data: Parameters<typeof printReturnReceipt>[0]; kind: 'return' | 'exchange' } | null>(null);
 
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => setSettings(null));
@@ -201,7 +205,10 @@ export function ReturnExchangePage() {
           note: note.trim() || null,
         });
         setMessage(`Return recorded. Refund Rs ${formatMoney(result.refundAmount)}`);
-        if (settings) printReturnReceipt(result, settings, 'return');
+        if (settings) {
+          printReturnReceipt(result, settings, 'return');
+          lastPrintRef.current = { data: result, kind: 'return' };
+        }
         await onLookup();
       } else {
         if (!newItems.length) throw new Error('Add at least one new item for exchange');
@@ -224,7 +231,10 @@ export function ReturnExchangePage() {
             ? `Exchange complete. Customer pays Rs ${formatMoney(result.netAmount)}`
             : `Exchange complete. Refund Rs ${formatMoney(result.refundedAmount)}`,
         );
-        if (settings) printReturnReceipt(result, settings, 'exchange');
+        if (settings) {
+          printReturnReceipt(result, settings, 'exchange');
+          lastPrintRef.current = { data: result, kind: 'exchange' };
+        }
         setNewItems([]);
         await onLookup();
       }
@@ -234,6 +244,25 @@ export function ReturnExchangePage() {
       setSaving(false);
     }
   }
+
+  function clearReturnForm() {
+    setNewItems([]);
+    setNote('');
+    setPaidAmount('');
+    setError('');
+    setMessage('');
+  }
+
+  useFormShortcuts({
+    onSave: () => returnFormRef.current?.requestSubmit(),
+    onPrint:
+      settings && lastPrintRef.current
+        ? () => printReturnReceipt(lastPrintRef.current!.data, settings, lastPrintRef.current!.kind)
+        : undefined,
+    onClear: clearReturnForm,
+    saveEnabled: Boolean(invoice) && !saving && returnDrafts.length > 0,
+    printEnabled: Boolean(settings && lastPrintRef.current),
+  });
 
   return (
     <PageShell
@@ -264,7 +293,7 @@ export function ReturnExchangePage() {
       </Panel>
 
       {invoice ? (
-        <form onSubmit={onSubmit}>
+        <form onSubmit={onSubmit} ref={returnFormRef}>
           <Panel className="mb-4">
             <div className="mb-4 flex flex-wrap gap-4 text-sm">
               <span>
@@ -489,7 +518,9 @@ export function ReturnExchangePage() {
           {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
 
           <PrimaryButton type="submit" disabled={saving || returnDrafts.length === 0}>
-            {saving ? 'Processing…' : mode === 'exchange' ? 'Confirm exchange' : 'Confirm return'}
+            {saving
+              ? 'Processing…'
+              : shortcutLabel(mode === 'exchange' ? 'Confirm exchange' : 'Confirm return', 'F9')}
           </PrimaryButton>
         </form>
       ) : null}
