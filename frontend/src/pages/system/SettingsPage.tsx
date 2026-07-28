@@ -20,9 +20,9 @@ const emptyForm = {
   businessName: 'Usman Mall',
   tagline: 'Quality Clothes, Your Style',
   ownerName: '',
-  phone: '0300-6195469',
-  whatsapp: '0300-6195469',
-  address: 'Al-Nisa Road, Chishtian',
+  phone: 'M Arslan 03024979697',
+  whatsapp: 'M Usman 03006195469',
+  address: 'Bano Bazar Al Nissa Road Near Taleem Un Nisa Madrasa Chishtian',
   developerCreditLine: DEFAULT_DEVELOPER_CREDIT_LINE,
   invoiceFooter: 'Thank you for shopping at Usman Mall',
   returnPolicy:

@@ -136,10 +136,20 @@ export function FieldLabel({ children }: { children: ReactNode }) {
 
 export const TextInput = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function TextInput(props, ref) {
+    const { onWheel, type, ...rest } = props;
     return (
       <input
         ref={ref}
-        {...props}
+        type={type}
+        {...rest}
+        onWheel={(event) => {
+          // Prevent scroll from nudging number values while the field is focused.
+          if (type === 'number') {
+            event.currentTarget.blur();
+            event.preventDefault();
+          }
+          onWheel?.(event);
+        }}
         className={`w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm text-textPrimary outline-none ring-accent focus:ring-2 ${props.className ?? ''}`}
       />
     );

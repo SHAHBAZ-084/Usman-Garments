@@ -21,12 +21,15 @@ const itemSchema = z.object({
 const createSaleSchema = z.object({
   items: z.array(itemSchema).min(1),
   paymentMethod: z.nativeEnum(SalePaymentMethod),
-  paidAmount: z.number().min(0),
+  paidAmount: z.number().min(0).optional(),
+  amountReceived: z.number().min(0).optional(),
   paymentAccountId: z.number().int().positive().nullable().optional(),
   customerId: z.number().int().positive().nullable().optional(),
   discount: z.number().min(0).optional(),
   date: z.string().min(1).optional(),
   notes: z.string().max(2000).nullable().optional(),
+}).refine((body) => body.amountReceived != null || body.paidAmount != null, {
+  message: 'amountReceived or paidAmount is required',
 });
 
 const returnItemSchema = z.object({

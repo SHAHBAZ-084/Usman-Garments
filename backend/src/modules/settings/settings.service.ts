@@ -15,9 +15,9 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   businessName: 'Usman Mall',
   tagline: 'Quality Clothes, Your Style',
   ownerName: '',
-  phone: '0300-6195469',
-  whatsapp: '0300-6195469',
-  address: 'Al-Nisa Road, Chishtian',
+  phone: 'M Arslan 03024979697',
+  whatsapp: 'M Usman 03006195469',
+  address: 'Bano Bazar Al Nissa Road Near Taleem Un Nisa Madrasa Chishtian',
   invoiceFooter: 'Thank you for shopping at Usman Mall',
   returnPolicy:
     'Returns accepted within 7 days with original receipt. Items must be unused and in original condition.',
@@ -31,8 +31,12 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   backupFolderPath: '',
   themeMode: ThemeMode.LIGHT,
   logoPath: null as string | null,
-  developerCreditLine: 'AS Solutions — Ali & Shahbaz — 0322-0726006',
+  developerCreditLine: 'AS Solutions | Ali & Shahbaz | 0322-0726006',
 };
+
+const LEGACY_ADDRESS = 'Al-Nisa Road, Chishtian';
+const LEGACY_PHONE = '0300-6195469';
+const LEGACY_CREDIT = 'AS Solutions — Ali & Shahbaz — 0322-0726006';
 
 export type BusinessSettingsUpdateInput = {
   businessName?: string;
@@ -100,6 +104,25 @@ export async function ensureBusinessSettings() {
     where: { id: BUSINESS_SETTINGS_ID },
   });
   if (existing) {
+    const patch: Prisma.BusinessSettingsUpdateInput = {};
+    if (existing.address.trim() === LEGACY_ADDRESS) {
+      patch.address = DEFAULT_BUSINESS_SETTINGS.address;
+    }
+    if (existing.phone.trim() === LEGACY_PHONE) {
+      patch.phone = DEFAULT_BUSINESS_SETTINGS.phone;
+      patch.whatsapp = DEFAULT_BUSINESS_SETTINGS.whatsapp;
+    }
+    if (existing.developerCreditLine.trim() === LEGACY_CREDIT || /[\u2014\u2013]/.test(existing.developerCreditLine)) {
+      patch.developerCreditLine = DEFAULT_BUSINESS_SETTINGS.developerCreditLine;
+    }
+    if (Object.keys(patch).length > 0) {
+      const updated = await prisma.businessSettings.update({
+        where: { id: BUSINESS_SETTINGS_ID },
+        data: patch,
+      });
+      await ensureDeveloperPassphraseHash();
+      return updated;
+    }
     await ensureDeveloperPassphraseHash();
     return existing;
   }

@@ -325,21 +325,47 @@ async function applyReturnStock(
 }
 
 export async function findInvoiceForReturn(invoiceNumber: string) {
-  const trimmed = invoiceNumber.trim();
+  // Printed invoice barcode encodes invoiceNumber (CODE128). Scanners may append CR/LF.
+  const trimmed = invoiceNumber.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, '').trim();
   if (!trimmed) throw new AppError(400, 'Invoice number is required');
 
-  const invoice = await prisma.invoice.findFirst({
-    where: { invoiceNumber: trimmed, status: InvoiceStatus.ACTIVE },
-    include: {
-      customer: { select: { id: true, name: true, phone: true } },
-      items: {
-        include: {
-          product: { select: { id: true, name: true, sku: true } },
-          variant: { select: { id: true, size: true, colour: true, sku: true } },
-        },
+  const include = {
+    customer: { select: { id: true, name: true, phone: true } },
+    items: {
+      include: {
+        product: { select: { id: true, name: true, sku: true } },
+        variant: { select: { id: true, size: true, colour: true, sku: true } },
       },
     },
+  } as const;
+
+  let invoice = await prisma.invoice.findFirst({
+    where: { invoiceNumber: trimmed, status: InvoiceStatus.ACTIVE },
+    include,
   });
+
+  if (!invoice) {
+    const upper = trimmed.toUpperCase();
+    if (upper !== trimmed) {
+      invoice = await prisma.invoice.findFirst({
+        where: { invoiceNumber: upper, status: InvoiceStatus.ACTIVE },
+        include,
+      });
+    }
+  }
+
+  if (!invoice) {
+    // Case-insensitive match against active invoices (small retail volume).
+    const candidates = await prisma.invoice.findMany({
+      where: { status: InvoiceStatus.ACTIVE },
+      include,
+      orderBy: { createdAt: 'desc' },
+      take: 500,
+    });
+    invoice =
+      candidates.find((row) => row.invoiceNumber.toUpperCase() === trimmed.toUpperCase()) ?? null;
+  }
+
   if (!invoice) throw new AppError(404, 'Invoice not found');
 
   const returnedMap = await returnedQtyByInvoiceItem(invoice.id);

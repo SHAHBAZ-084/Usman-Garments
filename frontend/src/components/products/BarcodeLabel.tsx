@@ -373,6 +373,10 @@ export function BarcodeLabelModal({
                     min={1}
                     max={99}
                     value={String(quantities[item.key] ?? 1)}
+                    onWheel={(event) => {
+                      event.currentTarget.blur();
+                      event.preventDefault();
+                    }}
                     onChange={(event) =>
                       setQuantities((prev) => ({
                         ...prev,

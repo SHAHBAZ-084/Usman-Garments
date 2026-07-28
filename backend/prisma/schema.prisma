@@ -499,6 +499,8 @@ model Invoice {
   subtotal        Decimal
   discount        Decimal           @default(0)
   totalAmount     Decimal
+  /// Cash/card tendered by customer (may exceed totalAmount; change = amountReceived - total).
+  amountReceived  Decimal           @default(0)
   paidAmount      Decimal           @default(0)
   remainingAmount Decimal           @default(0)
   paymentMethod   SalePaymentMethod
@@ -707,9 +709,9 @@ model BusinessSettings {
   businessName      String      @default("Usman Mall")
   tagline           String      @default("Quality Clothes, Your Style")
   ownerName         String      @default("")
-  phone             String      @default("0300-6195469")
-  whatsapp          String      @default("0300-6195469")
-  address           String      @default("Al-Nisa Road, Chishtian")
+  phone             String      @default("M Arslan 03024979697")
+  whatsapp          String      @default("M Usman 03006195469")
+  address           String      @default("Bano Bazar Al Nissa Road Near Taleem Un Nisa Madrasa Chishtian")
   invoiceFooter     String      @default("Thank you for shopping at Usman Mall")
   returnPolicy      String      @default("Returns accepted within 7 days with original receipt. Items must be unused and in original condition.")
   invoicePrefix     String      @default("UM-")
@@ -727,7 +729,7 @@ model BusinessSettings {
   isIdentityLocked  Boolean     @default(true)
   developerPassphraseHash String @default("")
   /// Print footer credit; editable only in developer edit mode.
-  developerCreditLine String    @default("AS Solutions — Ali & Shahbaz — 0322-0726006")
+  developerCreditLine String    @default("AS Solutions | Ali & Shahbaz | 0322-0726006")
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 }

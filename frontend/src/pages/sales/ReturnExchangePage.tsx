@@ -101,13 +101,15 @@ export function ReturnExchangePage() {
 
   async function onLookup(e?: FormEvent) {
     e?.preventDefault();
-    if (!invoiceQuery.trim()) return;
+    const raw = invoiceQuery.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, '').trim();
+    if (!raw) return;
     setLoading(true);
     setError('');
     setMessage('');
     try {
-      const found = await api.lookupInvoiceForReturn(invoiceQuery.trim());
+      const found = await api.lookupInvoiceForReturn(raw);
       setInvoice(found);
+      setInvoiceQuery(found.invoiceNumber);
       setReturnDrafts(
         found.items
           .filter((i) => i.returnableQty > 0)
@@ -277,12 +279,18 @@ export function ReturnExchangePage() {
       <Panel className="mb-4">
         <form className="flex flex-wrap gap-3" onSubmit={onLookup}>
           <div className="min-w-[200px] flex-1">
-            <FieldLabel>Invoice number</FieldLabel>
+            <FieldLabel>Invoice number / scan barcode</FieldLabel>
             <TextInput
               value={invoiceQuery}
               onChange={(e) => setInvoiceQuery(e.target.value)}
-              placeholder="e.g. UM-000001"
+              placeholder="Type UM-000001 or scan invoice barcode"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
             />
+            <p className="mt-1 text-xs text-textMuted">
+              Scan the barcode printed at the bottom of the invoice to open return details.
+            </p>
           </div>
           <div className="flex items-end">
             <PrimaryButton type="submit" disabled={loading}>

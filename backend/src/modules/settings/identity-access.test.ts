@@ -26,7 +26,7 @@ describe('identity access (developer edit mode)', () => {
       where: { id: BUSINESS_SETTINGS_ID },
       data: {
         developerPassphraseHash: await bcrypt.hash('CUIVHR', 10),
-        developerCreditLine: 'AS Solutions — Ali & Shahbaz — 0322-0726006',
+        developerCreditLine: 'AS Solutions | Ali & Shahbaz | 0322-0726006',
       },
     });
   });
@@ -66,7 +66,7 @@ describe('identity access (developer edit mode)', () => {
 
   it('defaults developerCreditLine and allows invoice fields without edit session', async () => {
     const settings = await getBusinessSettings();
-    expect(settings.developerCreditLine).toBe('AS Solutions — Ali & Shahbaz — 0322-0726006');
+    expect(settings.developerCreditLine).toBe('AS Solutions | Ali & Shahbaz | 0322-0726006');
 
     const updated = await updateBusinessSettings({
       invoicePrefix: 'XX-',

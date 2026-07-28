@@ -237,6 +237,7 @@ export function NewSalePage() {
           discount: line.discount,
         })),
         paymentMethod: remaining > 0 && received === 0 ? 'UDHAAR' : paymentMethod,
+        amountReceived: received,
         paidAmount: Math.min(received, total),
         customerId: resolvedCustomerId,
         discount: discount > 0 ? discount : undefined,
@@ -482,13 +483,14 @@ export function NewSalePage() {
             />
 
             <div>
-              <FieldLabel>Amount received</FieldLabel>
+              <FieldLabel>Cash / amount received</FieldLabel>
               <TextInput
                 type="number"
                 min={0}
                 step="0.01"
                 value={paidAmount}
                 onChange={(e) => setPaidAmount(e.target.value)}
+                placeholder="e.g. 1000"
               />
             </div>
 
@@ -497,7 +499,20 @@ export function NewSalePage() {
                 Remaining (udhaar): Rs {formatMoney(remaining)}
               </p>
             ) : change > 0 ? (
-              <p className="text-sm text-textSecondary">Change: Rs {formatMoney(change)}</p>
+              <div className="rounded-lg border border-border bg-surface1 px-3 py-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-textSecondary">Bill total</span>
+                  <span className="font-medium">Rs {formatMoney(total)}</span>
+                </div>
+                <div className="mt-1 flex justify-between gap-3">
+                  <span className="text-textSecondary">Cash received</span>
+                  <span className="font-medium">Rs {formatMoney(received)}</span>
+                </div>
+                <div className="mt-1 flex justify-between gap-3 border-t border-border pt-1 font-semibold text-textPrimary">
+                  <span>Change due</span>
+                  <span>Rs {formatMoney(change)}</span>
+                </div>
+              </div>
             ) : null}
 
             {remaining > 0 ? (
@@ -548,8 +563,13 @@ export function NewSalePage() {
           <Panel className="max-h-[90vh] w-full max-w-lg overflow-y-auto">
             <h2 className="text-lg font-semibold">Sale complete</h2>
             <p className="mt-1 text-sm text-textSecondary">
-              Invoice {completedInvoice.invoiceNumber} · Rs {formatMoney(completedInvoice.totalAmount)}
+              Invoice {completedInvoice.invoiceNumber} · Bill Rs {formatMoney(completedInvoice.totalAmount)}
             </p>
+            {(completedInvoice.changeAmount ?? 0) > 0 ? (
+              <p className="mt-2 text-sm font-semibold text-textPrimary">
+                Change due: Rs {formatMoney(completedInvoice.changeAmount!)}
+              </p>
+            ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
               <PrimaryButton type="button" onClick={() => printInvoice(completedInvoice, settings)}>
                 <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
@@ -766,13 +786,26 @@ export function InvoiceDetailPage() {
             </div>
           ) : null}
           <div className="flex justify-between font-semibold">
-            <span>Total</span>
+            <span>Bill total</span>
             <span>Rs {formatMoney(invoice.totalAmount)}</span>
           </div>
           <div className="flex justify-between">
-            <span>Paid</span>
-            <span>Rs {formatMoney(invoice.paidAmount)}</span>
+            <span>Cash / amount received</span>
+            <span>Rs {formatMoney(invoice.amountReceived ?? invoice.paidAmount)}</span>
           </div>
+          {(invoice.changeAmount ?? Math.max(0, (invoice.amountReceived ?? invoice.paidAmount) - invoice.totalAmount)) >
+          0 ? (
+            <div className="flex justify-between font-semibold">
+              <span>Change due</span>
+              <span>
+                Rs{' '}
+                {formatMoney(
+                  invoice.changeAmount ??
+                    Math.max(0, (invoice.amountReceived ?? invoice.paidAmount) - invoice.totalAmount),
+                )}
+              </span>
+            </div>
+          ) : null}
           {invoice.remainingAmount > 0 ? (
             <div className="flex justify-between text-amber-800 dark:text-amber-200">
               <span>Remaining</span>

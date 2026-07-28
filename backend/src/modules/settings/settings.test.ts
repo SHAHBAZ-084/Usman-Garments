@@ -40,8 +40,9 @@ describe('business settings', () => {
     const first = await getBusinessSettings();
     expect(first.id).toBe(BUSINESS_SETTINGS_ID);
     expect(first.businessName).toBe('Usman Mall');
-    expect(first.phone).toBe('0300-6195469');
-    expect(first.address).toBe('Al-Nisa Road, Chishtian');
+    expect(first.phone).toBe(DEFAULT_BUSINESS_SETTINGS.phone);
+    expect(first.whatsapp).toBe(DEFAULT_BUSINESS_SETTINGS.whatsapp);
+    expect(first.address).toBe(DEFAULT_BUSINESS_SETTINGS.address);
     expect(first.invoicePrefix).toBe('UM-');
     expect(first.currency).toBe('PKR');
     expect(first.lowStockLimit).toBe(5);

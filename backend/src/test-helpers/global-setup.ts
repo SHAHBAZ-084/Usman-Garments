@@ -27,6 +27,11 @@ export default async function globalSetup() {
     stdio: 'pipe',
   });
 
+  // Keep parity with app startup: add columns that may not have a migration yet.
+  const { ensureRequiredSchemaColumns } = await import('../lib/ensure-schema');
+  process.env.DATABASE_URL = databaseUrl;
+  await ensureRequiredSchemaColumns();
+
   return async () => {
     try {
       if (fs.existsSync(ENV_FILE)) fs.unlinkSync(ENV_FILE);

@@ -1,4 +1,5 @@
 import { formatDate, formatMoney } from '../../lib/format';
+import { formatDeveloperCreditForPrint } from '../../config/printCredit';
 import type { BusinessSettings, ExchangeResult, SaleReturn } from '../../lib/api';
 
 function escapeHtml(text: string): string {
@@ -75,7 +76,7 @@ export function buildReturnReceiptHtml(
   .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
   .total { font-weight: 700; font-size: 12px; }
   .footer { text-align: center; font-size: 9px; color: #555; margin-top: 10px; word-wrap: break-word; }
-  .credit { text-align: center; font-size: 7px; color: #888; margin-top: 6px; }
+  .credit { text-align: center; font-size: 9px; font-weight: 600; color: #333; margin-top: 8px; }
 </style></head><body>
   <h1>${escapeHtml(settings.businessName)}</h1>
   <p class="meta">${title}</p>
@@ -85,7 +86,7 @@ export function buildReturnReceiptHtml(
   ${newRows ? `<h2 style="font-size:12px;margin:8px 0 4px;">New items</h2><table><thead><tr><th>Item</th><th>Qty</th><th></th><th>Total</th></tr></thead><tbody>${newRows}</tbody></table>` : ''}
   ${summary}
   <p class="footer">${escapeHtml(settings.invoiceFooter)}</p>
-  ${settings.developerCreditLine?.trim() ? `<p class="credit">${escapeHtml(settings.developerCreditLine.trim())}</p>` : ''}
+  <p class="credit">${escapeHtml(formatDeveloperCreditForPrint(settings.developerCreditLine))}</p>
 <script>window.onload=function(){window.print();};<\/script>
 </body></html>`;
 }

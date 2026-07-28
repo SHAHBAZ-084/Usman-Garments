@@ -1070,8 +1070,12 @@ export type Invoice = {
   subtotal: number;
   discount: number;
   totalAmount: number;
+  /** Cash/card tendered (may exceed totalAmount). */
+  amountReceived?: number;
   paidAmount: number;
   remainingAmount: number;
+  /** Change returned when amountReceived > totalAmount. */
+  changeAmount?: number;
   paymentMethod: SalePaymentMethod;
   status: 'ACTIVE' | 'CANCELLED';
   notes: string | null;
@@ -1096,7 +1100,9 @@ export type CreateSaleInput = {
     discount?: number;
   }>;
   paymentMethod: SalePaymentMethod;
-  paidAmount: number;
+  paidAmount?: number;
+  /** Cash tendered by customer (bill 750, give 1000 → amountReceived 1000). */
+  amountReceived?: number;
   customerId?: number | null;
   discount?: number;
   date?: string;

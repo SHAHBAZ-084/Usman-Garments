@@ -37,7 +37,10 @@ export type SaleItemInput = {
 export type CreateSaleInput = {
   items: SaleItemInput[];
   paymentMethod: SalePaymentMethod;
-  paidAmount: number;
+  /** Amount applied to the bill (capped at total). Optional when amountReceived is sent. */
+  paidAmount?: number;
+  /** Cash/card tendered by customer (may exceed bill total for change). */
+  amountReceived?: number;
   paymentAccountId?: number | null;
   customerId?: number | null;
   discount?: number;
@@ -195,10 +198,11 @@ export async function createSale(input: CreateSaleInput) {
     throw new AppError(400, 'Sale total must be greater than zero');
   }
 
-  const paidAmount = roundMoney(Math.max(0, input.paidAmount ?? 0));
-  if (paidAmount > totalAmount + 0.001) {
-    throw new AppError(400, 'Amount received cannot exceed sale total');
-  }
+  const amountReceived = roundMoney(
+    Math.max(0, input.amountReceived ?? input.paidAmount ?? 0),
+  );
+  // Ledger / udhaar use only what settles the bill; surplus is change given back.
+  const paidAmount = roundMoney(Math.min(amountReceived, totalAmount));
   const remainingAmount = roundMoney(totalAmount - paidAmount);
 
   if (remainingAmount > 0 && !input.customerId) {
@@ -232,6 +236,7 @@ export async function createSale(input: CreateSaleInput) {
         subtotal,
         discount: invoiceDiscount,
         totalAmount,
+        amountReceived,
         paidAmount,
         remainingAmount,
         paymentMethod: input.paymentMethod,
@@ -324,6 +329,7 @@ function serializeInvoice(row: {
   subtotal: Prisma.Decimal;
   discount: Prisma.Decimal;
   totalAmount: Prisma.Decimal;
+  amountReceived?: Prisma.Decimal | null;
   paidAmount: Prisma.Decimal;
   remainingAmount: Prisma.Decimal;
   paymentMethod: SalePaymentMethod;
@@ -344,6 +350,11 @@ function serializeInvoice(row: {
     variant: { id: number; size: string | null; colour: string | null; sku: string } | null;
   }>;
 }) {
+  const totalAmount = Number(row.totalAmount);
+  const paidAmount = Number(row.paidAmount);
+  const amountReceived =
+    row.amountReceived != null ? Number(row.amountReceived) : paidAmount;
+  const changeAmount = Math.max(0, roundMoney(amountReceived - totalAmount));
   return {
     id: row.id,
     invoiceNumber: row.invoiceNumber,
@@ -352,9 +363,11 @@ function serializeInvoice(row: {
     date: row.date,
     subtotal: Number(row.subtotal),
     discount: Number(row.discount),
-    totalAmount: Number(row.totalAmount),
-    paidAmount: Number(row.paidAmount),
+    totalAmount,
+    amountReceived,
+    paidAmount,
     remainingAmount: Number(row.remainingAmount),
+    changeAmount,
     paymentMethod: row.paymentMethod,
     status: row.status,
     notes: row.notes,

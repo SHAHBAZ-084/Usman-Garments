@@ -1,5 +1,7 @@
+import JsBarcode from 'jsbarcode';
 import { formatDate, formatMoney } from '../../lib/format';
 import type { BusinessSettings, Invoice } from '../../lib/api';
+import { formatDeveloperCreditForPrint } from '../../config/printCredit';
 
 function escapeHtml(text: string): string {
   return text
@@ -21,18 +23,53 @@ function paymentLabel(method: string): string {
   return labels[method] ?? method;
 }
 
+function contactLines(settings: BusinessSettings): string[] {
+  const lines = [settings.phone?.trim(), settings.whatsapp?.trim()].filter(Boolean) as string[];
+  return [...new Set(lines)];
+}
+
+/** Encode invoice number exactly as stored — used for return scan lookup. */
+function invoiceBarcodeSvg(invoiceNumber: string): string {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  try {
+    JsBarcode(svg, invoiceNumber, {
+      format: 'CODE128',
+      displayValue: true,
+      fontSize: 11,
+      height: 36,
+      margin: 0,
+      width: 1.35,
+      textMargin: 2,
+    });
+  } catch {
+    return `<div class="barcode-fallback">${escapeHtml(invoiceNumber)}</div>`;
+  }
+  return svg.outerHTML;
+}
+
 export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettings): string {
   const isA4 = settings.receiptSize === 'A4';
   const widthMm = settings.receiptSize === 'THERMAL_58' ? 58 : settings.receiptSize === 'THERMAL_80' ? 80 : 210;
+  const amountReceived = invoice.amountReceived ?? invoice.paidAmount;
+  const changeAmount =
+    invoice.changeAmount ?? Math.max(0, amountReceived - invoice.totalAmount);
+
+  const customerLine = invoice.customer
+    ? `${escapeHtml(invoice.customer.name)}${
+        invoice.customer.phone ? `<br/><span class="muted">${escapeHtml(invoice.customer.phone)}</span>` : ''
+      }`
+    : 'Walk-in customer';
 
   const rows = invoice.items
     .map((item) => {
-      const variant = [item.variant?.size, item.variant?.colour].filter(Boolean).join(' / ');
+      const variant = [item.variant?.size, item.variant?.colour].filter(Boolean).join('/');
+      const name = escapeHtml(item.product.name);
+      const variantHtml = variant ? `<div class="variant">${escapeHtml(variant)}</div>` : '';
       return `<tr>
-        <td>${escapeHtml(item.product.name)}${variant ? `<br/><span class="muted">${escapeHtml(variant)}</span>` : ''}</td>
-        <td class="num">${item.quantity}</td>
-        <td class="num">${formatMoney(item.rate)}</td>
-        <td class="num">${formatMoney(item.total)}</td>
+        <td class="col-item"><div class="item-name">${name}</div>${variantHtml}</td>
+        <td class="col-qty">${item.quantity}</td>
+        <td class="col-rate">${formatMoney(item.rate)}</td>
+        <td class="col-total">${formatMoney(item.total)}</td>
       </tr>`;
     })
     .join('');
@@ -41,81 +78,293 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
     ? `<img src="${escapeHtml(settings.logoUrl)}" alt="" class="logo" />`
     : '';
 
+  const contacts = contactLines(settings)
+    .map((line) => `<div class="contact">${escapeHtml(line)}</div>`)
+    .join('');
+
+  const summaryParts: string[] = [
+    `<div class="sum-row"><span>Subtotal</span><span>Rs ${formatMoney(invoice.subtotal)}</span></div>`,
+  ];
+  if (invoice.discount > 0) {
+    summaryParts.push(
+      `<div class="sum-row"><span>Discount</span><span>- Rs ${formatMoney(invoice.discount)}</span></div>`,
+    );
+  }
+  summaryParts.push(
+    `<div class="sum-row sum-total"><span>Bill total</span><span>Rs ${formatMoney(invoice.totalAmount)}</span></div>`,
+  );
+  summaryParts.push(
+    `<div class="sum-row"><span>Cash received</span><span>Rs ${formatMoney(amountReceived)}</span></div>`,
+  );
+  if (changeAmount > 0) {
+    summaryParts.push(
+      `<div class="sum-row sum-change"><span>Change due</span><span>Rs ${formatMoney(changeAmount)}</span></div>`,
+    );
+  }
+  if (invoice.remainingAmount > 0) {
+    summaryParts.push(
+      `<div class="sum-row sum-due"><span>Remaining (udhaar)</span><span>Rs ${formatMoney(invoice.remainingAmount)}</span></div>`,
+    );
+  }
+  summaryParts.push(
+    `<div class="sum-row"><span>Payment</span><span>${escapeHtml(paymentLabel(invoice.paymentMethod))}</span></div>`,
+  );
+
+  const barcodeMarkup = invoiceBarcodeSvg(invoice.invoiceNumber);
+
   const body = `
     <div class="invoice">
-      ${logo}
-      <h1>${escapeHtml(settings.businessName)}</h1>
-      ${settings.tagline ? `<p class="tagline">${escapeHtml(settings.tagline)}</p>` : ''}
-      <p class="address">${escapeHtml(settings.address)}</p>
-      <p class="phone">${escapeHtml(settings.phone)}</p>
-      <hr />
-      <p class="inv-no"><strong>${escapeHtml(invoice.invoiceNumber)}</strong></p>
-      <p class="date">${formatDate(invoice.date)}</p>
-      ${invoice.customer ? `<p class="customer">Customer: ${escapeHtml(invoice.customer.name)}${invoice.customer.phone ? ` · ${escapeHtml(invoice.customer.phone)}` : ''}</p>` : '<p class="customer">Walk-in customer</p>'}
-      <table>
-        <thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Total</th></tr></thead>
+      <header class="header">
+        ${logo}
+        <div class="shop-name">${escapeHtml(settings.businessName)}</div>
+        ${settings.tagline ? `<div class="tagline">${escapeHtml(settings.tagline)}</div>` : ''}
+        <div class="address">${escapeHtml(settings.address)}</div>
+        <div class="contacts">${contacts}</div>
+      </header>
+
+      <div class="rule"></div>
+
+      <section class="meta">
+        <div class="meta-block">
+          <div class="meta-label">Invoice no.</div>
+          <div class="meta-value strong">${escapeHtml(invoice.invoiceNumber)}</div>
+        </div>
+        <div class="meta-block">
+          <div class="meta-label">Date</div>
+          <div class="meta-value">${formatDate(invoice.date)}</div>
+        </div>
+        <div class="meta-block">
+          <div class="meta-label">Customer</div>
+          <div class="meta-value">${customerLine}</div>
+        </div>
+      </section>
+
+      <div class="rule"></div>
+
+      <table class="items">
+        <colgroup>
+          <col class="c-item" />
+          <col class="c-qty" />
+          <col class="c-rate" />
+          <col class="c-total" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th class="col-item">Item</th>
+            <th class="col-qty">Qty</th>
+            <th class="col-rate">Rate</th>
+            <th class="col-total">Total</th>
+          </tr>
+        </thead>
         <tbody>${rows}</tbody>
       </table>
-      ${invoice.discount > 0 ? `<p class="row"><span>Discount</span><span>- ${formatMoney(invoice.discount)}</span></p>` : ''}
-      <p class="row total"><span>Total</span><span>Rs ${formatMoney(invoice.totalAmount)}</span></p>
-      <p class="row"><span>Paid</span><span>Rs ${formatMoney(invoice.paidAmount)}</span></p>
-      ${invoice.remainingAmount > 0 ? `<p class="row due"><span>Remaining</span><span>Rs ${formatMoney(invoice.remainingAmount)}</span></p>` : ''}
-      ${invoice.paidAmount > invoice.totalAmount ? `<p class="row"><span>Change</span><span>Rs ${formatMoney(invoice.paidAmount - invoice.totalAmount)}</span></p>` : ''}
-      <p class="pay">Payment: ${escapeHtml(paymentLabel(invoice.paymentMethod))}</p>
-      <hr />
-      <p class="footer">${escapeHtml(settings.invoiceFooter)}</p>
-      <p class="policy">${escapeHtml(settings.returnPolicy)}</p>
-      ${settings.developerCreditLine?.trim() ? `<p class="credit">${escapeHtml(settings.developerCreditLine.trim())}</p>` : ''}
+
+      <div class="rule"></div>
+
+      <section class="summary">
+        ${summaryParts.join('')}
+      </section>
+
+      <div class="rule"></div>
+
+      <footer class="footer">
+        <div class="footer-note">${escapeHtml(settings.invoiceFooter)}</div>
+        <div class="policy">${escapeHtml(settings.returnPolicy)}</div>
+      </footer>
+
+      <section class="invoice-barcode">
+        <div class="barcode-caption">Scan for return / exchange</div>
+        <div class="barcode-wrap">${barcodeMarkup}</div>
+      </section>
+
+      ${(() => {
+        const credit = formatDeveloperCreditForPrint(settings.developerCreditLine);
+        return credit ? `<div class="credit">${escapeHtml(credit)}</div>` : '';
+      })()}
     </div>`;
+
+  const sharedCss = `
+  * { box-sizing: border-box; }
+  body { font-family: Arial, Helvetica, sans-serif; color: #111; margin: 0; }
+  .invoice { width: 100%; margin: 0 auto; }
+  .header { text-align: center; padding: 0 1px 2px; }
+  .logo { display: block; max-height: 48px; max-width: 48%; margin: 0 auto 6px; }
+  .shop-name { font-size: 17px; font-weight: 800; letter-spacing: 0.03em; margin: 0; line-height: 1.2; }
+  .tagline { font-size: 10px; color: #555; margin: 3px 0 6px; }
+  .address { font-size: 10px; color: #333; margin: 0 auto; width: 100%; line-height: 1.4; }
+  .contacts { margin-top: 4px; }
+  .contact { font-size: 10px; color: #222; margin: 1px 0; font-weight: 600; }
+  .rule { border: none; border-top: 1px dashed #888; margin: 10px 0; height: 0; }
+  .meta { display: block; width: 100%; }
+  .meta-block {
+    display: block;
+    width: 100%;
+    padding: 6px 4px;
+    margin: 0 0 6px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fafafa;
+  }
+  .meta-block:last-child { margin-bottom: 0; }
+  .meta-label {
+    display: block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin: 0 0 3px;
+  }
+  .meta-value {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: #111;
+    line-height: 1.35;
+    word-break: break-word;
+  }
+  .meta-value.strong { font-size: 13px; font-weight: 800; }
+  .muted { color: #555; font-size: 10px; font-weight: 500; }
+  table.items {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    font-size: 10px;
+  }
+  col.c-item { width: 44%; }
+  col.c-qty { width: 12%; }
+  col.c-rate { width: 22%; }
+  col.c-total { width: 22%; }
+  table.items th {
+    font-weight: 700;
+    border-bottom: 1.5px solid #222;
+    padding: 4px 2px 5px;
+    vertical-align: bottom;
+  }
+  table.items td {
+    padding: 6px 2px;
+    vertical-align: top;
+    border-bottom: 1px dotted #ccc;
+  }
+  .col-item { text-align: left; word-wrap: break-word; overflow-wrap: anywhere; }
+  .col-qty, .col-rate, .col-total {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .item-name { font-weight: 700; line-height: 1.25; }
+  .variant { color: #555; font-size: 9px; margin-top: 2px; font-weight: 600; }
+  .summary { padding: 2px 0; width: 100%; }
+  .sum-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin: 4px 0;
+    font-size: 11px;
+    width: 100%;
+  }
+  .sum-row span:last-child {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+  .sum-total {
+    font-size: 13px;
+    font-weight: 800;
+    border-top: 1.5px solid #222;
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+  .sum-total span:last-child { font-weight: 800; }
+  .sum-change { font-weight: 700; }
+  .sum-due { font-weight: 700; color: #9a3412; }
+  .footer { text-align: center; padding: 2px 2px; }
+  .footer-note { font-size: 11px; font-weight: 700; margin: 4px 0; }
+  .policy { font-size: 9px; color: #555; line-height: 1.4; margin: 4px 0 0; }
+  .invoice-barcode {
+    text-align: center;
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px dashed #888;
+  }
+  .barcode-caption {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #666;
+    margin-bottom: 6px;
+  }
+  .barcode-wrap { display: flex; justify-content: center; width: 100%; }
+  .barcode-wrap svg { max-width: 100%; height: auto; }
+  .barcode-fallback {
+    font-family: ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px;
+  }
+  .credit {
+    font-size: 9px;
+    font-weight: 600;
+    color: #333;
+    margin-top: 10px;
+    text-align: center;
+    line-height: 1.35;
+  }
+  `;
 
   if (isA4) {
     return `<!DOCTYPE html><html><head><title>Invoice ${escapeHtml(invoice.invoiceNumber)}</title>
 <style>
-  @page { size: A4; margin: 12mm; }
-  body { font-family: Arial, sans-serif; color: #111; margin: 0; }
-  .invoice { max-width: 180mm; margin: 0 auto; }
-  h1 { font-size: 18pt; margin: 0 0 4px; }
-  .tagline, .address, .phone { font-size: 10pt; color: #444; margin: 2px 0; }
-  .logo { max-height: 48px; margin-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }
-  th, td { border-bottom: 1px solid #ddd; padding: 6px 4px; text-align: left; }
-  th { font-weight: 600; }
-  .num { text-align: right; white-space: nowrap; }
-  .muted { color: #666; font-size: 9pt; }
-  .row { display: flex; justify-content: space-between; margin: 4px 0; font-size: 11pt; }
-  .total { font-weight: 700; font-size: 13pt; }
-  .due { color: #b45309; font-weight: 600; }
-  .footer, .policy { font-size: 9pt; color: #555; margin-top: 8px; }
-  .credit { font-size: 7pt; color: #888; margin-top: 10px; text-align: center; }
+  @page { size: A4; margin: 14mm; }
+  ${sharedCss}
+  .invoice { max-width: 170mm; margin: 0 auto; }
+  .shop-name { font-size: 22pt; }
+  .tagline, .address, .contact { font-size: 10pt; }
+  .meta-block { padding: 10px 12px; margin-bottom: 10px; }
+  .meta-label { font-size: 8pt; }
+  .meta-value { font-size: 12pt; }
+  .meta-value.strong { font-size: 13pt; }
+  table.items { font-size: 10pt; }
+  .variant { font-size: 9pt; }
+  .sum-row { font-size: 11pt; }
+  .sum-total { font-size: 14pt; }
+  .footer-note { font-size: 11pt; }
+  .policy { font-size: 9pt; }
+  .credit { font-size: 9pt; color: #333; }
 </style></head><body>${body}
 <script>window.onload=function(){window.print();};<\/script></body></html>`;
   }
 
-  return `<!DOCTYPE html><html><head><title>Invoice</title>
+  // Thermal: full paper width, centered in print preview window
+  return `<!DOCTYPE html><html><head><title>Invoice ${escapeHtml(invoice.invoiceNumber)}</title>
 <style>
-  * { box-sizing: border-box; }
-  @page { size: ${widthMm}mm auto; margin: 2mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0 auto; width: ${widthMm - 4}mm; max-width: ${widthMm - 4}mm; overflow-x: hidden; }
-  h1 { font-size: 14px; margin: 0 0 2px; text-align: center; word-wrap: break-word; }
-  .tagline, .address, .phone, .customer, .date, .inv-no { text-align: center; margin: 2px 0; word-wrap: break-word; }
-  .logo { display: block; max-height: 36px; max-width: 100%; margin: 0 auto 4px; }
-  table { width: 100%; border-collapse: collapse; margin: 6px 0; font-size: 10px; table-layout: fixed; }
-  th, td { padding: 2px 1px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
-  th { border-bottom: 1px dashed #999; }
-  .num { text-align: right; white-space: nowrap; }
-  .row { display: flex; justify-content: space-between; margin: 2px 0; gap: 4px; }
-  .total { font-weight: 700; font-size: 12px; }
-  .due { font-weight: 600; }
-  .footer, .policy { font-size: 9px; color: #444; margin-top: 6px; text-align: center; word-wrap: break-word; }
-  .credit { font-size: 7px; color: #888; margin-top: 6px; text-align: center; }
-  hr { border: none; border-top: 1px dashed #999; margin: 6px 0; }
+  @page { size: ${widthMm}mm auto; margin: 1.5mm; }
+  html { background: #d0d0d0; }
+  body {
+    width: ${widthMm - 3}mm;
+    max-width: ${widthMm - 3}mm;
+    margin: 0 auto;
+    padding: 1.5mm;
+    overflow-x: hidden;
+    background: #fff;
+  }
+  ${sharedCss}
+  .invoice { width: 100%; max-width: 100%; }
+  @media print {
+    html { background: #fff; }
+    body { width: 100%; max-width: 100%; margin: 0; padding: 0; }
+  }
 </style></head><body>${body}
 <script>window.onload=function(){window.print();};<\/script></body></html>`;
 }
 
 export function printInvoice(invoice: Invoice, settings: BusinessSettings) {
   const html = buildInvoicePrintHtml(invoice, settings);
-  const win = window.open('', '_blank', 'width=480,height=720');
+  const isThermal = settings.receiptSize !== 'A4';
+  const win = window.open('', '_blank', isThermal ? 'width=360,height=780' : 'width=720,height=900');
   if (!win) return;
   win.document.write(html);
   win.document.close();

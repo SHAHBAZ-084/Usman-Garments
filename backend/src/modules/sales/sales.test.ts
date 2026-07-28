@@ -135,6 +135,27 @@ describe('POS sales (Phase 7)', () => {
     await assertVoucherBalanced(invoice.id);
   });
 
+  it('accepts cash overpayment and returns change on invoice', async () => {
+    const product = await createProduct({
+      name: `${PREFIX}Change ${runId}`,
+      salePrice: 750,
+      openingStock: 3,
+    });
+
+    const invoice = await createSale({
+      items: [{ productId: product.id, quantity: 1 }],
+      paymentMethod: SalePaymentMethod.CASH,
+      amountReceived: 1000,
+      createdById: userId,
+    });
+
+    expect(invoice.totalAmount).toBe(750);
+    expect(invoice.amountReceived).toBe(1000);
+    expect(invoice.paidAmount).toBe(750);
+    expect(invoice.remainingAmount).toBe(0);
+    expect(invoice.changeAmount).toBe(250);
+  });
+
   it('reduces variant stock and posts COGS/inventory legs', async () => {
     const product = await createProduct({
       name: `${PREFIX}Variant ${runId}`,
