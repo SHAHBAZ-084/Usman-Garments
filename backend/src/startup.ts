@@ -1,14 +1,16 @@
-import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { getDatabasePath, getDatabaseUrl, isAppDataMode } from './config/paths';
 import { ensureRequiredSchemaColumns } from './lib/ensure-schema';
 import { logger } from './lib/logger';
+import {
+  hasPendingMigrationsLocal,
+  migrateDeployLocal,
+  resolveMigrationsDir,
+} from './lib/migrate-local';
 import { configureSqlite, prisma } from './lib/prisma';
-import { withWindowsSafeShellEnv } from './lib/shell-env';
 import { runDailyBackupIfNeeded, runPreMigrationBackup } from './modules/backup/backup.service';
 
-const BACKEND_ROOT = path.resolve(__dirname, '..');
 const CORE_TABLE = 'BusinessSettings';
 
 export class DatabaseMigrationError extends Error {
@@ -16,31 +18,6 @@ export class DatabaseMigrationError extends Error {
     super(message);
     this.name = 'DatabaseMigrationError';
   }
-}
-
-function runPrismaCommand(args: string): string {
-  const appRoot = path.resolve(BACKEND_ROOT, '..');
-  const bundled = path.join(appRoot, 'node_modules', 'prisma', 'build', 'index.js');
-
-  const fixedEnv = withWindowsSafeShellEnv(process.env, {
-    DATABASE_URL: getDatabaseUrl(),
-  });
-
-  if (fs.existsSync(bundled)) {
-    return execSync(`"${process.execPath}" "${bundled}" ${args}`, {
-      cwd: BACKEND_ROOT,
-      env: { ...fixedEnv, ELECTRON_RUN_AS_NODE: '1' },
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-  }
-
-  return execSync(`npx prisma ${args}`, {
-    cwd: BACKEND_ROOT,
-    env: fixedEnv,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
 }
 
 async function coreTableExists(): Promise<boolean> {
@@ -58,16 +35,17 @@ async function coreTableExists(): Promise<boolean> {
   }
 }
 
-function showMigrationFailureDialog() {
+function showMigrationFailureDialog(detail?: string) {
   try {
     // Available when backend is loaded inside the Electron main process.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const electron = require('electron') as {
       dialog?: { showErrorBox: (title: string, content: string) => void };
     };
+    const extra = detail ? `\n\nDetails: ${detail.slice(0, 400)}` : '';
     electron.dialog?.showErrorBox(
       'Database update failed',
-      'Update failed to apply database changes. Please contact support.',
+      `Update failed to apply database changes. Please contact support.${extra}`,
     );
   } catch {
     // Not running inside Electron (e.g. `npm run dev -w backend`).
@@ -76,7 +54,6 @@ function showMigrationFailureDialog() {
 
 async function runMigrations(): Promise<void> {
   const dbExists = fs.existsSync(getDatabasePath());
-  // Always snapshot before migrate when a DB already exists (update / repair path).
   if (dbExists) {
     try {
       await runPreMigrationBackup();
@@ -84,17 +61,18 @@ async function runMigrations(): Promise<void> {
       logger.error('Pre-migration backup failed', {
         error: err instanceof Error ? err.message : String(err),
       });
-      // Still attempt migrate — backup failure shouldn't block schema repair forever,
-      // but log loudly. First-run empty DB skips backup above.
     }
   }
 
   try {
-    runPrismaCommand('migrate deploy');
+    const migrationsDir = resolveMigrationsDir();
+    logger.info('Running in-process migrate deploy', { migrationsDir });
+    const result = await migrateDeployLocal();
+    logger.info('Migrate deploy finished', { applied: result.applied });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error('migrate deploy failed', { error: message });
-    showMigrationFailureDialog();
+    showMigrationFailureDialog(message);
     throw new DatabaseMigrationError(
       'Update failed to apply database changes. Please contact support.',
       err,
@@ -109,7 +87,6 @@ export async function runStartupTasks(): Promise<void> {
   const dataRoot = path.dirname(getDatabasePath());
   fs.mkdirSync(dataRoot, { recursive: true });
 
-  // Never rely solely on migrate status — if the core table is gone, force deploy.
   const dbExists = fs.existsSync(getDatabasePath());
   const hasCore = await coreTableExists();
   if (!hasCore) {
@@ -118,12 +95,20 @@ export async function runStartupTasks(): Promise<void> {
       appDataMode: isAppDataMode(),
     });
     await runMigrations();
-  } else if (hasPendingMigrations()) {
-    logger.info('Pending migrations detected — backing up then migrate deploy');
-    await runMigrations();
+  } else {
+    try {
+      if (await hasPendingMigrationsLocal()) {
+        logger.info('Pending migrations detected — backing up then migrate deploy');
+        await runMigrations();
+      }
+    } catch (err) {
+      logger.error('migrate status check failed — forcing migrate deploy', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await runMigrations();
+    }
   }
 
-  // Always reconcile critical columns (covers migrate lock / partial apply)
   try {
     await ensureRequiredSchemaColumns();
   } catch (err) {
@@ -138,7 +123,6 @@ export async function runStartupTasks(): Promise<void> {
     logger.warn('Daily backup skipped', { error: err instanceof Error ? err.message : String(err) });
   }
 
-  // Final safety net before the server listens: prove the core table is queryable.
   try {
     await prisma.$queryRawUnsafe(`SELECT 1 FROM ${CORE_TABLE} LIMIT 1`);
   } catch (err) {
@@ -150,29 +134,12 @@ export async function runStartupTasks(): Promise<void> {
     } catch (retryErr) {
       const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
       logger.error('Core table still missing after forced migrate deploy', { error: retryMessage });
-      showMigrationFailureDialog();
+      showMigrationFailureDialog(retryMessage);
       throw new DatabaseMigrationError(
         'Update failed to apply database changes. Please contact support.',
         retryErr,
       );
     }
-  }
-}
-
-function hasPendingMigrations(): boolean {
-  try {
-    const out = runPrismaCommand('migrate status');
-    return /following migration have not yet been applied/i.test(out);
-  } catch (err) {
-    logger.error('migrate status check failed', {
-      error: err instanceof Error ? err.message : String(err),
-      stderr:
-        err && typeof err === 'object' && 'stderr' in err
-          ? String((err as { stderr?: unknown }).stderr ?? '')
-          : undefined,
-    });
-    // Fail-safe: assume migrations are pending and force deploy.
-    return true;
   }
 }
 

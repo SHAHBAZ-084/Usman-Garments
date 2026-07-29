@@ -73,12 +73,20 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "backend/prisma",
+        "to": "prisma",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "asarUnpack": [
       "**/node_modules/@prisma/**",
       "**/node_modules/.prisma/**",
-      "**/node_modules/prisma/**"
+      "**/node_modules/prisma/**",
+      "**/backend/prisma/**"
     ],
     "win": {
       "target": [
