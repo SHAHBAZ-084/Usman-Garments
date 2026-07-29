@@ -58,3 +58,34 @@ Double-entry accounting under `/api/accounting/*`:
 - Default categories on first run: **Bank** and **Cash** (with Cash in Hand account)
 
 Business settings (name, logo, invoice options, theme) live under `/api/settings`.
+
+## Auto-updates (desktop)
+
+Installed Windows builds check GitHub Releases for a newer `package.json` version via `electron-updater`.
+
+### Release a new version
+
+1. Bump `"version"` in the root `package.json` (this drives update detection).
+2. If the database schema changed, create a Prisma migration under `backend/prisma/migrations/` and commit it with the release.
+3. Commit and push to `main` on GitHub.
+4. Publish the Windows installer (requires a GitHub token with `repo` scope):
+
+```bash
+# PowerShell
+$env:GH_TOKEN = "ghp_..."   # or GITHUB_TOKEN
+npm run dist:win -- --publish always
+```
+
+This uploads `Usman-Mall-Setup-<version>.exe` and `latest.yml` to a GitHub Release tagged with that version.
+
+### What happens on the user’s PC
+
+1. App detects a newer Release → shows **Update Available**.
+2. After download → button becomes **Restart to Update**.
+3. Click installs the new build and restarts.
+4. On next launch, `backend/src/startup.ts`:
+   - Detects pending migrations (or missing core tables)
+   - Runs a **pre-migration backup** of the existing SQLite DB
+   - Applies `prisma migrate deploy`
+   - Verifies `BusinessSettings` is queryable before serving traffic
+5. Existing shop data is preserved (migrations are additive). If migrate fails, the user gets an error dialog instead of a silently broken app.

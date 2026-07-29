@@ -1,11 +1,14 @@
+import fs from 'fs';
+import path from 'path';
 import bcrypt from 'bcryptjs';
 import { FinancialYearStatus, PrismaClient } from '@prisma/client';
 import {
   bootstrapChartOfAccounts,
   fiscalYearLabelForDate,
 } from '../src/modules/accounting/accounting.service';
+import { getUploadsDir } from '../src/config/paths';
 import { ensureDeveloperPassphraseHash } from '../src/modules/settings/identity-access.service';
-import { ensureBusinessSettings } from '../src/modules/settings/settings.service';
+import { BUSINESS_SETTINGS_ID, ensureBusinessSettings } from '../src/modules/settings/settings.service';
 
 const prisma = new PrismaClient();
 
@@ -58,6 +61,26 @@ async function main() {
   await ensureBusinessSettings();
   await ensureDeveloperPassphraseHash();
   console.log('Business settings ensured.');
+
+  const settings = await prisma.businessSettings.findUnique({ where: { id: BUSINESS_SETTINGS_ID } });
+  if (settings && !settings.logoPath) {
+    const defaultLogoCandidates = [
+      path.resolve(__dirname, '../../frontend/public/logo.png'),
+      path.resolve(__dirname, '../assets/default-logo.png'),
+    ];
+    const source = defaultLogoCandidates.find((candidate) => fs.existsSync(candidate));
+    if (source) {
+      const uploadsDir = getUploadsDir();
+      const filename = 'logo-default.png';
+      const dest = path.join(uploadsDir, filename);
+      fs.copyFileSync(source, dest);
+      await prisma.businessSettings.update({
+        where: { id: BUSINESS_SETTINGS_ID },
+        data: { logoPath: path.join('uploads', filename) },
+      });
+      console.log('Default shop logo seeded.');
+    }
+  }
 
   const { ensureDefaultProductCategories } = await import('../src/modules/products/products.service');
   await ensureDefaultProductCategories();

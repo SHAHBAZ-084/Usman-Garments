@@ -1,6 +1,9 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../lib/api';
+
+const FALLBACK_LOGO = '/logo.png';
 
 export function LoginPage() {
   const { user, login } = useAuth();
@@ -8,6 +11,25 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [logoSrc, setLogoSrc] = useState<string | null>(FALLBACK_LOGO);
+  const [logoFailed, setLogoFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getSettings()
+      .then((settings) => {
+        if (cancelled) return;
+        if (settings.logoUrl) {
+          setLogoSrc(settings.logoUrl);
+          setLogoFailed(false);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (user) {
     return <Navigate to="/" replace />;
@@ -31,8 +53,24 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface3 px-4">
       <div className="w-full max-w-md rounded-2xl border border-border bg-surface2 p-8 shadow-xl">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full app-topnav text-xl font-semibold text-white">
-            UM
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center overflow-hidden rounded-full app-topnav text-xl font-semibold text-white">
+            {logoSrc && !logoFailed ? (
+              <img
+                src={logoSrc}
+                alt="Usman Mall"
+                className="h-full w-full object-cover"
+                onError={() => {
+                  if (logoSrc !== FALLBACK_LOGO) {
+                    setLogoSrc(FALLBACK_LOGO);
+                    setLogoFailed(false);
+                  } else {
+                    setLogoFailed(true);
+                  }
+                }}
+              />
+            ) : (
+              <span aria-hidden>UM</span>
+            )}
           </div>
           <h1 className="text-2xl font-semibold text-textPrimary">Usman Mall</h1>
           <p className="mt-2 text-sm text-textMuted">Quality Clothes, Your Style</p>

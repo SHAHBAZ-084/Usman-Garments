@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import { getDatabaseUrl } from './config/paths';
 import { createApp } from './app';
 import { env } from './config/env';
-import { registerShutdownHooks, runStartupTasks } from './startup';
+import { DatabaseMigrationError, registerShutdownHooks, runStartupTasks } from './startup';
 
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 process.env.DATABASE_URL = getDatabaseUrl();
@@ -20,6 +20,11 @@ runStartupTasks()
   })
   .catch((err) => {
     console.error('Startup failed:', err);
+    // Migration failures already showed Electron dialog from startup.ts.
+    // Do not start serving with a broken schema.
+    if (err instanceof DatabaseMigrationError || err?.name === 'DatabaseMigrationError') {
+      process.exit(1);
+    }
     process.exit(1);
   });
 

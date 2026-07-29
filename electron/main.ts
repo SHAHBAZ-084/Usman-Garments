@@ -1,4 +1,6 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
+import { autoUpdater } from 'electron-updater';
+import fs from 'fs';
 import Module from 'module';
 import path from 'path';
 
@@ -6,6 +8,10 @@ const isDev = process.env.NODE_ENV === 'development';
 const BACKEND_PORT = process.env.PORT ?? '3847';
 
 let mainWindow: BrowserWindow | null = null;
+
+function logError(message: string, meta?: Record<string, unknown>) {
+  console.error(message, meta ?? '');
+}
 
 /** Ensure backend can resolve hoisted production deps from app root node_modules. */
 function configureBackendModulePaths(): void {
@@ -30,13 +36,37 @@ async function startBackend(): Promise<void> {
   await import(backendEntry);
 }
 
+async function backendIsHealthy(): Promise<boolean> {
+  const url = `http://127.0.0.1:${BACKEND_PORT}/api/health`;
+  try {
+    const response = await fetch(url);
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+function getAppIconPath(): string {
+  const candidates = [
+    // Packaged: copied via extraResources (real filesystem path for Windows shell)
+    path.join(process.resourcesPath, 'icon.ico'),
+    // Packaged / asar-relative fallback
+    path.join(__dirname, '../build/icon.ico'),
+    // Dev: project build folder
+    path.join(__dirname, '../../build/icon.ico'),
+  ];
+  return candidates.find((p) => fs.existsSync(p)) ?? candidates[1];
+}
+
 function createWindow(): void {
+  const iconPath = getAppIconPath();
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1024,
     minHeight: 700,
     title: 'Usman Mall',
+    icon: iconPath,
     show: false,
     backgroundColor: '#F7F7F7',
     webPreferences: {
@@ -76,6 +106,31 @@ function createWindow(): void {
   });
 }
 
+function setupAutoUpdater(): void {
+  if (isDev) return;
+
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+
+  autoUpdater.on('update-available', () => {
+    mainWindow?.webContents.send('update-available');
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update-ready');
+  });
+
+  autoUpdater.on('error', (err) => {
+    logError('Auto-update failed', { error: err.message });
+  });
+
+  void autoUpdater.checkForUpdates().catch((err: unknown) => {
+    logError('Auto-update check failed', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+}
+
 ipcMain.handle('restart-app', () => {
   app.relaunch();
   app.exit(0);
@@ -83,14 +138,51 @@ ipcMain.handle('restart-app', () => {
 
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 
-app.whenReady().then(async () => {
-  await startBackend();
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
+});
 
+app.whenReady().then(async () => {
   if (!isDev) {
-    await waitForBackend();
+    // Prevent EADDRINUSE crashes when multiple instances are launched:
+    // if another instance already started the backend on the same port,
+    // just reuse it instead of trying to bind again.
+    const running = await backendIsHealthy();
+    if (!running) {
+      try {
+        await startBackend();
+      } catch (err) {
+        logError('Backend start failed', {
+          error: err instanceof Error ? err.message : String(err),
+        });
+        dialog.showErrorBox(
+          'Database update failed',
+          'Update failed to apply database changes. Please contact support.',
+        );
+        app.quit();
+        return;
+      }
+    }
+
+    try {
+      await waitForBackend();
+    } catch (err) {
+      logError('Backend health check failed', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      dialog.showErrorBox(
+        'Startup failed',
+        'The application server did not start. Please contact support.',
+      );
+      app.quit();
+      return;
+    }
+  } else {
+    await startBackend();
   }
 
   createWindow();
+  setupAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -25,6 +25,7 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "multer": "^2.2.0",
@@ -37,12 +38,15 @@
     "cross-env": "^7.0.3",
     "electron": "^34.0.0",
     "electron-builder": "^25.1.8",
+    "rcedit": "^5.0.2",
     "typescript": "^5.7.3",
     "wait-on": "^8.0.1"
   },
   "build": {
     "appId": "com.usmanmall.desktop",
     "productName": "Usman Mall",
+    "icon": "build/icon.ico",
+    "afterPack": "./scripts/after-pack.js",
     "directories": {
       "output": "release"
     },
@@ -56,10 +60,19 @@
       "backend/prisma/migrations/**/*",
       "backend/package.json",
       "package.json",
+      "build/icon.ico",
       {
         "from": "node_modules/.prisma",
         "to": "node_modules/.prisma",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
       }
     ],
     "asarUnpack": [
@@ -68,13 +81,28 @@
       "**/node_modules/prisma/**"
     ],
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
       "artifactName": "Usman-Mall-Setup-${version}.${ext}",
       "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
-    }
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "SHAHBAZ-084",
+        "repo": "Usman-Garments"
+      }
+    ]
   }
 }

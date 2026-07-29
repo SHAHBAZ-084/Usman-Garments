@@ -1,12 +1,15 @@
 node_modules/
 dist/
 dist-electron/
+release/
 *.db
 *.db-journal
+*.db-shm
+*.db-wal
 *.backup-*.db
 .env
 .env.local
 .DS_Store
 Thumbs.db
-backend/prisma/data/uploads/
+backend/prisma/data/
 backend/.vitest-test-env.json

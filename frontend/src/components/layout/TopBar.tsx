@@ -5,6 +5,7 @@ import { TOP_NAV, NavItem } from '../../config/navigation';
 import { NAV_GROUP_ICONS, navLinkIcon } from '../../config/navIcons';
 import { api } from '../../lib/api';
 import { voucherTypeColorClass } from '../../lib/format';
+import { UpdateBanner } from '../UpdateBanner';
 
 function voucherNavLabelClass(label: string) {
   if (label.startsWith('Payment')) return voucherTypeColorClass('PAYMENT');
@@ -161,6 +162,9 @@ export function TopBar() {
             ),
           )}
         </nav>
+        <div className="ml-auto shrink-0 pl-2">
+          <UpdateBanner />
+        </div>
       </div>
     </header>
   );
