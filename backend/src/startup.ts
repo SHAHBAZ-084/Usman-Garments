@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { getDatabasePath, getDatabaseUrl, isAppDataMode } from './config/paths';
 import { ensureRequiredSchemaColumns } from './lib/ensure-schema';
+import { ensureFirstRunDefaults } from './lib/first-run';
 import { logger } from './lib/logger';
 import {
   hasPendingMigrationsLocal,
@@ -113,6 +114,14 @@ export async function runStartupTasks(): Promise<void> {
     await ensureRequiredSchemaColumns();
   } catch (err) {
     logger.warn('Schema column ensure skipped', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+
+  try {
+    await ensureFirstRunDefaults();
+  } catch (err) {
+    logger.error('First-run defaults failed', {
       error: err instanceof Error ? err.message : String(err),
     });
   }
