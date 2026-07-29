@@ -36,8 +36,14 @@ function record(id: string, name: string, pass: boolean, evidence: string) {
 }
 
 function setupFreshDb() {
-  execSync('npx prisma migrate deploy', { cwd: BACKEND_ROOT, env: process.env, stdio: 'pipe' });
-  execSync('npx tsx prisma/seed.ts', { cwd: BACKEND_ROOT, env: process.env, stdio: 'pipe' });
+  const systemRoot = process.env.SystemRoot || 'C:\\Windows';
+  const env = {
+    ...process.env,
+    ComSpec: process.env.ComSpec || path.join(systemRoot, 'System32', 'cmd.exe'),
+    PATH: [process.env.PATH || '', path.join(systemRoot, 'System32'), systemRoot].join(path.delimiter),
+  };
+  execSync('npx prisma migrate deploy', { cwd: BACKEND_ROOT, env, stdio: 'pipe' });
+  execSync('npx tsx prisma/seed.ts', { cwd: BACKEND_ROOT, env, stdio: 'pipe' });
 }
 
 async function auditAllVouchers() {

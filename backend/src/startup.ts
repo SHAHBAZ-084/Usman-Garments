@@ -5,6 +5,7 @@ import { getDatabasePath, getDatabaseUrl, isAppDataMode } from './config/paths';
 import { ensureRequiredSchemaColumns } from './lib/ensure-schema';
 import { logger } from './lib/logger';
 import { configureSqlite, prisma } from './lib/prisma';
+import { withWindowsSafeShellEnv } from './lib/shell-env';
 import { runDailyBackupIfNeeded, runPreMigrationBackup } from './modules/backup/backup.service';
 
 const BACKEND_ROOT = path.resolve(__dirname, '..');
@@ -21,14 +22,14 @@ function runPrismaCommand(args: string): string {
   const appRoot = path.resolve(BACKEND_ROOT, '..');
   const bundled = path.join(appRoot, 'node_modules', 'prisma', 'build', 'index.js');
 
+  const fixedEnv = withWindowsSafeShellEnv(process.env, {
+    DATABASE_URL: getDatabaseUrl(),
+  });
+
   if (fs.existsSync(bundled)) {
     return execSync(`"${process.execPath}" "${bundled}" ${args}`, {
       cwd: BACKEND_ROOT,
-      env: {
-        ...process.env,
-        ELECTRON_RUN_AS_NODE: '1',
-        DATABASE_URL: getDatabaseUrl(),
-      },
+      env: { ...fixedEnv, ELECTRON_RUN_AS_NODE: '1' },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -36,7 +37,7 @@ function runPrismaCommand(args: string): string {
 
   return execSync(`npx prisma ${args}`, {
     cwd: BACKEND_ROOT,
-    env: { ...process.env, DATABASE_URL: getDatabaseUrl() },
+    env: fixedEnv,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });

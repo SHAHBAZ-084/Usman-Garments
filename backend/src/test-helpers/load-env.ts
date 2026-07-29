@@ -1,6 +1,7 @@
 import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { withWindowsSafeShellEnv } from '../lib/shell-env';
 
 const BACKEND_ROOT = path.resolve(__dirname, '../..');
 const ENV_FILE = path.join(BACKEND_ROOT, '.vitest-test-env.json');
@@ -30,7 +31,7 @@ async function resetTestDatabase() {
     }
   }
 
-  const env = { ...process.env, DATABASE_URL: databaseUrl };
+  const env = withWindowsSafeShellEnv(process.env, { DATABASE_URL: databaseUrl });
   execSync('npx prisma migrate deploy', { cwd: BACKEND_ROOT, env, stdio: 'pipe' });
   execSync('npx tsx prisma/seed.ts', { cwd: BACKEND_ROOT, env, stdio: 'pipe' });
 

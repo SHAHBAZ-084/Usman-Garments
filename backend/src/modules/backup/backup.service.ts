@@ -11,6 +11,7 @@ import {
 } from '../../config/paths';
 import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
+import { withWindowsSafeShellEnv } from '../../lib/shell-env';
 import { AppError } from '../../utils/helpers';
 import { getBusinessSettings } from '../settings/settings.service';
 
@@ -76,7 +77,10 @@ export async function getFreeDiskSpaceBytes(targetDir: string): Promise<number |
     if (process.platform === 'win32') {
       const drive = path.parse(path.resolve(targetDir)).root.replace('\\', '');
       const ps = `(Get-PSDrive -Name '${drive.replace(':', '')}').Free`;
-      const out = execSync(`powershell -NoProfile -Command "${ps}"`, { encoding: 'utf8' }).trim();
+      const out = execSync(`powershell -NoProfile -Command "${ps}"`, {
+        encoding: 'utf8',
+        env: withWindowsSafeShellEnv(),
+      }).trim();
       const n = Number(out);
       return Number.isFinite(n) ? n : null;
     }
@@ -239,7 +243,17 @@ export async function runDailyBackupIfNeeded(): Promise<BackupEntry | null> {
   return entry;
 }
 
-export async function runPreMigrationBackup(): Promise<BackupEntry> {
+export async function runPreMigrationBackup(): Promise<BackupEntry | null> {
+  // Empty / half-created DBs have no tables yet — nothing to snapshot, and
+  // querying BusinessSettings would throw and block migrate deploy.
+  const tableCheck = await prisma.$queryRawUnsafe<{ name: string }[]>(
+    `SELECT name FROM sqlite_master WHERE type='table' LIMIT 1`,
+  );
+  if (!tableCheck.length) {
+    logger.info('Pre-migration backup skipped — database has no tables yet');
+    return null;
+  }
+
   return createBackup({ label: 'Pre-migration safety backup', automatic: false });
 }
 
