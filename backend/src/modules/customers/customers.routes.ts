@@ -14,6 +14,7 @@ const createSchema = z.object({
   phone: z.string().max(40).optional(),
   address: z.string().max(500).nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
+  openingBalance: z.number().min(0).optional(),
 });
 
 const updateSchema = z.object({

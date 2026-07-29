@@ -46,6 +46,14 @@ const updateSchema = z.object({
   lowStockLimit: z.number().int().positive().optional(),
   backupFolderPath: z.string().max(500).optional(),
   developerCreditLine: z.string().max(200).optional(),
+  primaryColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Primary color must be hex like #111111')
+    .optional(),
+  secondaryColor: z
+    .string()
+    .regex(/^#[0-9A-Fa-f]{6}$/, 'Secondary color must be hex like #C99618')
+    .optional(),
   themeMode: z
     .union([z.nativeEnum(ThemeMode), z.enum(['light', 'dark'])])
     .optional()

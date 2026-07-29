@@ -144,6 +144,7 @@ export function CustomerFormPage({ mode }: { mode: 'add' | 'edit' }) {
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [openingBalance, setOpeningBalance] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -175,6 +176,7 @@ export function CustomerFormPage({ mode }: { mode: 'add' | 'edit' }) {
           phone,
           address: address.trim() || null,
           notes: notes.trim() || null,
+          openingBalance: openingBalance.trim() ? Number(openingBalance) : 0,
         });
         navigate(`/customers/${created.id}`);
       } else if (id) {
@@ -222,6 +224,22 @@ export function CustomerFormPage({ mode }: { mode: 'add' | 'edit' }) {
             <FieldLabel>Notes (optional)</FieldLabel>
             <TextInput value={notes} onChange={(e) => setNotes(e.target.value)} />
           </div>
+          {mode === 'add' ? (
+            <div>
+              <FieldLabel>Opening balance / prior udhaar (optional)</FieldLabel>
+              <TextInput
+                type="number"
+                min={0}
+                step="0.01"
+                value={openingBalance}
+                onChange={(e) => setOpeningBalance(e.target.value)}
+                placeholder="0 if starting fresh"
+              />
+              <p className="mt-1 text-xs text-textMuted">
+                Amount this customer already owed before using Usman Mall — leave blank for zero.
+              </p>
+            </div>
+          ) : null}
           {mode === 'edit' ? (
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />

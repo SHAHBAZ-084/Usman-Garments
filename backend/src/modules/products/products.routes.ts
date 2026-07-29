@@ -55,16 +55,22 @@ const commitImportSchema = z.object({
     z.object({
       name: z.string().min(1),
       category: z.string().min(1),
-      salePrice: z.number().min(0),
-      purchasePrice: z.number().min(0),
+      salePrice: z.number().min(0).optional().default(0),
+      purchasePrice: z.number().min(0).optional().default(0),
       totalStock: z.number().int().min(0),
-      variants: z.array(
-        z.object({
-          size: z.string().nullable(),
-          colour: z.string().nullable(),
-          stock: z.number().int().min(0),
-        }),
-      ),
+      needsVariants: z.boolean().optional(),
+      mergeIntoProductId: z.number().int().positive().optional(),
+      action: z.enum(['create', 'merge']).optional().default('create'),
+      variants: z
+        .array(
+          z.object({
+            size: z.string().nullable(),
+            colour: z.string().nullable(),
+            stock: z.number().int().min(0),
+          }),
+        )
+        .optional()
+        .default([]),
     }),
   ),
 });

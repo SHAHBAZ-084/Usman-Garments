@@ -15,6 +15,12 @@ import { PROTECTED_SETTINGS_FIELD_KEYS } from '../../config/protectedSettingsFie
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAccessComboListener } from '../../hooks/useAccessComboListener';
 import { api, type BusinessSettings } from '../../lib/api';
+import {
+  contrastingTextColor,
+  DEFAULT_PRIMARY_COLOR,
+  DEFAULT_SECONDARY_COLOR,
+  normalizeHexColor,
+} from '../../lib/brandColors';
 
 const emptyForm = {
   businessName: 'Usman Mall',
@@ -36,10 +42,12 @@ const emptyForm = {
   lowStockLimit: 5,
   backupFolderPath: '',
   themeMode: 'light' as BusinessSettings['themeMode'],
+  primaryColor: DEFAULT_PRIMARY_COLOR,
+  secondaryColor: DEFAULT_SECONDARY_COLOR,
 };
 
 export function SettingsPage() {
-  const { theme, setTheme, refreshThemeFromServer } = useTheme();
+  const { theme, setTheme, refreshThemeFromServer, applyBrandTheme } = useTheme();
   const [form, setForm] = useState(emptyForm);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,6 +63,9 @@ export function SettingsPage() {
   const [currentPassphrase, setCurrentPassphrase] = useState('');
   const [newPassphrase, setNewPassphrase] = useState('');
   const [passphraseMessage, setPassphraseMessage] = useState('');
+  const [themeDraftPrimary, setThemeDraftPrimary] = useState(DEFAULT_PRIMARY_COLOR);
+  const [themeDraftSecondary, setThemeDraftSecondary] = useState(DEFAULT_SECONDARY_COLOR);
+  const [themeBusy, setThemeBusy] = useState(false);
 
   const refreshAccessStatus = useCallback(async () => {
     try {
@@ -160,10 +171,19 @@ export function SettingsPage() {
           lowStockLimit: settings.lowStockLimit,
           backupFolderPath: settings.backupFolderPath,
           themeMode: settings.themeMode,
+          primaryColor: settings.primaryColor || DEFAULT_PRIMARY_COLOR,
+          secondaryColor: settings.secondaryColor || DEFAULT_SECONDARY_COLOR,
         });
+        setThemeDraftPrimary(settings.primaryColor || DEFAULT_PRIMARY_COLOR);
+        setThemeDraftSecondary(settings.secondaryColor || DEFAULT_SECONDARY_COLOR);
         setLogoUrl(settings.logoUrl);
         if (settings.themeMode !== theme) {
           await refreshThemeFromServer();
+        } else {
+          applyBrandTheme(
+            settings.primaryColor || DEFAULT_PRIMARY_COLOR,
+            settings.secondaryColor || DEFAULT_SECONDARY_COLOR,
+          );
         }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load settings');
@@ -186,7 +206,7 @@ export function SettingsPage() {
     setMessage('');
     setSaving(true);
     try {
-      const payload: Partial<typeof form> & { printerName: string | null; themeMode: 'light' | 'dark' } = {
+      const payload: Record<string, unknown> = {
         invoiceFooter: form.invoiceFooter,
         returnPolicy: form.returnPolicy,
         invoicePrefix: form.invoicePrefix,
@@ -202,14 +222,14 @@ export function SettingsPage() {
 
       if (identityEditActive) {
         for (const key of PROTECTED_SETTINGS_FIELD_KEYS) {
-          if (key === 'logoPath') continue;
+          if (key === 'logoPath' || key === 'primaryColor' || key === 'secondaryColor') continue;
           if (key in form) {
-            (payload as Record<string, unknown>)[key] = form[key as keyof typeof form];
+            payload[key] = form[key as keyof typeof form];
           }
         }
       }
 
-      const saved = await api.updateSettings(payload);
+      const saved = await api.updateSettings(payload as Parameters<typeof api.updateSettings>[0]);
       setForm((prev) => ({
         ...prev,
         businessName: saved.businessName,
@@ -230,7 +250,14 @@ export function SettingsPage() {
         lowStockLimit: saved.lowStockLimit,
         backupFolderPath: saved.backupFolderPath,
         themeMode: saved.themeMode,
+        primaryColor: saved.primaryColor || DEFAULT_PRIMARY_COLOR,
+        secondaryColor: saved.secondaryColor || DEFAULT_SECONDARY_COLOR,
       }));
+      setThemeDraftPrimary(saved.primaryColor || DEFAULT_PRIMARY_COLOR);
+      setThemeDraftSecondary(saved.secondaryColor || DEFAULT_SECONDARY_COLOR);
+      if (saved.primaryColor && saved.secondaryColor) {
+        applyBrandTheme(saved.primaryColor, saved.secondaryColor);
+      }
       setLogoUrl(saved.logoUrl);
       setMessage('Settings saved.');
       window.dispatchEvent(new CustomEvent('usman-mall-settings-updated'));
@@ -238,6 +265,58 @@ export function SettingsPage() {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onApplyTheme() {
+    if (!identityEditActive) return;
+    const primary = normalizeHexColor(themeDraftPrimary);
+    const secondary = normalizeHexColor(themeDraftSecondary);
+    if (!primary || !secondary) {
+      setError('Primary and secondary colors must be hex values like #111111');
+      return;
+    }
+    setThemeBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const saved = await api.updateSettings({ primaryColor: primary, secondaryColor: secondary });
+      patchField('primaryColor', saved.primaryColor || primary);
+      patchField('secondaryColor', saved.secondaryColor || secondary);
+      applyBrandTheme(saved.primaryColor || primary, saved.secondaryColor || secondary);
+      setMessage('Theme colors applied.');
+      window.dispatchEvent(new CustomEvent('usman-mall-settings-updated'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to apply theme');
+    } finally {
+      setThemeBusy(false);
+    }
+  }
+
+  async function onResetTheme() {
+    if (!identityEditActive) return;
+    setThemeDraftPrimary(DEFAULT_PRIMARY_COLOR);
+    setThemeDraftSecondary(DEFAULT_SECONDARY_COLOR);
+    setThemeBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const saved = await api.updateSettings({
+        primaryColor: DEFAULT_PRIMARY_COLOR,
+        secondaryColor: DEFAULT_SECONDARY_COLOR,
+      });
+      patchField('primaryColor', saved.primaryColor || DEFAULT_PRIMARY_COLOR);
+      patchField('secondaryColor', saved.secondaryColor || DEFAULT_SECONDARY_COLOR);
+      applyBrandTheme(
+        saved.primaryColor || DEFAULT_PRIMARY_COLOR,
+        saved.secondaryColor || DEFAULT_SECONDARY_COLOR,
+      );
+      setMessage('Theme reset to default black and premium gold.');
+      window.dispatchEvent(new CustomEvent('usman-mall-settings-updated'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset theme');
+    } finally {
+      setThemeBusy(false);
     }
   }
 
@@ -358,6 +437,75 @@ export function SettingsPage() {
                       onChange={(e) => onLogoChange(e.target.files?.[0] ?? null)}
                       className="text-sm text-textSecondary"
                     />
+                  </div>
+                </div>
+
+                <div className="sm:col-span-2 rounded-lg border border-border bg-surface1 p-3">
+                  <h3 className="mb-2 text-sm font-semibold">Brand colors</h3>
+                  <p className="mb-3 text-xs text-textMuted">
+                    Primary is the main brand color (sidebar). Secondary is the accent. Defaults: black + premium gold.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <FieldLabel>Primary color</FieldLabel>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={normalizeHexColor(themeDraftPrimary) ?? DEFAULT_PRIMARY_COLOR}
+                          onChange={(e) => setThemeDraftPrimary(e.target.value.toUpperCase())}
+                          className="h-10 w-12 cursor-pointer rounded border border-border bg-transparent"
+                        />
+                        <TextInput
+                          value={themeDraftPrimary}
+                          onChange={(e) => setThemeDraftPrimary(e.target.value)}
+                          placeholder="#111111"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <FieldLabel>Secondary color</FieldLabel>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={normalizeHexColor(themeDraftSecondary) ?? DEFAULT_SECONDARY_COLOR}
+                          onChange={(e) => setThemeDraftSecondary(e.target.value.toUpperCase())}
+                          className="h-10 w-12 cursor-pointer rounded border border-border bg-transparent"
+                        />
+                        <TextInput
+                          value={themeDraftSecondary}
+                          onChange={(e) => setThemeDraftSecondary(e.target.value)}
+                          placeholder="#C99618"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <div
+                      className="flex h-12 min-w-[140px] items-center justify-center rounded px-3 text-sm font-medium"
+                      style={{
+                        backgroundColor: normalizeHexColor(themeDraftPrimary) ?? DEFAULT_PRIMARY_COLOR,
+                        color: contrastingTextColor(themeDraftPrimary),
+                      }}
+                    >
+                      Primary preview
+                    </div>
+                    <div
+                      className="flex h-12 min-w-[140px] items-center justify-center rounded px-3 text-sm font-medium"
+                      style={{
+                        backgroundColor: normalizeHexColor(themeDraftSecondary) ?? DEFAULT_SECONDARY_COLOR,
+                        color: contrastingTextColor(themeDraftSecondary),
+                      }}
+                    >
+                      Secondary preview
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <PrimaryButton type="button" onClick={() => void onApplyTheme()} disabled={themeBusy}>
+                      {themeBusy ? 'Applying…' : 'Apply Theme'}
+                    </PrimaryButton>
+                    <SecondaryButton type="button" onClick={() => void onResetTheme()} disabled={themeBusy}>
+                      Reset to Default
+                    </SecondaryButton>
                   </div>
                 </div>
               </div>

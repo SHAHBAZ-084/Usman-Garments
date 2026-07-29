@@ -41,6 +41,8 @@ describe('identity access (developer edit mode)', () => {
       'address',
       'logoPath',
       'developerCreditLine',
+      'primaryColor',
+      'secondaryColor',
     ]);
   });
 

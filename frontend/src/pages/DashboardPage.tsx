@@ -405,6 +405,7 @@ export function DashboardPage() {
 
         <Panel>
           <h2 className="mb-3 text-sm font-semibold">Low stock</h2>
+          <p className="mb-2 text-xs text-textMuted">Items at or below the low-stock limit (includes out of stock).</p>
           {dash?.lowStockProducts.length ? (
             <ul className="space-y-2 text-sm">
               {dash.lowStockProducts.map((p) => (
@@ -412,7 +413,9 @@ export function DashboardPage() {
                   <Link to={`/products/${p.id}`} className="truncate hover:underline">
                     {p.name}
                   </Link>
-                  <span className="font-medium text-warning">{p.currentStock} left</span>
+                  <span className={`font-medium ${p.currentStock <= 0 ? 'text-danger' : 'text-warning'}`}>
+                    {p.currentStock <= 0 ? 'Out of stock' : `${p.currentStock} left`}
+                  </span>
                 </li>
               ))}
             </ul>

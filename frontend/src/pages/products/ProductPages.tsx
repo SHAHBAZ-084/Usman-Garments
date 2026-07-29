@@ -217,8 +217,30 @@ export function ProductsListPage() {
       </div></Panel>
       {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
       {successMessage ? <Feedback variant="success" className="mb-4">{successMessage}</Feedback> : null}
-      {preview ? <Panel className="mb-4"><h2 className="text-lg font-semibold">Import preview</h2><p className="mt-2 text-sm text-textSecondary">{preview.productsToCreate} products ready to create · {preview.validCount} valid rows · {preview.errorCount} errors</p>
+      {preview ? <Panel className="mb-4"><h2 className="text-lg font-semibold">Import preview</h2>
+        <p className="mt-2 text-sm text-textSecondary">
+          {preview.productsToCreate} new · {preview.productsToMerge ?? 0} merge stock · {preview.validCount} valid · {preview.errorCount} errors
+        </p>
+        <p className="mt-1 text-xs text-textMuted">
+          Template columns: Product Name, Category, Total Stock. Matching names add stock (e.g. 17 + 20 = 37). New rows are marked Need Variants until you edit and add size/colour.
+        </p>
         {preview.errors.length ? <ul className="mt-3 list-disc pl-5 text-sm text-danger">{preview.errors.map((item) => <li key={`${item.rowNumber}-${item.message}`}>Row {item.rowNumber}: {item.message}</li>)}</ul> : null}
+        {preview.products.length ? (
+          <ul className="mt-3 max-h-48 space-y-1 overflow-y-auto text-sm">
+            {preview.products.map((p) => (
+              <li key={`${p.action}-${p.name}`} className="flex justify-between gap-2 border-b border-border/50 py-1">
+                <span>
+                  {p.name}{' '}
+                  <span className="text-xs text-textMuted">
+                    ({p.action === 'merge' ? 'merge +' : 'new'}{p.totalStock}
+                    {p.needsVariants ? ' · Need Variants' : ''})
+                  </span>
+                </span>
+                <span className="text-textSecondary">{p.category}</span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="mt-4 flex gap-2"><SecondaryButton onClick={() => setPreview(null)}>Cancel</SecondaryButton><PrimaryButton onClick={() => void commitImport()} disabled={importing || !preview.commitPayload.length}>{importing ? 'Importing…' : 'Confirm Import'}</PrimaryButton></div>
       </Panel> : null}
       <Panel><div className="overflow-x-auto">{loading ? <LoadingState className="py-6" /> : null}<table className="app-data-table min-w-full text-sm"><thead><tr className="text-left text-textSecondary">
@@ -302,6 +324,7 @@ function ProductListRow({
         </td>
         <td className="px-2 py-2">
           <Link className="font-medium text-accent hover:underline" to={`/products/${product.id}`}>{product.name}</Link>
+          {product.needsVariants ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:text-amber-200">*Need Variants</span> : null}
           {product.isLowStock ? <span className="ml-2 rounded bg-bgDanger px-1.5 py-0.5 text-xs text-danger">Low stock</span> : null}
           {product.costNotSet ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-200">Cost not set</span> : null}
           {!product.isActive ? <span className="ml-2 rounded bg-surface1 px-1.5 py-0.5 text-xs text-textMuted">Inactive</span> : null}

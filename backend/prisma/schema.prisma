@@ -316,6 +316,8 @@ model Product {
   salePrice     Decimal
   currentStock  Int      @default(0)
   lowStockLimit Int?
+  /// Set when imported without size/colour rows — prompts user to finish variants.
+  needsVariants Boolean  @default(false)
   supplierId    Int?
   imagePath     String?
   notes         String?
@@ -725,6 +727,10 @@ model BusinessSettings {
   lowStockLimit     Int         @default(5)
   backupFolderPath  String      @default("")
   themeMode         ThemeMode   @default(LIGHT)
+  /// Main brand color (sidebar / financial actions). Default black.
+  primaryColor      String      @default("#111111")
+  /// Accent color (active nav / highlights). Default premium gold.
+  secondaryColor    String      @default("#C99618")
   logoPath          String?
   isIdentityLocked  Boolean     @default(true)
   developerPassphraseHash String @default("")

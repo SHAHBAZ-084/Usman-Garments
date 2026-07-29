@@ -247,6 +247,7 @@ function serializeProduct(row: {
   salePrice: Prisma.Decimal;
   currentStock: number;
   lowStockLimit: number | null;
+  needsVariants?: boolean;
   supplierId: number | null;
   imagePath: string | null;
   notes: string | null;
@@ -273,6 +274,7 @@ function serializeProduct(row: {
     purchasePrice: Number(row.purchasePrice),
     salePrice: Number(row.salePrice),
     costNotSet: Number(row.purchasePrice) === 0,
+    needsVariants: Boolean(row.needsVariants) && (variants?.length ?? 0) === 0,
     effectiveLowStockLimit: effectiveLow,
     isLowStock: row.currentStock <= effectiveLow,
     category: row.category
@@ -399,6 +401,7 @@ export type CreateProductInput = {
     currentStock?: number;
   }>;
   openingStock?: number;
+  needsVariants?: boolean;
 };
 
 export async function createProduct(input: CreateProductInput) {
@@ -452,6 +455,7 @@ export async function createProduct(input: CreateProductInput) {
           purchasePrice,
           salePrice,
           lowStockLimit: input.lowStockLimit ?? null,
+          needsVariants: variants.length === 0 ? Boolean(input.needsVariants) : false,
           supplierId: input.supplierId ?? null,
           imagePath: input.imagePath?.trim() || null,
           notes: input.notes?.trim() || null,
@@ -549,6 +553,7 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
   }
   if (input.imagePath !== undefined) data.imagePath = input.imagePath?.trim() || null;
   if (input.notes !== undefined) data.notes = input.notes?.trim() || null;
+  if (input.needsVariants !== undefined) data.needsVariants = input.needsVariants;
 
   try {
     await prisma.product.update({ where: { id }, data });
@@ -626,6 +631,11 @@ export async function createProductVariant(productId: number, input: CreateVaria
       } else {
         await syncProductStockFromVariants(tx, productId);
       }
+
+      await tx.product.update({
+        where: { id: productId },
+        data: { needsVariants: false },
+      });
 
       const { sku, ...rest } = variant;
       return { ...rest, productCode: sku };

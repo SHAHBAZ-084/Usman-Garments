@@ -10,6 +10,8 @@ export const PROTECTED_BUSINESS_IDENTITY_FIELDS = [
   'address',
   'logoPath',
   'developerCreditLine',
+  'primaryColor',
+  'secondaryColor',
 ] as const satisfies readonly (keyof BusinessSettingsUpdateInput)[];
 
 export type ProtectedBusinessIdentityField = (typeof PROTECTED_BUSINESS_IDENTITY_FIELDS)[number];

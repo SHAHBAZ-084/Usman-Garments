@@ -24,6 +24,8 @@ export type BusinessSettings = {
   lowStockLimit: number;
   backupFolderPath: string;
   themeMode: 'light' | 'dark';
+  primaryColor: string;
+  secondaryColor: string;
   logoPath: string | null;
   logoUrl: string | null;
   developerCreditLine: string;
@@ -536,6 +538,7 @@ export const api = {
     phone?: string;
     address?: string | null;
     notes?: string | null;
+    openingBalance?: number;
   }) {
     return request<Customer>('/api/customers', { method: 'POST', body: JSON.stringify(data) });
   },
@@ -710,6 +713,13 @@ export const api = {
     }>('/api/system/health');
   },
 
+  reconcileHealthStock(productId: number) {
+    return request<{ productId: number; expected: number; actual: number; adjusted: number }>(
+      '/api/system/health/reconcile-stock',
+      { method: 'POST', body: JSON.stringify({ productId }) },
+    );
+  },
+
   getLogsPath() {
     return request<{ path: string }>('/api/system/logs-path');
   },
@@ -774,6 +784,7 @@ export type Product = {
   lowStockLimit: number | null;
   effectiveLowStockLimit: number;
   isLowStock: boolean;
+  needsVariants?: boolean;
   supplierId: number | null;
   imagePath: string | null;
   notes: string | null;
@@ -845,6 +856,7 @@ export type ProductImportPreview = {
   validCount: number;
   errorCount: number;
   productsToCreate: number;
+  productsToMerge?: number;
   errors: Array<{ rowNumber: number; message: string }>;
   products: Array<{
     name: string;
@@ -852,6 +864,9 @@ export type ProductImportPreview = {
     salePrice: number;
     purchasePrice: number;
     totalStock: number;
+    needsVariants?: boolean;
+    action?: 'create' | 'merge';
+    mergeIntoProductId?: number;
     variants: Array<{ size: string | null; colour: string | null; stock: number }>;
   }>;
   commitPayload: Array<{
@@ -860,6 +875,9 @@ export type ProductImportPreview = {
     salePrice: number;
     purchasePrice: number;
     totalStock: number;
+    needsVariants?: boolean;
+    action?: 'create' | 'merge';
+    mergeIntoProductId?: number;
     variants: Array<{ size: string | null; colour: string | null; stock: number }>;
   }>;
 };
@@ -1116,11 +1134,15 @@ export type InvoiceForReturn = {
   id: number;
   invoiceNumber: string;
   date: string;
+  subtotal?: number;
+  discount?: number;
   totalAmount: number;
   paidAmount: number;
   remainingAmount: number;
   paymentMethod: SalePaymentMethod;
   customer: { id: number; name: string; phone: string } | null;
+  /** Customer's running udhaar balance (for apply-refund-to-udhaar). */
+  customerBalance?: number;
   items: Array<{
     id: number;
     productId: number;
@@ -1129,6 +1151,7 @@ export type InvoiceForReturn = {
     returnedQty: number;
     returnableQty: number;
     rate: number;
+    discount?: number;
     total: number;
     product: { id: number; name: string; productCode: string };
     variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
@@ -1196,7 +1219,11 @@ export type CreateSaleReturnInput = {
   invoiceId: number;
   items: Array<{ invoiceItemId: number; quantity: number; condition: ReturnCondition }>;
   refundMethod?: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
+  refundAmount?: number;
   refundToCash?: boolean;
+  applyToUdhaar?: boolean;
+  applyToUdhaarAmount?: number;
   note?: string | null;
 };
 
@@ -1211,8 +1238,11 @@ export type CreateExchangeInput = {
     discount?: number;
   }>;
   paymentMethod?: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
   paidAmount?: number;
   refundToCash?: boolean;
+  applyToUdhaar?: boolean;
+  applyToUdhaarAmount?: number;
   note?: string | null;
 };
 

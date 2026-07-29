@@ -8,6 +8,8 @@ export const PROTECTED_SETTINGS_FIELD_KEYS = [
   'address',
   'logoPath',
   'developerCreditLine',
+  'primaryColor',
+  'secondaryColor',
 ] as const;
 
 export type ProtectedSettingsFieldKey = (typeof PROTECTED_SETTINGS_FIELD_KEYS)[number];

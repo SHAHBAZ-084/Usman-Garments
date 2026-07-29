@@ -44,7 +44,7 @@ async function loadReturnableInvoice(invoiceId: number) {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: {
-      customer: { select: { id: true, name: true, accountId: true } },
+      customer: { select: { id: true, name: true, accountId: true, currentBalance: true } },
       items: {
         include: {
           product: { select: { id: true, name: true } },
@@ -72,6 +72,21 @@ async function returnedQtyByInvoiceItem(invoiceId: number) {
   return map;
 }
 
+/** Line total after allocating a proportional share of invoice-level discount. */
+function returnLineMoney(
+  item: { total: unknown; quantity: number },
+  returnQty: number,
+  invoice: { subtotal: unknown; discount: unknown },
+) {
+  const grossUnit = Number(item.total) / item.quantity;
+  const gross = grossUnit * returnQty;
+  const subtotal = Number(invoice.subtotal) || 0;
+  const discount = Math.max(0, Number(invoice.discount) || 0);
+  if (subtotal <= 0 || discount <= 0) return roundMoney(gross);
+  const discountShare = (gross / subtotal) * discount;
+  return roundMoney(Math.max(0, gross - discountShare));
+}
+
 async function resolveReturnLines(
   invoice: Awaited<ReturnType<typeof loadReturnableInvoice>>,
   items: ReturnLineInput[],
@@ -97,7 +112,6 @@ async function resolveReturnLines(
       );
     }
 
-    const unitTotal = Number(item.total) / item.quantity;
     const unitCost = Number(item.costAtSale);
     resolved.push({
       invoiceItemId: item.id,
@@ -106,7 +120,7 @@ async function resolveReturnLines(
       productName: item.product.name,
       quantity: req.quantity,
       rate: roundMoney(Number(item.rate)),
-      lineTotal: roundMoney(unitTotal * req.quantity),
+      lineTotal: returnLineMoney(item, req.quantity, invoice),
       costAtReturn: roundMoney(unitCost * req.quantity),
       condition: req.condition,
     });
@@ -119,28 +133,41 @@ function restocksInventory(condition: ReturnCondition) {
   return condition === ReturnCondition.GOOD || condition === ReturnCondition.OTHER;
 }
 
+type RefundSplitOptions = {
+  /** When true, do not apply any amount against customer udhaar. */
+  refundToCash?: boolean;
+  /** When true (and not refundToCash), apply against udhaar. */
+  applyToUdhaar?: boolean;
+  /** How much of the refund to clear from customer owe (optional; defaults to max possible). */
+  applyToUdhaarAmount?: number;
+};
+
 function computeRefundSplit(
   invoice: Awaited<ReturnType<typeof loadReturnableInvoice>>,
   refundTotal: number,
-  refundToCash?: boolean,
+  options?: RefundSplitOptions | boolean,
 ) {
-  const invoiceTotal = Number(invoice.totalAmount);
-  const remaining = Number(invoice.remainingAmount);
+  const opts: RefundSplitOptions =
+    typeof options === 'boolean' ? { refundToCash: options } : options ?? {};
 
-  let customerCredit = 0;
-  let cashCredit = refundTotal;
+  const applyUdhaar =
+    opts.refundToCash !== true &&
+    opts.applyToUdhaar !== false &&
+    Boolean(invoice.customerId && invoice.customer?.accountId);
 
-  if (
-    invoice.customerId &&
-    invoice.customer?.accountId &&
-    remaining > 0.001 &&
-    refundToCash !== true
-  ) {
-    const udhaarShare = invoiceTotal > 0 ? remaining / invoiceTotal : 0;
-    customerCredit = roundMoney(refundTotal * udhaarShare);
-    cashCredit = roundMoney(refundTotal - customerCredit);
+  if (!applyUdhaar || refundTotal <= 0) {
+    return { customerCredit: 0, cashCredit: roundMoney(refundTotal) };
   }
 
+  const balanceRaw = Number(invoice.customer!.currentBalance);
+  const remaining = Number(invoice.remainingAmount) || 0;
+  const owed = Math.max(0, Number.isFinite(balanceRaw) ? balanceRaw : remaining);
+  const requested =
+    opts.applyToUdhaarAmount != null
+      ? Math.max(0, opts.applyToUdhaarAmount)
+      : Math.min(refundTotal, owed);
+  const customerCredit = roundMoney(Math.min(refundTotal, owed, requested));
+  const cashCredit = roundMoney(refundTotal - customerCredit);
   return { customerCredit, cashCredit };
 }
 
@@ -150,6 +177,7 @@ async function applyRefundLegs(
   customerCredit: number,
   cashCredit: number,
   refundMethod: PurchasePaymentMethod,
+  paymentAccountId?: number | null,
 ) {
   const legs: { accountId: number; type: LedgerEntryType; amount: number }[] = [];
 
@@ -166,7 +194,7 @@ async function applyRefundLegs(
   }
 
   if (cashCredit > 0.001) {
-    const paymentAccount = await resolvePaymentAccount(tx, refundMethod);
+    const paymentAccount = await resolvePaymentAccount(tx, refundMethod, paymentAccountId);
     legs.push({
       accountId: paymentAccount.id,
       type: LedgerEntryType.CREDIT,
@@ -183,20 +211,24 @@ async function buildRefundLegs(
     invoice: Awaited<ReturnType<typeof loadReturnableInvoice>>;
     refundTotal: number;
     refundMethod: PurchasePaymentMethod;
+    paymentAccountId?: number | null;
     refundToCash?: boolean;
+    applyToUdhaar?: boolean;
+    applyToUdhaarAmount?: number;
   },
 ) {
-  const { customerCredit, cashCredit } = computeRefundSplit(
-    params.invoice,
-    params.refundTotal,
-    params.refundToCash,
-  );
+  const { customerCredit, cashCredit } = computeRefundSplit(params.invoice, params.refundTotal, {
+    refundToCash: params.refundToCash,
+    applyToUdhaar: params.applyToUdhaar,
+    applyToUdhaarAmount: params.applyToUdhaarAmount,
+  });
   const legs = await applyRefundLegs(
     tx,
     params.invoice,
     customerCredit,
     cashCredit,
     params.refundMethod,
+    params.paymentAccountId,
   );
   return { legs, customerCredit, cashCredit };
 }
@@ -266,8 +298,11 @@ function buildReturnAccountingLegs(
   accounts: Awaited<ReturnType<typeof ensureRetailSystemAccounts>>,
   lines: ResolvedReturnLine[],
   refundLegs: { accountId: number; type: LedgerEntryType; amount: number }[],
+  refundAmount?: number,
 ) {
-  const returnTotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0));
+  const calculatedTotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0));
+  const returnTotal =
+    refundAmount != null ? roundMoney(Math.min(calculatedTotal, Math.max(0, refundAmount))) : calculatedTotal;
   const returnCost = roundMoney(lines.reduce((s, l) => s + l.costAtReturn, 0));
 
   const restockCost = roundMoney(
@@ -330,7 +365,7 @@ export async function findInvoiceForReturn(invoiceNumber: string) {
   if (!trimmed) throw new AppError(400, 'Invoice number is required');
 
   const include = {
-    customer: { select: { id: true, name: true, phone: true } },
+    customer: { select: { id: true, name: true, phone: true, currentBalance: true } },
     items: {
       include: {
         product: { select: { id: true, name: true, sku: true } },
@@ -374,11 +409,20 @@ export async function findInvoiceForReturn(invoiceNumber: string) {
     id: invoice.id,
     invoiceNumber: invoice.invoiceNumber,
     date: invoice.date,
+    subtotal: Number(invoice.subtotal),
+    discount: Number(invoice.discount),
     totalAmount: Number(invoice.totalAmount),
     paidAmount: Number(invoice.paidAmount),
     remainingAmount: Number(invoice.remainingAmount),
     paymentMethod: invoice.paymentMethod,
-    customer: invoice.customer,
+    customer: invoice.customer
+      ? {
+          id: invoice.customer.id,
+          name: invoice.customer.name,
+          phone: invoice.customer.phone,
+        }
+      : null,
+    customerBalance: invoice.customer ? Number(invoice.customer.currentBalance) : 0,
     items: invoice.items.map((item) => {
       const returnedQty = returnedMap.get(item.id) ?? 0;
       return {
@@ -389,6 +433,7 @@ export async function findInvoiceForReturn(invoiceNumber: string) {
         returnedQty,
         returnableQty: item.quantity - returnedQty,
         rate: Number(item.rate),
+        discount: Number(item.discount),
         total: Number(item.total),
         product: { id: item.product.id, name: item.product.name, productCode: item.product.sku },
         variant: item.variant
@@ -408,7 +453,12 @@ export type CreateSaleReturnInput = {
   invoiceId: number;
   items: ReturnLineInput[];
   refundMethod?: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
+  /** Actual money refunded (≤ calculated return after discounts). */
+  refundAmount?: number;
   refundToCash?: boolean;
+  applyToUdhaar?: boolean;
+  applyToUdhaarAmount?: number;
   note?: string | null;
   createdById: number;
 };
@@ -417,13 +467,24 @@ export async function createSaleReturn(input: CreateSaleReturnInput) {
   const invoice = await loadReturnableInvoice(input.invoiceId);
   const lines = await resolveReturnLines(invoice, input.items);
   const refundMethod = input.refundMethod ?? PurchasePaymentMethod.CASH;
+  const calculatedTotal = roundMoney(lines.reduce((s, l) => s + l.lineTotal, 0));
+  if (!(calculatedTotal > 0)) throw new AppError(400, 'Return total must be greater than zero');
+
+  let refundAmount = calculatedTotal;
+  if (input.refundAmount != null) {
+    refundAmount = roundMoney(input.refundAmount);
+    if (refundAmount < 0) throw new AppError(400, 'Refund amount cannot be negative');
+    if (refundAmount > calculatedTotal + 0.01) {
+      throw new AppError(400, `Refund cannot exceed calculated return Rs ${calculatedTotal}`);
+    }
+  }
 
   const returnId = await prisma.$transaction(async (tx) => {
     const revalidated = await resolveReturnLines(
       await tx.invoice.findUniqueOrThrow({
         where: { id: invoice.id },
         include: {
-          customer: { select: { id: true, name: true, accountId: true } },
+          customer: { select: { id: true, name: true, accountId: true, currentBalance: true } },
           items: {
             include: {
               product: { select: { id: true, name: true } },
@@ -437,12 +498,13 @@ export async function createSaleReturn(input: CreateSaleReturnInput) {
 
     const totalAmount = roundMoney(revalidated.reduce((s, l) => s + l.lineTotal, 0));
     if (!(totalAmount > 0)) throw new AppError(400, 'Return total must be greater than zero');
+    const refundFinal = roundMoney(Math.min(totalAmount, Math.max(0, refundAmount)));
 
     const saleReturn = await tx.saleReturn.create({
       data: {
         invoiceId: invoice.id,
         totalAmount,
-        refundAmount: totalAmount,
+        refundAmount: refundFinal,
         refundMethod,
         note: input.note?.trim() || null,
         createdById: input.createdById,
@@ -467,23 +529,26 @@ export async function createSaleReturn(input: CreateSaleReturnInput) {
     const accounts = await ensureRetailSystemAccounts(tx);
     const refundResult = await buildRefundLegs(tx, {
       invoice,
-      refundTotal: totalAmount,
+      refundTotal: refundFinal,
       refundMethod,
+      paymentAccountId: input.paymentAccountId,
       refundToCash: input.refundToCash,
+      applyToUdhaar: input.applyToUdhaar,
+      applyToUdhaarAmount: input.applyToUdhaarAmount,
     });
-    const { legs } = buildReturnAccountingLegs(accounts, revalidated, refundResult.legs);
+    const { legs } = buildReturnAccountingLegs(accounts, revalidated, refundResult.legs, refundFinal);
 
     await adjustInvoiceAfterReturn(
       tx,
       invoice,
-      totalAmount,
+      refundFinal,
       refundResult.customerCredit,
       refundResult.cashCredit,
     );
 
     await createMultiLegVoucherInTx(tx, {
       type: VoucherType.SALE_RETURN,
-      amount: totalAmount,
+      amount: refundFinal,
       date: new Date(),
       description: `Sale return ${invoice.invoiceNumber} — ${SALES_RETURN_ACCOUNT_NAME}`,
       sourceType: 'SALE_RETURN',
@@ -561,8 +626,11 @@ export type CreateExchangeInput = {
   returnItems: ReturnLineInput[];
   newItems: SaleItemInput[];
   paymentMethod?: PurchasePaymentMethod;
+  paymentAccountId?: number | null;
   paidAmount?: number;
   refundToCash?: boolean;
+  applyToUdhaar?: boolean;
+  applyToUdhaarAmount?: number;
   note?: string | null;
   createdById: number;
 };
@@ -591,7 +659,7 @@ export async function createExchange(input: CreateExchangeInput) {
       await tx.invoice.findUniqueOrThrow({
         where: { id: invoice.id },
         include: {
-          customer: { select: { id: true, name: true, accountId: true } },
+          customer: { select: { id: true, name: true, accountId: true, currentBalance: true } },
           items: {
             include: {
               product: { select: { id: true, name: true } },
@@ -720,21 +788,30 @@ export async function createExchange(input: CreateExchangeInput) {
     }
 
     if (netAmountTx > 0.001) {
-      const paymentAccount = await resolvePaymentAccount(tx, paymentMethod);
+      const paymentAccount = await resolvePaymentAccount(tx, paymentMethod, input.paymentAccountId);
       legs.push({ accountId: paymentAccount.id, type: LedgerEntryType.DEBIT, amount: netAmountTx });
     } else if (netAmountTx < -0.001) {
-      const netRefund = computeRefundSplit(invoice, -netAmountTx, input.refundToCash);
+      const netRefund = computeRefundSplit(invoice, -netAmountTx, {
+        refundToCash: input.refundToCash,
+        applyToUdhaar: input.applyToUdhaar,
+        applyToUdhaarAmount: input.applyToUdhaarAmount,
+      });
       const netRefundLegs = await applyRefundLegs(
         tx,
         invoice,
         netRefund.customerCredit,
         netRefund.cashCredit,
         paymentMethod,
+        input.paymentAccountId,
       );
       legs.push(...netRefundLegs);
     }
 
-    const returnRefund = computeRefundSplit(invoice, returnTotalTx, input.refundToCash);
+    const returnRefund = computeRefundSplit(invoice, returnTotalTx, {
+      refundToCash: input.refundToCash,
+      applyToUdhaar: input.applyToUdhaar,
+      applyToUdhaarAmount: input.applyToUdhaarAmount,
+    });
     await adjustInvoiceAfterExchange(
       tx,
       invoice,
@@ -751,6 +828,7 @@ export async function createExchange(input: CreateExchangeInput) {
         returnRefund.customerCredit,
         0,
         paymentMethod,
+        input.paymentAccountId,
       );
       legs.push(...returnRefundLegs);
     }

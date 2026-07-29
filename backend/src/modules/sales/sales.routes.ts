@@ -42,7 +42,11 @@ const createReturnSchema = z.object({
   invoiceId: z.number().int().positive(),
   items: z.array(returnItemSchema).min(1),
   refundMethod: z.nativeEnum(PurchasePaymentMethod).optional(),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
+  refundAmount: z.number().min(0).optional(),
   refundToCash: z.boolean().optional(),
+  applyToUdhaar: z.boolean().optional(),
+  applyToUdhaarAmount: z.number().min(0).optional(),
   note: z.string().max(500).nullable().optional(),
 });
 
@@ -51,8 +55,11 @@ const createExchangeSchema = z.object({
   returnItems: z.array(returnItemSchema).min(1),
   newItems: z.array(itemSchema).min(1),
   paymentMethod: z.nativeEnum(PurchasePaymentMethod).optional(),
+  paymentAccountId: z.number().int().positive().nullable().optional(),
   paidAmount: z.number().min(0).optional(),
   refundToCash: z.boolean().optional(),
+  applyToUdhaar: z.boolean().optional(),
+  applyToUdhaarAmount: z.number().min(0).optional(),
   note: z.string().max(500).nullable().optional(),
 });
 

@@ -25,6 +25,17 @@ export async function ensureRequiredSchemaColumns(): Promise<void> {
     'developerCreditLine',
     `"developerCreditLine" TEXT NOT NULL DEFAULT 'AS Solutions | Ali & Shahbaz | 0322-0726006'`,
   );
+  await addColumnIfMissing(
+    'BusinessSettings',
+    'primaryColor',
+    `"primaryColor" TEXT NOT NULL DEFAULT '#111111'`,
+  );
+  await addColumnIfMissing(
+    'BusinessSettings',
+    'secondaryColor',
+    `"secondaryColor" TEXT NOT NULL DEFAULT '#C99618'`,
+  );
+  await addColumnIfMissing('Product', 'needsVariants', `"needsVariants" BOOLEAN NOT NULL DEFAULT 0`);
   await addColumnIfMissing('Invoice', 'amountReceived', `"amountReceived" DECIMAL NOT NULL DEFAULT 0`);
   await addColumnIfMissing('User', 'role', `"role" TEXT DEFAULT 'Owner'`);
   await prisma.$executeRawUnsafe(

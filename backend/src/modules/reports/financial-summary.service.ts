@@ -465,7 +465,8 @@ async function getStockCounts(): Promise<{ lowStockCount: number; outOfStockCoun
   for (const p of products) {
     const limit = p.lowStockLimit ?? threshold;
     if (p.currentStock <= 0) outOfStockCount++;
-    else if (p.currentStock <= limit) lowStockCount++;
+    // Low-stock alerts include out-of-stock (≤ limit, including 0).
+    if (p.currentStock <= limit) lowStockCount++;
   }
   return { lowStockCount, outOfStockCount };
 }
@@ -515,14 +516,15 @@ async function getRecentExpenses(limit = 8) {
   }));
 }
 
-async function getLowStockProducts(limit = 10) {
+async function getLowStockProducts(limit = 15) {
   const threshold = await getLowStockThreshold();
   const products = await prisma.product.findMany({
-    where: { isActive: true, currentStock: { gt: 0 } },
+    where: { isActive: true },
     select: { id: true, name: true, sku: true, currentStock: true, lowStockLimit: true },
     orderBy: { currentStock: 'asc' },
-    take: 100,
+    take: 200,
   });
+  // Include out-of-stock (0) and anything ≤ product/global low-stock limit.
   return products
     .filter((p) => p.currentStock <= (p.lowStockLimit ?? threshold))
     .slice(0, limit)

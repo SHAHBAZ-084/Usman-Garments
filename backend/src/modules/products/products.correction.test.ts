@@ -149,77 +149,73 @@ describe('product creation correction', () => {
     expect(Number(refreshed.purchasePrice)).toBe(300);
   });
 
-  it('bulk import preview reports bad rows and commit creates only valid groups', async () => {
+  it('bulk import preview reports bad rows, merges stock, and marks needsVariants', async () => {
+    await ensureDefaultProductCategories();
+    const kidsCat = (await listProductCategories()).find((c) => c.name === 'Kids Wear');
+    const existing = await createProduct({
+      name: `${PREFIX}Import Cap ${runId}`,
+      categoryId: kidsCat?.id,
+      salePrice: 400,
+      purchasePrice: 200,
+      openingStock: 17,
+    });
+
     const rows: ImportRowInput[] = [
       {
         rowNumber: 2,
         productName: `${PREFIX}Import Shirt ${runId}`,
         category: 'Men Shirts',
-        totalStock: '3',
-        salePrice: '1200',
-        purchasePrice: '700',
-        size: 'M',
-        colour: 'White',
+        totalStock: '10',
       },
       {
         rowNumber: 3,
-        productName: `${PREFIX}Import Shirt ${runId}`,
-        category: 'Men Shirts',
-        totalStock: '2',
-        salePrice: '1200',
-        purchasePrice: '700',
-        size: 'L',
-        colour: 'White',
+        productName: `${PREFIX}Import Cap ${runId}`,
+        category: `${PREFIX}Hats ${runId}`,
+        totalStock: '20',
       },
       {
         rowNumber: 4,
-        productName: `${PREFIX}Import Cap ${runId}`,
-        category: `${PREFIX}Hats ${runId}`,
-        totalStock: '10',
-        salePrice: '350',
-        purchasePrice: '',
-        size: '',
-        colour: '',
-      },
-      {
-        rowNumber: 5,
         productName: '',
         category: 'Men Shirts',
         totalStock: '1',
-        salePrice: '100',
-        purchasePrice: '',
-        size: '',
-        colour: '',
       },
       {
-        rowNumber: 6,
-        productName: `${PREFIX}Bad Price ${runId}`,
+        rowNumber: 5,
+        productName: `${PREFIX}Bad Stock ${runId}`,
         category: 'Men Shirts',
-        totalStock: '1',
-        salePrice: 'abc',
-        purchasePrice: '',
-        size: '',
-        colour: '',
+        totalStock: 'abc',
       },
     ];
 
-    const preview = previewImportRows(rows);
+    const preview = await previewImportRows(rows);
     expect(preview.errorCount).toBe(2);
-    expect(preview.productsToCreate).toBe(2);
+    expect(preview.productsToCreate).toBe(1);
+    expect(preview.productsToMerge).toBe(1);
+    expect(preview.errors.some((e) => e.rowNumber === 4)).toBe(true);
     expect(preview.errors.some((e) => e.rowNumber === 5)).toBe(true);
-    expect(preview.errors.some((e) => e.rowNumber === 6)).toBe(true);
 
     const shirt = preview.products.find((p) => p.name.includes('Import Shirt'))!;
-    expect(shirt.variants).toHaveLength(2);
-    expect(shirt.totalStock).toBe(5); // sum of variant rows, not a separate total
+    expect(shirt.action).toBe('create');
+    expect(shirt.needsVariants).toBe(true);
+    expect(shirt.totalStock).toBe(10);
+
+    const cap = preview.products.find((p) => p.name.includes('Import Cap'))!;
+    expect(cap.action).toBe('merge');
+    expect(cap.mergeIntoProductId).toBe(existing.id);
+    expect(cap.totalStock).toBe(20);
 
     const result = await commitImport(preview.commitPayload);
-    expect(result.createdCount).toBe(2);
+    expect(result.createdCount).toBe(1);
+    expect(result.mergedCount).toBe(1);
 
     const createdShirt = result.products.find((p) => p.name.includes('Import Shirt'))!;
-    expect(createdShirt.variants).toHaveLength(2);
-    expect(createdShirt.currentStock).toBe(5);
+    expect(createdShirt.needsVariants).toBe(true);
+    expect(createdShirt.currentStock).toBe(10);
     expect(createdShirt.productCode).toMatch(/^MSH-/);
+
+    const mergedCap = await getProduct(existing.id);
+    expect(mergedCap.currentStock).toBe(37);
+    expect(mergedCap.needsVariants).toBe(true);
 
     const cats = await listProductCategories();
     expect(cats.some((c) => c.name === `${PREFIX}Hats ${runId}`)).toBe(true);

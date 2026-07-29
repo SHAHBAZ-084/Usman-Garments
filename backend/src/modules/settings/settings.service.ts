@@ -31,6 +31,8 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   backupFolderPath: '',
   themeMode: ThemeMode.LIGHT,
   logoPath: null as string | null,
+  primaryColor: '#111111',
+  secondaryColor: '#C99618',
   developerCreditLine: 'AS Solutions | Ali & Shahbaz | 0322-0726006',
 };
 
@@ -57,8 +59,18 @@ export type BusinessSettingsUpdateInput = {
   backupFolderPath?: string;
   themeMode?: ThemeMode;
   logoPath?: string | null;
+  primaryColor?: string;
+  secondaryColor?: string;
   developerCreditLine?: string;
 };
+
+function normalizeHexColor(raw: string, field: string): string {
+  const value = raw.trim();
+  if (!/^#[0-9A-Fa-f]{6}$/.test(value)) {
+    throw new AppError(400, `${field} must be a hex color like #111111`);
+  }
+  return value.toUpperCase();
+}
 
 function serializeSettings(row: {
   id: number;
@@ -79,6 +91,8 @@ function serializeSettings(row: {
   lowStockLimit: number;
   backupFolderPath: string;
   themeMode: ThemeMode;
+  primaryColor: string;
+  secondaryColor: string;
   logoPath: string | null;
   isIdentityLocked: boolean;
   developerPassphraseHash: string;
@@ -185,6 +199,12 @@ export async function updateBusinessSettings(
   if (input.backupFolderPath !== undefined) data.backupFolderPath = input.backupFolderPath.trim();
   if (input.themeMode !== undefined) data.themeMode = input.themeMode;
   if (input.logoPath !== undefined) data.logoPath = input.logoPath;
+  if (input.primaryColor !== undefined) {
+    data.primaryColor = normalizeHexColor(input.primaryColor, 'Primary color');
+  }
+  if (input.secondaryColor !== undefined) {
+    data.secondaryColor = normalizeHexColor(input.secondaryColor, 'Secondary color');
+  }
   if (input.developerCreditLine !== undefined) {
     data.developerCreditLine = input.developerCreditLine.trim();
   }

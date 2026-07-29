@@ -229,18 +229,23 @@ export type CreateCustomerInput = {
   phone?: string;
   address?: string | null;
   notes?: string | null;
+  /** Optional opening udhaar — what the customer already owed before using this system. */
+  openingBalance?: number;
 };
 
 export async function createCustomer(input: CreateCustomerInput) {
   const name = input.name.trim();
   if (!name) throw new AppError(400, 'Customer name is required');
 
+  const openingBalance = Math.max(0, Number(input.openingBalance ?? 0) || 0);
+  if (openingBalance < 0) throw new AppError(400, 'Opening balance cannot be negative');
+
   const category = await ensureCustomersCategory();
   const account = await createAccount({
     categoryId: category.id,
     name,
     type: AccountType.ASSET,
-    openingBalance: 0,
+    openingBalance: openingBalance > 0 ? openingBalance : 0,
     openingBalanceSide: 'DR',
   });
 
@@ -252,6 +257,7 @@ export async function createCustomer(input: CreateCustomerInput) {
         address: input.address?.trim() || null,
         notes: input.notes?.trim() || null,
         accountId: account.id,
+        currentBalance: openingBalance,
       },
       include: { account: { include: { ledger: true } } },
     });

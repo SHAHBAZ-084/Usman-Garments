@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { StockMovementType } from '@prisma/client';
 import { getTrialBalance } from '../accounting/accounting.service';
 import {
   estimateBackupBytes,
@@ -8,6 +9,8 @@ import {
 } from '../backup/backup.service';
 import { getDatabasePath, describeDataLocation } from '../../config/paths';
 import { prisma } from '../../lib/prisma';
+import { AppError } from '../../utils/helpers';
+import { isStockInType, isStockOutType, manualStockAdjustment } from '../products/products.service';
 
 export type HealthReport = {
   dataLocation: ReturnType<typeof describeDataLocation>;
@@ -23,6 +26,19 @@ export type HealthReport = {
   backup: Awaited<ReturnType<typeof getLastBackupInfo>>;
   recentBackups: Awaited<ReturnType<typeof listBackups>>;
 };
+
+function expectedStockFromMovements(
+  movements: Array<{ type: string; _sum: { quantity: number | null } }>,
+): number {
+  let expected = 0;
+  for (const m of movements) {
+    const qty = m._sum.quantity ?? 0;
+    const t = m.type as StockMovementType;
+    if (isStockInType(t)) expected += qty;
+    else if (isStockOutType(t)) expected -= qty;
+  }
+  return expected;
+}
 
 export async function runHealthCheck(): Promise<HealthReport> {
   let integrityOk = true;
@@ -52,16 +68,7 @@ export async function runHealthCheck(): Promise<HealthReport> {
       where: { productId: p.id },
       _sum: { quantity: true },
     });
-    let expected = 0;
-    for (const m of movements) {
-      const qty = m._sum.quantity ?? 0;
-      const t = m.type;
-      if (t === 'SALE' || t === 'MANUAL_REDUCE' || t === 'PURCHASE_RETURN' || t === 'CANCELLATION') {
-        expected -= qty;
-      } else if (t !== 'DAMAGED') {
-        expected += qty;
-      }
-    }
+    const expected = expectedStockFromMovements(movements);
     if (expected !== p.currentStock) {
       mismatches.push({
         productId: p.id,
@@ -97,3 +104,59 @@ export async function runHealthCheck(): Promise<HealthReport> {
 }
 
 export { estimateBackupBytes, getFreeDiskSpaceBytes };
+
+/**
+ * Align on-hand stock with the sum of stock movements (health "Agree / fix" action).
+ * Prefer this over dismissing forever when the movement ledger is trusted.
+ */
+export async function reconcileProductStockToMovements(productId: number) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    include: { variants: { select: { id: true, currentStock: true } } },
+  });
+  if (!product) throw new AppError(404, 'Product not found');
+
+  const movements = await prisma.stockMovement.groupBy({
+    by: ['type'],
+    where: { productId },
+    _sum: { quantity: true },
+  });
+  const expected = expectedStockFromMovements(movements);
+
+  if (product.variants.length > 0) {
+    const variantSum = product.variants.reduce((s, v) => s + v.currentStock, 0);
+    if (variantSum === product.currentStock && expected === variantSum) {
+      return { productId, expected, actual: product.currentStock, adjusted: 0 };
+    }
+    // Sync parent to variant sum when movement expected matches variants, else adjust top variant.
+    if (expected === variantSum && product.currentStock !== variantSum) {
+      await prisma.product.update({ where: { id: productId }, data: { currentStock: variantSum } });
+      return { productId, expected, actual: product.currentStock, adjusted: variantSum - product.currentStock };
+    }
+    const sorted = [...product.variants].sort((a, b) => b.currentStock - a.currentStock);
+    const target = sorted[0];
+    if (!target) throw new AppError(400, 'No variant to adjust');
+    const variantDelta = expected - variantSum;
+    if (variantDelta === 0) {
+      await prisma.product.update({ where: { id: productId }, data: { currentStock: variantSum } });
+      return { productId, expected: variantSum, actual: product.currentStock, adjusted: 0 };
+    }
+    await manualStockAdjustment(productId, {
+      variantId: target.id,
+      quantity: Math.abs(variantDelta),
+      direction: variantDelta > 0 ? 'add' : 'reduce',
+      note: 'Health reconcile: align stock with movements',
+    });
+    return { productId, expected, actual: product.currentStock, adjusted: variantDelta };
+  }
+
+  const delta = expected - product.currentStock;
+  if (delta === 0) return { productId, expected, actual: product.currentStock, adjusted: 0 };
+
+  await manualStockAdjustment(productId, {
+    quantity: Math.abs(delta),
+    direction: delta > 0 ? 'add' : 'reduce',
+    note: 'Health reconcile: align stock with movements',
+  });
+  return { productId, expected, actual: product.currentStock, adjusted: delta };
+}

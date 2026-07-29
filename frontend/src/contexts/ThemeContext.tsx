@@ -1,5 +1,10 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import {
+  applyBrandColors,
+  DEFAULT_PRIMARY_COLOR,
+  DEFAULT_SECONDARY_COLOR,
+} from '../lib/brandColors';
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -11,6 +16,9 @@ type ThemeContextValue = {
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
   refreshThemeFromServer: () => Promise<void>;
+  primaryColor: string;
+  secondaryColor: string;
+  applyBrandTheme: (primary: string, secondary: string) => void;
 };
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -36,11 +44,23 @@ function writeStoredTheme(theme: ThemeMode) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeMode>(readStoredTheme);
+  const [primaryColor, setPrimaryColor] = useState(DEFAULT_PRIMARY_COLOR);
+  const [secondaryColor, setSecondaryColor] = useState(DEFAULT_SECONDARY_COLOR);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     writeStoredTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    applyBrandColors(primaryColor, secondaryColor);
+  }, [primaryColor, secondaryColor]);
+
+  const applyBrandTheme = useCallback((primary: string, secondary: string) => {
+    setPrimaryColor(primary);
+    setSecondaryColor(secondary);
+    applyBrandColors(primary, secondary);
+  }, []);
 
   const persistTheme = useCallback(async (next: ThemeMode) => {
     setThemeState(next);
@@ -59,6 +79,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (settings.themeMode === 'light' || settings.themeMode === 'dark') {
         setThemeState(settings.themeMode);
       }
+      if (settings.primaryColor) setPrimaryColor(settings.primaryColor);
+      if (settings.secondaryColor) setSecondaryColor(settings.secondaryColor);
     } catch {
       /* ignore when unauthenticated */
     }
@@ -72,7 +94,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, toggleTheme, refreshThemeFromServer }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        setTheme,
+        toggleTheme,
+        refreshThemeFromServer,
+        primaryColor,
+        secondaryColor,
+        applyBrandTheme,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

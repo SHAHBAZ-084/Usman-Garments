@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageShell, Panel, PrimaryButton, SecondaryButton, Feedback, Tile } from '../../components/ui/PageShell';
 import { api } from '../../lib/api';
@@ -19,6 +19,41 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+const DISMISS_KEY = 'usman-mall-health-dismissed';
+
+type DismissedState = {
+  database?: string;
+  trialBalance?: string;
+  stock: Record<string, string>;
+};
+
+function mismatchSignature(m: { productId: number; expected: number; actual: number }) {
+  return `${m.productId}:${m.expected}:${m.actual}`;
+}
+
+function readDismissed(): DismissedState {
+  try {
+    const raw = localStorage.getItem(DISMISS_KEY);
+    if (!raw) return { stock: {} };
+    const parsed = JSON.parse(raw) as Partial<DismissedState>;
+    return {
+      database: parsed.database,
+      trialBalance: parsed.trialBalance,
+      stock: parsed.stock ?? {},
+    };
+  } catch {
+    return { stock: {} };
+  }
+}
+
+function writeDismissed(next: DismissedState) {
+  try {
+    localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
+  } catch {
+    /* ignore */
+  }
+}
+
 export function SystemHealthPage() {
   const [report, setReport] = useState<Awaited<ReturnType<typeof api.getSystemHealth>> | null>(null);
   const [error, setError] = useState('');
@@ -27,6 +62,7 @@ export function SystemHealthPage() {
   const [restoreBusy, setRestoreBusy] = useState(false);
   const [restorePath, setRestorePath] = useState('');
   const [message, setMessage] = useState('');
+  const [dismissed, setDismissed] = useState<DismissedState>(() => readDismissed());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -43,6 +79,56 @@ export function SystemHealthPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const databaseKey = report ? report.databaseIntegrity.detail : '';
+  const trialKey = report
+    ? `${report.trialBalance.totalDebit}:${report.trialBalance.totalCredit}:${report.trialBalance.ok}`
+    : '';
+
+  const showDatabaseAlert = Boolean(
+    report && !report.databaseIntegrity.ok && dismissed.database !== databaseKey,
+  );
+  const showTrialAlert = Boolean(report && !report.trialBalance.ok && dismissed.trialBalance !== trialKey);
+
+  const visibleMismatches = useMemo(() => {
+    if (!report) return [];
+    return report.stockReconciliation.mismatches.filter(
+      (m) => dismissed.stock[String(m.productId)] !== mismatchSignature(m),
+    );
+  }, [report, dismissed]);
+
+  function dismissDatabase() {
+    const next = { ...dismissed, database: databaseKey };
+    setDismissed(next);
+    writeDismissed(next);
+  }
+
+  function dismissTrial() {
+    const next = { ...dismissed, trialBalance: trialKey };
+    setDismissed(next);
+    writeDismissed(next);
+  }
+
+  function dismissStock(productId: number, signature: string) {
+    const next = {
+      ...dismissed,
+      stock: { ...dismissed.stock, [String(productId)]: signature },
+    };
+    setDismissed(next);
+    writeDismissed(next);
+  }
+
+  function agreeStock(m: { productId: number; expected: number; actual: number; name: string }) {
+    dismissStock(m.productId, mismatchSignature(m));
+    setMessage(`Acknowledged stock note for ${m.name}.`);
+  }
+
+  const stockSettled =
+    !report ||
+    report.stockReconciliation.ok ||
+    report.stockReconciliation.mismatches.every(
+      (m) => dismissed.stock[String(m.productId)] === mismatchSignature(m),
+    );
 
   async function createBackupNow() {
     setBackupBusy(true);
@@ -123,10 +209,59 @@ export function SystemHealthPage() {
       {report ? (
         <>
           <div className="mb-4 flex flex-wrap gap-2">
-            <StatusBadge ok={report.databaseIntegrity.ok} label="Database" />
-            <StatusBadge ok={report.trialBalance.ok} label="Trial balance" />
-            <StatusBadge ok={report.stockReconciliation.ok} label="Stock reconciliation" />
+            <StatusBadge ok={report.databaseIntegrity.ok || !showDatabaseAlert} label="Database" />
+            <StatusBadge ok={report.trialBalance.ok || !showTrialAlert} label="Trial balance" />
+            <StatusBadge ok={stockSettled} label="Stock reconciliation" />
           </div>
+
+          {showDatabaseAlert ? (
+            <Panel className="mb-4 border-red-200 bg-red-50/60">
+              <h2 className="mb-1 text-sm font-semibold text-red-900">Database health alert</h2>
+              <p className="mb-3 text-sm text-red-900/80">{report.databaseIntegrity.detail}</p>
+              <SecondaryButton type="button" onClick={dismissDatabase}>
+                Agreed — dismiss notification
+              </SecondaryButton>
+            </Panel>
+          ) : null}
+
+          {showTrialAlert ? (
+            <Panel className="mb-4 border-amber-200 bg-amber-50/60">
+              <h2 className="mb-1 text-sm font-semibold text-amber-950">Trial balance alert</h2>
+              <p className="mb-3 text-sm text-amber-950/80">
+                Debit {formatMoney(report.trialBalance.totalDebit)} does not match credit{' '}
+                {formatMoney(report.trialBalance.totalCredit)}.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <SecondaryButton type="button" onClick={dismissTrial}>
+                  Agreed — dismiss notification
+                </SecondaryButton>
+                <Link to="/accounts/trial-balance" className="inline-flex items-center rounded-md border border-border px-3 py-1.5 text-sm">
+                  Open trial balance
+                </Link>
+              </div>
+            </Panel>
+          ) : null}
+
+          {visibleMismatches.length > 0 ? (
+            <Panel className="mb-4 border-amber-200 bg-amber-50/50">
+              <h2 className="mb-2 text-sm font-semibold">Stock mismatch alerts</h2>
+              <p className="mb-3 text-xs text-textMuted">
+                Monitor only — review each note and Agree when you have seen it. Adjusting inventory is optional and separate.
+              </p>
+              <ul className="space-y-3 text-sm">
+                {visibleMismatches.map((m) => (
+                  <li key={m.productId} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-surface2 p-3">
+                    <p className="font-medium">
+                      {m.name}: movements expect {m.expected}, on-hand is {m.actual}
+                    </p>
+                    <SecondaryButton type="button" onClick={() => agreeStock(m)}>
+                      Agree — seen
+                    </SecondaryButton>
+                  </li>
+                ))}
+              </ul>
+            </Panel>
+          ) : null}
 
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             <Tile>
@@ -164,19 +299,6 @@ export function SystemHealthPage() {
               </p>
             </Tile>
           </div>
-
-          {report.stockReconciliation.mismatches.length > 0 ? (
-            <Panel className="mt-4">
-              <h2 className="mb-2 text-sm font-semibold">Stock mismatches (sample)</h2>
-              <ul className="text-sm text-textSecondary">
-                {report.stockReconciliation.mismatches.map((m) => (
-                  <li key={m.productId}>
-                    {m.name}: expected {m.expected}, actual {m.actual}
-                  </li>
-                ))}
-              </ul>
-            </Panel>
-          ) : null}
 
           <Panel className="mt-4">
             <h2 className="mb-3 text-sm font-semibold">Recovery actions</h2>
