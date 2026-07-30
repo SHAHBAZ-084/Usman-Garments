@@ -5,8 +5,11 @@ import { AppError } from '../../utils/helpers';
 import {
   adjustStock,
   createProduct,
+  createProductVariant,
   deactivateProduct,
   getProductByBarcode,
+  isStockInType,
+  isStockOutType,
   manualStockAdjustment,
   updateProduct,
 } from './products.service';
@@ -176,6 +179,49 @@ describe('products inventory foundation', () => {
 
     const updated = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
     expect(updated.currentStock).toBe(6);
+  });
+
+  it('reallocates product opening stock into variants without double-counting', async () => {
+    const product = await createProduct({
+      name: `${TEST_NAME_PREFIX}Reallocate Stock`,
+      salePrice: 500,
+      openingStock: 200,
+    });
+    expect(product.currentStock).toBe(200);
+
+    await createProductVariant(product.id, {
+      size: 'M',
+      colour: 'Blue',
+      salePrice: 500,
+      openingStock: 120,
+    });
+    await createProductVariant(product.id, {
+      size: 'L',
+      colour: 'Blue',
+      salePrice: 500,
+      openingStock: 80,
+    });
+
+    const refreshed = await prisma.product.findUniqueOrThrow({
+      where: { id: product.id },
+      include: { variants: true },
+    });
+    expect(refreshed.currentStock).toBe(200);
+    expect(refreshed.variants.reduce((s, v) => s + v.currentStock, 0)).toBe(200);
+
+    const movements = await prisma.stockMovement.groupBy({
+      by: ['type'],
+      where: { productId: product.id },
+      _sum: { quantity: true },
+    });
+    let expected = 0;
+    for (const m of movements) {
+      const qty = m._sum.quantity ?? 0;
+      if (isStockInType(m.type)) expected += qty;
+      else if (isStockOutType(m.type)) expected -= qty;
+    }
+    expect(expected).toBe(200);
+    expect(expected).toBe(refreshed.currentStock);
   });
 
   it('adjusts variant stock and keeps product total in sync', async () => {

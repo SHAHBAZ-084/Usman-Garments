@@ -326,6 +326,14 @@ export async function listProducts(params: ProductListParams = {}) {
       { name: { contains: q } },
       { sku: { contains: q } },
       { barcode: { contains: q } },
+      { brand: { contains: q } },
+      {
+        variants: {
+          some: {
+            OR: [{ sku: { contains: q } }, { barcode: { contains: q } }],
+          },
+        },
+      },
     ];
   }
 
@@ -597,10 +605,31 @@ export async function createProductVariant(productId: number, input: CreateVaria
 
   try {
     return await prisma.$transaction(async (tx) => {
+      // Re-read inside tx: first variant converts product-level stock → variant stock.
+      // Without clearing product OPENING first, history double-counts (e.g. 200 + 200 = 400).
+      const fresh = await tx.product.findUnique({
+        where: { id: productId },
+        include: { variants: { select: { id: true } } },
+      });
+      if (!fresh) throw new AppError(404, 'Product not found');
+
+      const convertingPlainProduct = fresh.variants.length === 0;
+      if (convertingPlainProduct && fresh.currentStock > 0) {
+        await adjustStockInTx(
+          tx,
+          { productId },
+          fresh.currentStock,
+          StockMovementType.MANUAL_REDUCE,
+          {
+            note: 'Reallocate product stock into size/colour variants (no net change)',
+          },
+        );
+      }
+
       const variantCode =
         input.sku?.trim() ||
-        (await generateUniqueProductCode(tx, product.name, {
-          parentCode: product.sku,
+        (await generateUniqueProductCode(tx, fresh.name, {
+          parentCode: fresh.sku,
           size: input.size,
           colour: input.colour,
         }));
@@ -619,7 +648,7 @@ export async function createProductVariant(productId: number, input: CreateVaria
         },
       });
 
-      const openingQty = input.openingStock ?? 0;
+      const openingQty = Math.max(0, Math.floor(input.openingStock ?? 0));
       if (openingQty > 0) {
         await adjustStockInTx(
           tx,

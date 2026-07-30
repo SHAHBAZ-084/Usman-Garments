@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { BarcodeLabelModal, type LabelItem } from '../../components/products/BarcodeLabel';
 import {
@@ -106,16 +106,27 @@ export function ProductsListPage() {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const searchRequestId = useRef(0);
 
   const load = useCallback(async () => {
+    const requestId = ++searchRequestId.current;
     setLoading(true);
     setError('');
     try {
-      setResult(await api.listProducts({ page, pageSize: 20, search: search.trim() || undefined, categoryId: categoryId ? Number(categoryId) : undefined, activeOnly }));
+      const next = await api.listProducts({
+        page,
+        pageSize: 20,
+        search: search.trim() || undefined,
+        categoryId: categoryId ? Number(categoryId) : undefined,
+        activeOnly,
+      });
+      if (requestId !== searchRequestId.current) return;
+      setResult(next);
     } catch (err) {
+      if (requestId !== searchRequestId.current) return;
       setError(err instanceof Error ? err.message : 'Failed to load products');
     } finally {
-      setLoading(false);
+      if (requestId === searchRequestId.current) setLoading(false);
     }
   }, [activeOnly, categoryId, page, search]);
 
@@ -129,7 +140,13 @@ export function ProductsListPage() {
       })
       .catch(() => setCategories([]));
   }, []);
-  useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void load();
+    }, search.trim() ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [load, search]);
 
   useEffect(() => {
     const state = location.state as { printAfterSaveId?: number; savedName?: string } | null;
@@ -201,6 +218,7 @@ export function ProductsListPage() {
 
   return (
     <PageShell title="Products" subtitle="Manage inventory, variants, barcodes, and stock" actions={<div className="flex flex-wrap gap-2">
+      <Link to="/products"><SecondaryButton type="button">Products hub</SecondaryButton></Link>
       <Link to="/products/scan"><SecondaryButton type="button"><ScanBarcode className="mr-1.5 inline h-4 w-4" aria-hidden />Scan barcode</SecondaryButton></Link>
       <SecondaryButton onClick={() => void downloadTemplate()}>Download Template</SecondaryButton>
       <label className="btn-secondary cursor-pointer">Import Stock<input className="hidden" type="file" accept=".xlsx,.xls" onChange={(event) => {
@@ -271,6 +289,10 @@ export function ProductsListPage() {
               setAllowQtyEdit(true);
               setLabelItems(items);
             }}
+            onDeleted={() => {
+              setSuccessMessage(`“${product.name}” removed from the list.`);
+              void load();
+            }}
           />
         ))}
         {!loading && result?.items.length === 0 ? <tr><td colSpan={8} className="px-2 py-8 text-center text-textSecondary">No products found.</td></tr> : null}
@@ -302,6 +324,7 @@ function ProductListRow({
   expanded,
   onToggle,
   onGenerateBarcode,
+  onDeleted,
 }: {
   srNo: number;
   product: Product;
@@ -309,9 +332,26 @@ function ProductListRow({
   expanded: boolean;
   onToggle: () => void;
   onGenerateBarcode: () => void;
+  onDeleted: () => void;
 }) {
   const targets = labelItemsFromProduct(product, businessName);
   const hasVariants = (product.variants?.length ?? 0) > 0;
+
+  async function onDelete() {
+    if (
+      !window.confirm(
+        `Delete "${product.name}" from the product list?\n\nIt will be deactivated and hidden from the default list. Past sales keep their history.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await api.deactivateProduct(product.id);
+      onDeleted();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to delete product');
+    }
+  }
 
   return (
     <>
@@ -344,6 +384,15 @@ function ProductListRow({
               <GhostButton type="button" className="text-xs text-accent" onClick={onGenerateBarcode}>
                 <Printer className="mr-1 inline h-3.5 w-3.5" aria-hidden />
                 Barcode
+              </GhostButton>
+            ) : null}
+            {product.isActive ? (
+              <GhostButton
+                type="button"
+                className="text-xs text-danger"
+                onClick={() => void onDelete()}
+              >
+                Delete
               </GhostButton>
             ) : null}
           </div>
@@ -650,16 +699,20 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       setError(`Variant stock (${allocatedStock}) cannot exceed Total Stock (${totalStock}).`);
       return;
     }
-    if (!hasVariants) {
-      setError('Add at least one variant row with qty and sale price. Barcodes are created per variant for sales.');
-      return;
-    }
-    const missingPrice = variants
-      .filter((v) => v.size?.trim() || v.colour?.trim() || Number(v.currentStock) > 0 || v.existingId)
-      .some((v) => v.salePrice == null || Number(v.salePrice) < 0 || Number.isNaN(Number(v.salePrice)));
-    if (missingPrice) {
-      setError('Each variant needs a sale price (purchase price is optional).');
-      return;
+    if (hasVariants) {
+      const missingPrice = variants
+        .filter((v) => v.size?.trim() || v.colour?.trim() || Number(v.currentStock) > 0 || v.existingId)
+        .some((v) => v.salePrice == null || Number(v.salePrice) < 0 || Number.isNaN(Number(v.salePrice)));
+      if (missingPrice) {
+        setError('Each variant needs a sale price (purchase price is optional).');
+        return;
+      }
+    } else {
+      const productSale = Number(salePrice);
+      if (!salePrice.trim() || Number.isNaN(productSale) || productSale < 0) {
+        setError('Enter a sale price (variants are optional — e.g. accessories can use the product barcode).');
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -670,13 +723,13 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       const variantPrices = variantRows
         .map((v) => Number(v.salePrice))
         .filter((n) => !Number.isNaN(n) && n >= 0);
-      const productSalePrice = variantPrices.length
+      const productSalePrice = hasVariants && variantPrices.length
         ? Math.min(...variantPrices)
         : Number(salePrice) || 0;
       const variantPurchases = variantRows
         .map((v) => (v.purchasePrice != null ? Number(v.purchasePrice) : NaN))
         .filter((n) => !Number.isNaN(n) && n >= 0);
-      const parsedPurchase = variantPurchases.length
+      const parsedPurchase = hasVariants && variantPurchases.length
         ? Math.min(...variantPurchases)
         : purchasePrice.trim()
           ? Number(purchasePrice)
@@ -708,7 +761,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           openingStock: totalStock,
         });
 
-        navigate('/products', {
+        navigate('/products/list', {
           state: { printAfterSaveId: created.id, savedName: created.name },
         });
       } else if (productId) {
@@ -751,6 +804,8 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
         const refreshed = await api.getProduct(productId);
         setProduct(refreshed);
         setOpeningStock(String(refreshed.currentStock));
+        setSalePrice(String(refreshed.salePrice));
+        setPurchasePrice(refreshed.purchasePrice > 0 ? String(refreshed.purchasePrice) : '');
         setVariants(
           (refreshed.variants ?? []).map((v) => ({
             key: String(v.id),
@@ -803,12 +858,12 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       title={title}
       subtitle={
         mode === 'add'
-          ? 'Set total stock first, then split into size/colour variants with their own prices'
-          : 'Same as add — edit name, category, total stock, and variant rows. Existing barcodes stay as sale identity.'
+          ? 'Save with or without size/colour variants — accessories can use the product barcode'
+          : 'Edit name, prices, stock, and optional variant rows. Existing barcodes stay as sale identity.'
       }
       actions={
         <div className="flex flex-wrap gap-2">
-          <Link to="/products">
+          <Link to="/products/list">
             <SecondaryButton type="button">Back to list</SecondaryButton>
           </Link>
           {mode === 'edit' && product?.isActive ? (
@@ -890,12 +945,38 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                   });
                 }}
                 placeholder="e.g. 5"
-                required
               />
               <p className="mt-1 text-xs text-textMuted">
-                Enter full stock first. Variant quantities together cannot exceed this number.
+                Optional opening qty. If you add variants, their quantities cannot exceed this total.
               </p>
             </div>
+
+            {variants.length === 0 ? (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div>
+                  <FieldLabel>Sale price</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={salePrice}
+                    onChange={(e) => setSalePrice(e.target.value)}
+                    required
+                    placeholder="Required"
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Purchase cost (optional)</FieldLabel>
+                  <TextInput
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={purchasePrice}
+                    onChange={(e) => setPurchasePrice(e.target.value)}
+                  />
+                </div>
+              </div>
+            ) : null}
 
             {mode === 'edit' && product?.costNotSet ? (
               <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
@@ -906,9 +987,10 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
             <div className="rounded-lg border border-border p-3">
               <div className="mb-2 flex items-center justify-between gap-2">
                 <div>
-                  <FieldLabel>Size / colour variants</FieldLabel>
+                  <FieldLabel>Size / colour variants (optional)</FieldLabel>
                   <p className="text-xs text-textMuted">
-                    Sale price (required) and purchase price (optional) are set per variant row only.
+                    Skip for accessories and single-SKU items — a product barcode is generated on save.
+                    With variants, set sale price on each row.
                   </p>
                 </div>
                 <GhostButton
@@ -926,7 +1008,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
               </div>
               {variants.length === 0 ? (
                 <p className="text-sm text-textSecondary">
-                  Add a variant row for each size/colour. Sale price is required on every row so barcodes and sales stay correct.
+                  No variants yet. You can save now, or add size/colour rows if this product needs them.
                 </p>
               ) : (
                 <div className="space-y-3">
@@ -1094,9 +1176,9 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           <Panel>
             <h2 className="text-sm font-semibold text-textPrimary">Flow</h2>
             <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-textSecondary">
-              <li>Enter product name, category, and total stock.</li>
-              <li>Add variant rows with size/colour, qty, sale price, and optional purchase price.</li>
-              <li>Save — opens the product list with barcode preview for each variant.</li>
+              <li>Enter product name, category, sale price, and optional total stock.</li>
+              <li>Variants are optional — skip for accessories; add size/colour rows when needed.</li>
+              <li>Save — opens the product list with barcode preview (product or each variant).</li>
               <li>Confirm barcode identity, adjust label size, then print.</li>
             </ol>
           </Panel>

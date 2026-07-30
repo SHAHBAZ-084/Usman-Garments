@@ -87,10 +87,36 @@ export function splitSqlStatements(sql: string): string[] {
     .filter((s) => s.length > 0);
 }
 
+function isAlreadyAppliedSqliteError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    /duplicate column name/i.test(msg) ||
+    /duplicate column/i.test(msg) ||
+    /already exists/i.test(msg)
+  );
+}
+
+/**
+ * Apply migration SQL. Columns/tables already present (e.g. from ensure-schema)
+ * are treated as success so local DBs stay migratable.
+ */
 async function applySqlFile(sql: string): Promise<number> {
   const statements = splitSqlStatements(sql);
   for (const statement of statements) {
-    await prisma.$executeRawUnsafe(statement);
+    try {
+      await prisma.$executeRawUnsafe(statement);
+    } catch (err) {
+      const ignorable =
+        isAlreadyAppliedSqliteError(err) &&
+        (/ADD COLUMN/i.test(statement) || /CREATE TABLE/i.test(statement) || /CREATE INDEX/i.test(statement));
+      if (ignorable) {
+        logger.warn('Migration statement already applied — skipping', {
+          preview: statement.replace(/\s+/g, ' ').slice(0, 140),
+        });
+        continue;
+      }
+      throw err;
+    }
   }
   return statements.length;
 }

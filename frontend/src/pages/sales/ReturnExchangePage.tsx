@@ -323,7 +323,7 @@ export function ReturnExchangePage() {
       title="Return / Exchange"
       subtitle="Search the original invoice — returns are separate records, invoice is never edited"
       actions={
-        <Link to="/sales">
+        <Link to="/sales/list">
           <SecondaryButton type="button">Recent invoices</SecondaryButton>
         </Link>
       }

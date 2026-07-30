@@ -201,7 +201,7 @@ export function CustomerFormPage({ mode }: { mode: 'add' | 'edit' }) {
       title={mode === 'add' ? 'Add Customer' : 'Edit Customer'}
       subtitle={mode === 'add' ? 'For udhaar sales and payment tracking' : 'Update customer details'}
       actions={
-        <Link to="/customers">
+        <Link to="/customers/list">
           <SecondaryButton type="button">Back to list</SecondaryButton>
         </Link>
       }
@@ -325,7 +325,7 @@ export function CustomerDetailPage() {
       subtitle={customer.phone || 'No phone'}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Link to="/customers">
+          <Link to="/customers/list">
             <SecondaryButton type="button">Back</SecondaryButton>
           </Link>
           <Link to={`/customers/${id}/edit`}>

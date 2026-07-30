@@ -182,7 +182,7 @@ export function SupplierFormPage({ mode }: { mode: 'add' | 'edit' }) {
       title={mode === 'add' ? 'Add Supplier' : 'Edit Supplier'}
       subtitle={mode === 'add' ? 'Opening balance is what you already owed them' : 'Update supplier details'}
       actions={
-        <Link to="/suppliers">
+        <Link to="/suppliers/list">
           <SecondaryButton type="button">Back to list</SecondaryButton>
         </Link>
       }
@@ -292,7 +292,7 @@ export function SupplierDetailPage() {
       subtitle={supplier.phone || 'No phone'}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Link to="/suppliers">
+          <Link to="/suppliers/list">
             <SecondaryButton type="button">Back</SecondaryButton>
           </Link>
           <Link to={`/suppliers/${id}/edit`}>

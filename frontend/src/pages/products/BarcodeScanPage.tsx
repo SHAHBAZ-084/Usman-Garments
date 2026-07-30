@@ -109,7 +109,7 @@ export function BarcodeScanPage() {
       title="Barcode scan test"
       subtitle="Point a USB scanner here to verify lookup before POS. Scanners type the code and press Enter."
       actions={
-        <Link to="/products">
+        <Link to="/products/list">
           <SecondaryButton type="button">Back to products</SecondaryButton>
         </Link>
       }

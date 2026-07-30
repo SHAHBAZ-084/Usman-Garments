@@ -14,6 +14,7 @@ import { Trash2 } from 'lucide-react';
 import {
   Feedback,
   FieldLabel,
+  GhostButton,
   IconButton,
   PageShell,
   Panel,
@@ -50,6 +51,7 @@ export function PurchaseEntryPage() {
   const [searchParams] = useSearchParams();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [supplierId, setSupplierId] = useState<number | ''>(
     searchParams.get('supplierId') ? Number(searchParams.get('supplierId')) : '',
   );
@@ -65,9 +67,17 @@ export function PurchaseEntryPage() {
   const [saving, setSaving] = useState(false);
   const [confirmation, setConfirmation] = useState<Purchase | null>(null);
   const purchaseFormRef = useRef<HTMLFormElement>(null);
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickName, setQuickName] = useState('');
+  const [quickCategoryId, setQuickCategoryId] = useState('');
+  const [quickCategoryName, setQuickCategoryName] = useState('');
+  const [quickSalePrice, setQuickSalePrice] = useState('');
+  const [quickPurchasePrice, setQuickPurchasePrice] = useState('');
+  const [quickBusy, setQuickBusy] = useState(false);
 
   useEffect(() => {
     api.listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
+    api.listProductCategories().then(setCategories).catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {
@@ -117,6 +127,47 @@ export function PurchaseEntryPage() {
     ]);
     setProductSearch('');
     setProducts([]);
+  }
+
+  async function onQuickAddProduct() {
+    setError('');
+    const name = quickName.trim();
+    if (!name) {
+      setError('Enter a product name for quick add');
+      return;
+    }
+    setQuickBusy(true);
+    try {
+      let categoryId: number | null = quickCategoryId ? Number(quickCategoryId) : null;
+      if (!categoryId && quickCategoryName.trim()) {
+        const created = await api.createProductCategory(quickCategoryName.trim());
+        categoryId = created.id;
+        setCategories((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      }
+      const sale = quickSalePrice.trim() ? Number(quickSalePrice) : 0;
+      const purchase = quickPurchasePrice.trim() ? Number(quickPurchasePrice) : 0;
+      if (Number.isNaN(sale) || sale < 0 || Number.isNaN(purchase) || purchase < 0) {
+        throw new Error('Prices must be zero or greater');
+      }
+      const created = await api.createProduct({
+        name,
+        categoryId,
+        salePrice: sale,
+        purchasePrice: purchase,
+        openingStock: 0,
+      });
+      addProduct(created);
+      setQuickAddOpen(false);
+      setQuickName('');
+      setQuickCategoryId('');
+      setQuickCategoryName('');
+      setQuickSalePrice('');
+      setQuickPurchasePrice(purchase > 0 ? String(purchase) : '');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Quick add failed');
+    } finally {
+      setQuickBusy(false);
+    }
   }
 
   async function onSubmit(e: FormEvent) {
@@ -232,7 +283,19 @@ export function PurchaseEntryPage() {
             </div>
           </div>
           <div>
-            <FieldLabel>Add products</FieldLabel>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <FieldLabel>Add products</FieldLabel>
+              <GhostButton
+                type="button"
+                className="text-xs text-accent"
+                onClick={() => {
+                  setQuickAddOpen((o) => !o);
+                  setQuickName(productSearch.trim());
+                }}
+              >
+                {quickAddOpen ? 'Close quick add' : 'Quick add product'}
+              </GhostButton>
+            </div>
             <TextInput
               value={productSearch}
               onChange={(e) => setProductSearch(e.target.value)}
@@ -266,6 +329,76 @@ export function PurchaseEntryPage() {
                   ),
                 )}
               </ul>
+            ) : productSearch.trim() && !quickAddOpen ? (
+              <p className="mt-2 text-xs text-textMuted">
+                No match — use <button type="button" className="underline text-accent" onClick={() => { setQuickAddOpen(true); setQuickName(productSearch.trim()); }}>Quick add product</button> if this is new stock.
+              </p>
+            ) : null}
+
+            {quickAddOpen ? (
+              <div className="mt-3 space-y-3 rounded-lg border border-dashed border-border bg-surface1 p-3">
+                <p className="text-sm font-medium text-textPrimary">Quick add — not yet in inventory</p>
+                <p className="text-xs text-textMuted">
+                  Creates the product (with barcode) at 0 stock, adds it to this purchase, and lists it under Products for search, print, and stock.
+                </p>
+                <div>
+                  <FieldLabel>Product name</FieldLabel>
+                  <TextInput value={quickName} onChange={(e) => setQuickName(e.target.value)} required />
+                </div>
+                <div>
+                  <FieldLabel>Category</FieldLabel>
+                  <select
+                    className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
+                    value={quickCategoryId}
+                    onChange={(e) => {
+                      setQuickCategoryId(e.target.value);
+                      if (e.target.value) setQuickCategoryName('');
+                    }}
+                  >
+                    <option value="">Select or type new below</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  {!quickCategoryId ? (
+                    <TextInput
+                      className="mt-2"
+                      value={quickCategoryName}
+                      onChange={(e) => setQuickCategoryName(e.target.value)}
+                      placeholder="Or new category name"
+                    />
+                  ) : null}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel>Sale price (optional)</FieldLabel>
+                    <TextInput
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={quickSalePrice}
+                      onChange={(e) => setQuickSalePrice(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Purchase cost (optional)</FieldLabel>
+                    <TextInput
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={quickPurchasePrice}
+                      onChange={(e) => setQuickPurchasePrice(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <PrimaryButton
+                  type="button"
+                  disabled={quickBusy}
+                  onClick={() => void onQuickAddProduct()}
+                >
+                  {quickBusy ? 'Adding…' : 'Create & add to purchase'}
+                </PrimaryButton>
+              </div>
             ) : null}
           </div>
 

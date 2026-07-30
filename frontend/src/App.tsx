@@ -69,6 +69,16 @@ import {
   SuppliersListPage,
 } from './pages/suppliers/SupplierPages';
 import { VoucherFormPage, VoucherListPage } from './pages/vouchers/VoucherPages';
+import {
+  AccountsHubPage,
+  CustomersHubPage,
+  FinanceHubPage,
+  ProductsHubPage,
+  ReportsHubPage,
+  SalesHubPage,
+  SuppliersHubPage,
+  SystemHubPage,
+} from './pages/hubs/HubPages';
 
 export default function App() {
   return (
@@ -82,12 +92,14 @@ export default function App() {
             <Route element={<AppShell />}>
               <Route path="/" element={<DashboardPage />} />
 
-              <Route path="/products" element={<ProductsListPage />} />
+              <Route path="/products" element={<ProductsHubPage />} />
+              <Route path="/products/list" element={<ProductsListPage />} />
               <Route path="/products/add" element={<ProductFormPage mode="add" />} />
               <Route path="/products/scan" element={<BarcodeScanPage />} />
               <Route path="/products/:id" element={<ProductFormPage mode="edit" />} />
 
-              <Route path="/suppliers" element={<SuppliersListPage />} />
+              <Route path="/suppliers" element={<SuppliersHubPage />} />
+              <Route path="/suppliers/list" element={<SuppliersListPage />} />
               <Route path="/suppliers/add" element={<SupplierFormPage mode="add" />} />
               <Route path="/suppliers/:id/edit" element={<SupplierFormPage mode="edit" />} />
               <Route path="/suppliers/:id" element={<SupplierDetailPage />} />
@@ -97,24 +109,31 @@ export default function App() {
               <Route path="/purchases/pay" element={<SupplierPaymentPage />} />
               <Route path="/purchases/:id" element={<PurchaseDetailPage />} />
 
-              <Route path="/sales" element={<InvoicesListPage />} />
+              <Route path="/sales" element={<SalesHubPage />} />
+              <Route path="/sales/list" element={<InvoicesListPage />} />
               <Route path="/sales/new" element={<NewSalePage />} />
               <Route path="/sales/return" element={<ReturnExchangePage />} />
               <Route path="/sales/:id" element={<InvoiceDetailPage />} />
 
+              <Route path="/finance" element={<FinanceHubPage />} />
               <Route path="/finance/expenses" element={<ExpensesListPage />} />
               <Route path="/finance/expenses/new" element={<ExpenseEntryPage />} />
               <Route path="/finance/other-income" element={<OtherIncomeListPage />} />
               <Route path="/finance/other-income/new" element={<OtherIncomeEntryPage />} />
 
-              <Route path="/customers" element={<CustomersListPage />} />
+              <Route path="/customers" element={<CustomersHubPage />} />
+              <Route path="/customers/list" element={<CustomersListPage />} />
               <Route path="/customers/add" element={<CustomerFormPage mode="add" />} />
               <Route path="/customers/pay" element={<CustomerPaymentPage />} />
               <Route path="/customers/:id/edit" element={<CustomerFormPage mode="edit" />} />
               <Route path="/customers/:id" element={<CustomerDetailPage />} />
 
-              <Route path="/accounts" element={<AccountsFinancePage />} />
+              <Route path="/accounts" element={<AccountsHubPage />} />
+              <Route path="/accounts/overview" element={<AccountsFinancePage />} />
               <Route path="/accounts/chart" element={<AccountsFinancePage />} />
+
+              <Route path="/reports" element={<ReportsHubPage />} />
+              <Route path="/system" element={<SystemHubPage />} />
               <Route path="/accounts/categories/add" element={<CategoryManagePage mode="add" />} />
               <Route path="/accounts/categories/edit" element={<CategoryManagePage mode="edit" />} />
               <Route path="/accounts/categories/remove" element={<CategoryManagePage mode="remove" />} />

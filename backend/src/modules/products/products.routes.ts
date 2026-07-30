@@ -39,6 +39,7 @@ const createProductSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
   variants: z.array(variantSchema).optional(),
   openingStock: z.number().int().min(0).optional(),
+  needsVariants: z.boolean().optional(),
 });
 
 const updateProductSchema = createProductSchema.partial().omit({ variants: true });

@@ -823,6 +823,7 @@ export type CreateProductInput = {
   notes?: string | null;
   variants?: ProductVariantInput[];
   openingStock?: number;
+  needsVariants?: boolean;
 };
 
 export type StockMovement = {

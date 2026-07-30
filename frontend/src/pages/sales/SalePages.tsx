@@ -282,7 +282,7 @@ export function NewSalePage() {
       subtitle="Scan or search items, complete checkout, print invoice"
       actions={
         <div className="flex flex-wrap gap-2">
-          <Link to="/sales">
+          <Link to="/sales/list">
             <SecondaryButton type="button">Recent invoices</SecondaryButton>
           </Link>
           <SecondaryButton type="button" onClick={clearBill}>
@@ -725,7 +725,7 @@ export function InvoiceDetailPage() {
       subtitle={`${formatDate(invoice.date)} · ${invoice.status}`}
       actions={
         <div className="flex flex-wrap gap-2">
-          <Link to="/sales">
+          <Link to="/sales/list">
             <SecondaryButton type="button">Back</SecondaryButton>
           </Link>
           {settings ? (

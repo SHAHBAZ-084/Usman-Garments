@@ -280,7 +280,7 @@ export function DashboardPage() {
               to="/reports/stock/valuation"
               accent="info"
             />
-            <ClickableMetricTile label="Invoices" value={dash ? String(dash.invoiceCount) : '—'} to="/sales" comparison={comparisons?.invoiceCount} />
+            <ClickableMetricTile label="Invoices" value={dash ? String(dash.invoiceCount) : '—'} to="/sales/list" comparison={comparisons?.invoiceCount} />
             <ClickableMetricTile label="Out of Stock" value={dash ? String(dash.outOfStockCount) : '—'} to="/reports/stock/out" accent="danger" />
           </div>
         ) : null}

@@ -120,7 +120,7 @@ function setupAutoUpdater(): void {
     mainWindow?.webContents.send('update-ready');
   });
 
-  autoUpdater.on('error', (err) => {
+  autoUpdater.on('error', (err: Error) => {
     logError('Auto-update failed', { error: err.message });
   });
 
