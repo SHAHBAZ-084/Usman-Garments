@@ -11,7 +11,7 @@ import {
   type StockMovement,
 } from '../../lib/api';
 import { formatDate, formatMoney, formatStockMovementType } from '../../lib/format';
-import { Plus, Printer, ScanBarcode, Trash2 } from 'lucide-react';
+import { Plus, Printer, Trash2 } from 'lucide-react';
 import { DangerButton, Feedback, FieldLabel, GhostButton, IconButton, LoadingState, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput } from '../../components/ui/PageShell';
 
 type VariantDraft = ProductVariantInput & {
@@ -219,7 +219,6 @@ export function ProductsListPage() {
   return (
     <PageShell title="Products" subtitle="Manage inventory, variants, barcodes, and stock" actions={<div className="flex flex-wrap gap-2">
       <Link to="/products"><SecondaryButton type="button">Products hub</SecondaryButton></Link>
-      <Link to="/products/scan"><SecondaryButton type="button"><ScanBarcode className="mr-1.5 inline h-4 w-4" aria-hidden />Scan barcode</SecondaryButton></Link>
       <SecondaryButton onClick={() => void downloadTemplate()}>Download Template</SecondaryButton>
       <label className="btn-secondary cursor-pointer">Import Stock<input className="hidden" type="file" accept=".xlsx,.xls" onChange={(event) => {
         const file = event.target.files?.[0];

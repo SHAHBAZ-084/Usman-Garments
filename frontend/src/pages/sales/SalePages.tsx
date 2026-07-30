@@ -12,7 +12,7 @@ import {
   type Product,
   type SalePaymentMethod,
 } from '../../lib/api';
-import { formatDate, formatMoney } from '../../lib/format';
+import { formatDate, formatDateTime, formatMoney } from '../../lib/format';
 import { shortcutLabel } from '../../lib/shortcuts';
 import { Printer, Trash2 } from 'lucide-react';
 import {
@@ -27,7 +27,7 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
-import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
+import { PaymentMethodFields, toApiPaymentMethod, type SimplePayKind } from '../../components/ui/PaymentMethodFields';
 import { BarcodeScanField } from '../products/BarcodeScanPage';
 
 type CartLine = {
@@ -108,9 +108,11 @@ export function NewSalePage() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [overallDiscount, setOverallDiscount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>('CASH');
+  const [paymentKind, setPaymentKind] = useState<SimplePayKind>('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
+  const [paidEdited, setPaidEdited] = useState(false);
+  const [udhaarRecovery, setUdhaarRecovery] = useState('');
   const [customerId, setCustomerId] = useState<string>('');
   const [newCustomerName, setNewCustomerName] = useState('');
   const [newCustomerPhone, setNewCustomerPhone] = useState('');
@@ -133,13 +135,21 @@ export function NewSalePage() {
   const subtotal = useMemo(() => cart.reduce((sum, line) => sum + lineTotal(line), 0), [cart]);
   const discount = Number(overallDiscount) || 0;
   const total = Math.max(0, subtotal - discount);
-  const received = paidAmount.trim() === '' ? total : Number(paidAmount) || 0;
+  const received = paidAmount.trim() === '' ? (paidEdited ? 0 : total) : Number(paidAmount) || 0;
   const remaining = Math.max(0, total - received);
-  const change = Math.max(0, received - total);
+  const surplus = Math.max(0, received - total);
+  const selectedCustomer = customers.find((c) => String(c.id) === customerId);
+  const priorOwed = selectedCustomer?.currentBalance ?? 0;
+  const recoveryRequested = Math.min(
+    surplus,
+    priorOwed,
+    udhaarRecovery.trim() === '' ? 0 : Number(udhaarRecovery) || 0,
+  );
+  const change = Math.max(0, surplus - recoveryRequested);
 
   useEffect(() => {
-    if (paidAmount.trim() === '' && total > 0) setPaidAmount(String(total));
-  }, [total, paidAmount]);
+    if (!paidEdited) setPaidAmount(total > 0 ? String(total) : '');
+  }, [total, paidEdited]);
 
   const stockErrors = useMemo(() => {
     const need = new Map<string, { name: string; need: number; have: number }>();
@@ -194,9 +204,10 @@ export function NewSalePage() {
   }, [runSearch]);
 
   async function ensureCustomerId(): Promise<number | null> {
-    if (remaining <= 0) return customerId ? Number(customerId) : null;
+    const needsCustomer = remaining > 0 || recoveryRequested > 0;
+    if (!needsCustomer && !customerId) return null;
     if (customerId === '__new__') {
-      if (!newCustomerName.trim()) throw new Error('Enter customer name for udhaar sale');
+      if (!newCustomerName.trim()) throw new Error('Enter customer name');
       const created = await api.createCustomer({
         name: newCustomerName.trim(),
         phone: newCustomerPhone.trim() || undefined,
@@ -205,8 +216,10 @@ export function NewSalePage() {
       setCustomerId(String(created.id));
       return created.id;
     }
-    if (!customerId) throw new Error('Select a customer when there is an amount remaining');
-    return Number(customerId);
+    if (needsCustomer && !customerId) {
+      throw new Error('Select or add a customer for udhaar / recovery');
+    }
+    return customerId ? Number(customerId) : null;
   }
 
   async function completeSale(event: FormEvent) {
@@ -216,18 +229,18 @@ export function NewSalePage() {
       setError('Add at least one item to the cart.');
       return;
     }
-    if (stockErrors.length) {
-      setError(stockErrors.map((e) => `${e.name}: need ${e.need}, only ${e.have} in stock`).join('; '));
+    if (paymentKind === 'EPAY' && !paymentAccountId) {
+      setError('Select an e-payment account');
       return;
     }
-    if (remaining > 0 && !customerId && customerId !== '__new__') {
-      setError('Select or add a customer for the remaining amount.');
+    if (stockErrors.length > 0) {
+      setError('Fix stock issues before completing the sale.');
       return;
     }
-
     setSaving(true);
     try {
       const resolvedCustomerId = await ensureCustomerId();
+      const paymentMethod = toApiPaymentMethod(paymentKind) as SalePaymentMethod;
       const payload: CreateSaleInput = {
         items: cart.map((line) => ({
           productId: line.productId,
@@ -239,6 +252,7 @@ export function NewSalePage() {
         paymentMethod: remaining > 0 && received === 0 ? 'UDHAAR' : paymentMethod,
         amountReceived: received,
         paidAmount: Math.min(received, total),
+        udhaarRecoveryAmount: recoveryRequested > 0 ? recoveryRequested : 0,
         customerId: resolvedCustomerId,
         discount: discount > 0 ? discount : undefined,
         paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
@@ -248,9 +262,13 @@ export function NewSalePage() {
       setCart([]);
       setOverallDiscount('');
       setPaidAmount('');
+      setPaidEdited(false);
+      setUdhaarRecovery('');
       setCustomerId('');
       setNewCustomerName('');
       setNewCustomerPhone('');
+      // refresh customers for updated balances
+      api.listCustomers().then(setCustomers).catch(() => undefined);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Sale failed');
     } finally {
@@ -263,6 +281,8 @@ export function NewSalePage() {
     setError('');
     setOverallDiscount('');
     setPaidAmount('');
+    setPaidEdited(false);
+    setUdhaarRecovery('');
     setCustomerId('');
   }
 
@@ -461,89 +481,112 @@ export function NewSalePage() {
               </div>
             </div>
 
-            <div>
-              <FieldLabel>Payment method</FieldLabel>
-              <select
-                className={SELECT_CLASS}
-                value={paymentMethod}
-                onChange={(e) => setPaymentMethod(e.target.value as SalePaymentMethod)}
-              >
-                <option value="CASH">Cash</option>
-                <option value="CARD">Card</option>
-                <option value="EASYPAISA">Easypaisa</option>
-                <option value="JAZZCASH">JazzCash</option>
-                <option value="BANK_TRANSFER">Bank transfer</option>
-              </select>
-            </div>
-
-            <PaymentBankAccountSelect
-              paymentMethod={paymentMethod}
-              value={paymentAccountId}
-              onChange={setPaymentAccountId}
+            <PaymentMethodFields
+              kind={paymentKind}
+              onKindChange={setPaymentKind}
+              accountId={paymentAccountId}
+              onAccountChange={setPaymentAccountId}
             />
 
             <div>
-              <FieldLabel>Cash / amount received</FieldLabel>
+              <FieldLabel>Amount received</FieldLabel>
               <TextInput
                 type="number"
                 min={0}
                 step="0.01"
                 value={paidAmount}
-                onChange={(e) => setPaidAmount(e.target.value)}
+                onChange={(e) => {
+                  setPaidEdited(true);
+                  setPaidAmount(e.target.value);
+                }}
                 placeholder="e.g. 1000"
               />
             </div>
 
+            <div className="space-y-2 rounded-lg border border-border p-3">
+              <FieldLabel>Customer (for udhaar / regular buyers)</FieldLabel>
+              <select
+                className={SELECT_CLASS}
+                value={customerId}
+                onChange={(e) => setCustomerId(e.target.value)}
+              >
+                <option value="">Walk-in (no account)</option>
+                {customers.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {c.phone ? ` (${c.phone})` : ''}
+                    {c.currentBalance > 0 ? ` — owes Rs ${formatMoney(c.currentBalance)}` : ''}
+                  </option>
+                ))}
+                <option value="__new__">+ Add new customer</option>
+              </select>
+              {customerId === '__new__' ? (
+                <div className="grid gap-2">
+                  <TextInput
+                    placeholder="Customer name"
+                    value={newCustomerName}
+                    onChange={(e) => setNewCustomerName(e.target.value)}
+                    required
+                  />
+                  <TextInput
+                    placeholder="Phone (optional)"
+                    value={newCustomerPhone}
+                    onChange={(e) => setNewCustomerPhone(e.target.value)}
+                  />
+                </div>
+              ) : null}
+              {selectedCustomer && priorOwed > 0 ? (
+                <p className="text-xs text-textMuted">
+                  Prior udhaar: Rs {formatMoney(priorOwed)}
+                </p>
+              ) : null}
+            </div>
+
             {remaining > 0 ? (
               <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-100">
-                Remaining (udhaar): Rs {formatMoney(remaining)}
+                New udhaar on this bill: Rs {formatMoney(remaining)}
+                {!customerId ? ' — select or add a customer' : ''}
               </p>
-            ) : change > 0 ? (
+            ) : null}
+
+            {surplus > 0 && priorOwed > 0 ? (
+              <div className="space-y-2 rounded-lg border border-success/30 bg-success/5 p-3">
+                <FieldLabel>Apply to prior udhaar (optional)</FieldLabel>
+                <TextInput
+                  type="number"
+                  min={0}
+                  max={Math.min(surplus, priorOwed)}
+                  step="0.01"
+                  value={udhaarRecovery}
+                  onChange={(e) => setUdhaarRecovery(e.target.value)}
+                  placeholder={`Up to Rs ${formatMoney(Math.min(surplus, priorOwed))}`}
+                />
+                <p className="text-xs text-textMuted">
+                  Extra paid: Rs {formatMoney(surplus)}. Leave blank for change, or enter amount to clear old udhaar.
+                </p>
+              </div>
+            ) : null}
+
+            {change > 0 || recoveryRequested > 0 ? (
               <div className="rounded-lg border border-border bg-surface1 px-3 py-2 text-sm">
                 <div className="flex justify-between gap-3">
                   <span className="text-textSecondary">Bill total</span>
                   <span className="font-medium">Rs {formatMoney(total)}</span>
                 </div>
                 <div className="mt-1 flex justify-between gap-3">
-                  <span className="text-textSecondary">Cash received</span>
+                  <span className="text-textSecondary">Amount received</span>
                   <span className="font-medium">Rs {formatMoney(received)}</span>
                 </div>
-                <div className="mt-1 flex justify-between gap-3 border-t border-border pt-1 font-semibold text-textPrimary">
-                  <span>Change due</span>
-                  <span>Rs {formatMoney(change)}</span>
-                </div>
-              </div>
-            ) : null}
-
-            {remaining > 0 ? (
-              <div className="space-y-2 rounded-lg border border-border p-3">
-                <FieldLabel>Customer (required for remaining balance)</FieldLabel>
-                <select
-                  className={SELECT_CLASS}
-                  value={customerId}
-                  onChange={(e) => setCustomerId(e.target.value)}
-                >
-                  <option value="">Select customer</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name} {c.phone ? `(${c.phone})` : ''}
-                    </option>
-                  ))}
-                  <option value="__new__">+ Add new customer</option>
-                </select>
-                {customerId === '__new__' ? (
-                  <div className="grid gap-2">
-                    <TextInput
-                      placeholder="Customer name"
-                      value={newCustomerName}
-                      onChange={(e) => setNewCustomerName(e.target.value)}
-                      required
-                    />
-                    <TextInput
-                      placeholder="Phone (optional)"
-                      value={newCustomerPhone}
-                      onChange={(e) => setNewCustomerPhone(e.target.value)}
-                    />
+                {recoveryRequested > 0 ? (
+                  <div className="mt-1 flex justify-between gap-3 text-success">
+                    <span>Udhaar recovery</span>
+                    <span className="font-medium">Rs {formatMoney(recoveryRequested)}</span>
+                  </div>
+                ) : null}
+                {change > 0 ? (
+                  <div className="mt-1 flex justify-between gap-3 border-t border-border pt-1 font-semibold text-textPrimary">
+                    <span>Change due</span>
+                    <span>Rs {formatMoney(change)}</span>
                   </div>
                 ) : null}
               </div>
@@ -722,7 +765,7 @@ export function InvoiceDetailPage() {
   return (
     <PageShell
       title={invoice.invoiceNumber}
-      subtitle={`${formatDate(invoice.date)} · ${invoice.status}`}
+      subtitle={`${formatDateTime(invoice.date)} · ${invoice.status}`}
       actions={
         <div className="flex flex-wrap gap-2">
           <Link to="/sales/list">
@@ -743,10 +786,12 @@ export function InvoiceDetailPage() {
       }
     >
       <Panel>
-        <p className="text-sm text-textSecondary">
-          Customer: {invoice.customer?.name ?? 'Walk-in'}
-          {invoice.customer?.phone ? ` · ${invoice.customer.phone}` : ''}
-        </p>
+        {invoice.customer ? (
+          <p className="text-sm text-textSecondary">
+            Customer: {invoice.customer.name}
+            {invoice.customer.phone ? ` · ${invoice.customer.phone}` : ''}
+          </p>
+        ) : null}
         <table className="mt-4 w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-textSecondary">

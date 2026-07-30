@@ -39,8 +39,13 @@ export type CreateSaleInput = {
   paymentMethod: SalePaymentMethod;
   /** Amount applied to the bill (capped at total). Optional when amountReceived is sent. */
   paidAmount?: number;
-  /** Cash/card tendered by customer (may exceed bill total for change). */
+  /** Cash/card tendered by customer (may exceed bill total for change / udhaar recovery). */
   amountReceived?: number;
+  /**
+   * When customer pays more than the bill, apply this much of the surplus to prior udhaar.
+   * Remainder of surplus is change given back.
+   */
+  udhaarRecoveryAmount?: number;
   paymentAccountId?: number | null;
   customerId?: number | null;
   discount?: number;
@@ -318,7 +323,53 @@ export async function createSale(input: CreateSaleInput) {
     return invoice.id;
   });
 
-  return getInvoice(invoiceId);
+  const surplus = roundMoney(Math.max(0, amountReceived - totalAmount));
+  let udhaarRecoveryApplied = 0;
+  const priorBalance = customer
+    ? Number(
+        (
+          await prisma.customer.findUnique({
+            where: { id: customer.id },
+            select: { currentBalance: true },
+          })
+        )?.currentBalance ?? 0,
+      ) - remainingAmount // strip this sale's new udhaar from balance
+    : 0;
+  const recoverablePrior = roundMoney(Math.max(0, priorBalance));
+  const requestedRecovery = roundMoney(Math.max(0, input.udhaarRecoveryAmount ?? 0));
+  udhaarRecoveryApplied = roundMoney(
+    Math.min(surplus, recoverablePrior, requestedRecovery > 0 ? requestedRecovery : 0),
+  );
+
+  // If frontend sent recovery intent via amount only (requested equals surplus when they want full surplus to recovery)
+  if (requestedRecovery <= 0 && surplus > 0 && recoverablePrior > 0 && input.udhaarRecoveryAmount === undefined) {
+    // no auto-apply without explicit amount
+    udhaarRecoveryApplied = 0;
+  }
+
+  if (udhaarRecoveryApplied > 0 && customer) {
+    const { createCustomerPayment } = await import('../customers/customers.service');
+    const payMethod: PurchasePaymentMethod =
+      input.paymentMethod === SalePaymentMethod.UDHAAR
+        ? PurchasePaymentMethod.CASH
+        : (input.paymentMethod as PurchasePaymentMethod);
+    await createCustomerPayment({
+      customerId: customer.id,
+      amount: udhaarRecoveryApplied,
+      paymentMethod: payMethod,
+      paymentAccountId: input.paymentAccountId,
+      date: saleDate.toISOString().slice(0, 10),
+      note: `Udhaar recovery with sale`,
+      createdById: input.createdById,
+    });
+  }
+
+  const invoice = await getInvoice(invoiceId);
+  return {
+    ...invoice,
+    udhaarRecoveryApplied,
+    changeAmount: roundMoney(surplus - udhaarRecoveryApplied),
+  };
 }
 
 function serializeInvoice(row: {

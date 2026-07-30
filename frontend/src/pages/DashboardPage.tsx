@@ -19,7 +19,6 @@ import {
   Package,
   Plus,
   Receipt,
-  ScanBarcode,
   ShoppingCart,
   Wallet,
 } from 'lucide-react';
@@ -49,7 +48,6 @@ const QUICK_ACTIONS = [
   { label: 'New Sale', to: '/sales/new', icon: ShoppingCart },
   { label: 'Add Product', to: '/products/add', icon: Plus },
   { label: 'Add Purchase', to: '/purchases/new', icon: Package },
-  { label: 'Print Barcode', to: '/products/scan', icon: ScanBarcode },
   { label: 'Add Expense', to: '/finance/expenses/new', icon: Wallet },
   { label: 'Receive Payment', to: '/customers/pay', icon: HandCoins },
   { label: 'Pay Supplier', to: '/purchases/pay', icon: Receipt },
@@ -94,7 +92,6 @@ export function DashboardPage() {
   const [fromDate, setFromDate] = useState(todayInput());
   const [toDate, setToDate] = useState(todayInput());
   const [data, setData] = useState<DashboardPayload | null>(null);
-  const [backupStatus, setBackupStatus] = useState<{ lastBackupAt: string | null; ok: boolean } | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -109,15 +106,6 @@ export function DashboardPage() {
         toDate: preset === 'custom' ? toDate : undefined,
       });
       setData(result);
-      try {
-        const health = await api.getSystemHealth();
-        setBackupStatus({
-          lastBackupAt: health.backup.lastBackupAt,
-          ok: Boolean(health.backup.lastBackupAt),
-        });
-      } catch {
-        setBackupStatus(null);
-      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load dashboard');
     } finally {
@@ -170,16 +158,8 @@ export function DashboardPage() {
         </div>
       </section>
 
-      <PageShell>
+      <PageShell wide>
       {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
-      {backupStatus ? (
-        <Feedback variant={backupStatus.ok ? 'info' : 'warning'} className="mb-3">
-          Last backup: {backupStatus.lastBackupAt ? formatDate(backupStatus.lastBackupAt) : 'Never'} —{' '}
-          <Link to="/system/health" className="font-medium underline">
-            System Health
-          </Link>
-        </Feedback>
-      ) : null}
 
       <Panel className="mb-4">
         <div className="flex flex-wrap items-end gap-3">
@@ -220,7 +200,7 @@ export function DashboardPage() {
           <ClickableMetricTile
             label={salesLabel(preset)}
             value={dash ? formatMoney(dash.netSales) : '—'}
-            to="/reports/sales/range"
+            to={`/reports/sales/daily?preset=${preset}`}
             accent="success"
             comparison={comparisons?.netSales}
           />
@@ -251,6 +231,44 @@ export function DashboardPage() {
           />
         </div>
       )}
+
+      {dash?.salesCollectionBreakdown ? (
+        <Panel className="mt-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-textPrimary">How sales were collected</p>
+              <p className="text-xs text-textMuted">{dash.range.label} — tap “View details” on sales for the full report</p>
+            </div>
+            <Link to={`/reports/sales/daily?preset=${preset}`} className="text-xs font-medium text-accent underline">
+              Open full breakdown →
+            </Link>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-3">
+            <div className="rounded-lg border border-success/30 bg-success/5 px-3 py-2">
+              <p className="text-xs text-textMuted">Cash</p>
+              <p className="text-lg font-semibold text-success">Rs {formatMoney(dash.salesCollectionBreakdown.cash)}</p>
+            </div>
+            <div className="rounded-lg border border-accent/30 bg-accent/5 px-3 py-2">
+              <p className="text-xs text-textMuted">E-payment</p>
+              <p className="text-lg font-semibold text-textPrimary">Rs {formatMoney(dash.salesCollectionBreakdown.ePayment)}</p>
+            </div>
+            <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2">
+              <p className="text-xs text-textMuted">Still on udhaar</p>
+              <p className="text-lg font-semibold text-warning">Rs {formatMoney(dash.salesCollectionBreakdown.udhaar)}</p>
+            </div>
+          </div>
+          {dash.salesCollectionBreakdown.byAccount.length > 0 ? (
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {dash.salesCollectionBreakdown.byAccount.map((row) => (
+                <li key={row.accountName} className="flex justify-between gap-3 border-b border-border/50 py-1">
+                  <span className="text-textSecondary">{row.accountName}</span>
+                  <span className="font-medium tabular-nums text-textPrimary">Rs {formatMoney(row.amount)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </Panel>
+      ) : null}
 
       <Panel className="mt-4">
         <button

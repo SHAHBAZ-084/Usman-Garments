@@ -241,13 +241,25 @@ export async function createCustomer(input: CreateCustomerInput) {
   if (openingBalance < 0) throw new AppError(400, 'Opening balance cannot be negative');
 
   const category = await ensureCustomersCategory();
-  const account = await createAccount({
-    categoryId: category.id,
-    name,
-    type: AccountType.ASSET,
-    openingBalance: openingBalance > 0 ? openingBalance : 0,
-    openingBalanceSide: 'DR',
-  });
+  let account;
+  try {
+    account = await createAccount({
+      categoryId: category.id,
+      name: `Customer — ${name}`,
+      type: AccountType.ASSET,
+      openingBalance: openingBalance > 0 ? openingBalance : 0,
+      openingBalanceSide: 'DR',
+    });
+  } catch {
+    const suffix = input.phone?.trim() || String(Date.now()).slice(-6);
+    account = await createAccount({
+      categoryId: category.id,
+      name: `Customer — ${name} (${suffix})`,
+      type: AccountType.ASSET,
+      openingBalance: openingBalance > 0 ? openingBalance : 0,
+      openingBalanceSide: 'DR',
+    });
+  }
 
   try {
     const customer = await prisma.customer.create({

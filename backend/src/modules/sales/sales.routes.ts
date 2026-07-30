@@ -23,6 +23,7 @@ const createSaleSchema = z.object({
   paymentMethod: z.nativeEnum(SalePaymentMethod),
   paidAmount: z.number().min(0).optional(),
   amountReceived: z.number().min(0).optional(),
+  udhaarRecoveryAmount: z.number().min(0).optional(),
   paymentAccountId: z.number().int().positive().nullable().optional(),
   customerId: z.number().int().positive().nullable().optional(),
   discount: z.number().min(0).optional(),

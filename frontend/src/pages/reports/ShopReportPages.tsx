@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, type DateRangePreset, type PaginatedResult } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
 import { downloadCsv, downloadExcel, downloadPdf, type ReportExportMeta } from '../../lib/reportExport';
@@ -453,41 +454,231 @@ export function ReturnsExchangesReportPage() {
 }
 
 export function DailySalesReportPage() {
+  const [searchParams] = useSearchParams();
+  const initialPreset = (searchParams.get('preset') as DateRangePreset) || 'today';
+  const [preset, setPreset] = useState<DateRangePreset>(
+    ['today', 'week', 'month', 'year', 'lifetime', 'custom'].includes(initialPreset) ? initialPreset : 'today',
+  );
   const [fromDate, setFromDate] = useState(monthStartInputValue());
   const [toDate, setToDate] = useState(todayInputValue());
   const [rows, setRows] = useState<(string | number)[][]>([]);
+  const [breakdown, setBreakdown] = useState<{
+    range: { label: string };
+    totalCollected: number;
+    cash: number;
+    ePayment: number;
+    udhaar: number;
+    byAccount: Array<{ accountName: string; amount: number }>;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const headers = ['Date', 'Invoices', 'Gross', 'Discounts', 'Net Sales', 'Cash'];
+  const headers = ['Date', 'Invoices', 'Gross', 'Discounts', 'Net Sales', 'Cash taken'];
 
   async function load() {
     setLoading(true);
     setError('');
     try {
-      const data = await api.fetchReport<PaginatedResult<{ date: string; invoiceCount: number; grossSales: number; discounts: number; netSales: number; cashReceived: number }>>('/sales/daily', { fromDate, toDate, page: 1, pageSize: 100 });
-      setRows(data.items.map((d) => [d.date, d.invoiceCount, formatMoney(d.grossSales), formatMoney(d.discounts), formatMoney(d.netSales), formatMoney(d.cashReceived)]));
+      const [daily, collection] = await Promise.all([
+        api.fetchReport<
+          PaginatedResult<{
+            date: string;
+            invoiceCount: number;
+            grossSales: number;
+            discounts: number;
+            netSales: number;
+            cashReceived: number;
+          }>
+        >('/sales/daily', {
+          fromDate: preset === 'custom' ? fromDate : undefined,
+          toDate: preset === 'custom' ? toDate : undefined,
+          preset,
+          page: 1,
+          pageSize: 100,
+        }),
+        api.fetchReport<{
+          range: { label: string };
+          totalCollected: number;
+          cash: number;
+          ePayment: number;
+          udhaar: number;
+          byAccount: Array<{ accountName: string; amount: number }>;
+        }>('/sales/collection-breakdown', {
+          preset,
+          fromDate: preset === 'custom' ? fromDate : undefined,
+          toDate: preset === 'custom' ? toDate : undefined,
+        }),
+      ]);
+      setRows(
+        daily.items.map((d) => [
+          d.date,
+          d.invoiceCount,
+          formatMoney(d.grossSales),
+          formatMoney(d.discounts),
+          formatMoney(d.netSales),
+          formatMoney(d.cashReceived),
+        ]),
+      );
+      setBreakdown(collection);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed');
       setRows([]);
+      setBreakdown(null);
     } finally {
       setLoading(false);
     }
   }
 
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when period changes
+  }, [preset, fromDate, toDate]);
+
   return (
-    <ReportShell
-      title="Daily Sales"
-      headers={headers}
-      rows={rows}
-      loading={loading}
-      error={error}
-      onLoad={() => void load()}
-      preset="custom"
-      fromDate={fromDate}
-      toDate={toDate}
-      onFromDate={setFromDate}
-      onToDate={setToDate}
-    />
+    <PageShell
+      title="Sales report"
+      subtitle="Choose day, week, month, year, or custom dates — see cash vs e-payment clearly"
+      wide
+      actions={
+        <div className="flex flex-wrap gap-2">
+          <SecondaryButton
+            type="button"
+            disabled={!breakdown && rows.length === 0}
+            onClick={() => {
+              const headers = ['Section', 'Account / metric', 'Amount'];
+              const exportRows: (string | number)[][] = [];
+              if (breakdown) {
+                exportRows.push(['Summary', 'Total collected', breakdown.totalCollected]);
+                exportRows.push(['Summary', 'Cash', breakdown.cash]);
+                exportRows.push(['Summary', 'E-payment', breakdown.ePayment]);
+                exportRows.push(['Summary', 'Udhaar still open', breakdown.udhaar]);
+                for (const row of breakdown.byAccount) {
+                  exportRows.push(['Landed', row.accountName, row.amount]);
+                }
+              }
+              for (const row of rows) {
+                exportRows.push(['Daily', ...row]);
+              }
+              downloadExcel('sales-report.xlsx', 'Sales', headers, exportRows);
+            }}
+          >
+            Download Excel
+          </SecondaryButton>
+          <SecondaryButton
+            type="button"
+            disabled={!breakdown && rows.length === 0}
+            onClick={() => {
+              const headers = ['Date', 'Invoices', 'Gross', 'Discounts', 'Net Sales', 'Cash taken'];
+              downloadPdf(
+                'sales-report.pdf',
+                `Sales report — ${breakdown?.range.label ?? preset}`,
+                headers,
+                rows,
+              );
+            }}
+          >
+            Download PDF
+          </SecondaryButton>
+        </div>
+      }
+    >
+      <Panel className="mb-4">
+        <p className="mb-2 text-xs font-medium text-textMuted">Period</p>
+        <SegmentedControl
+          value={preset}
+          onChange={(v) => setPreset(v as DateRangePreset)}
+          options={PRESET_OPTIONS}
+        />
+        {preset === 'custom' ? (
+          <div className="mt-3 flex flex-wrap gap-3">
+            <div>
+              <FieldLabel>From</FieldLabel>
+              <TextInput type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+            </div>
+            <div>
+              <FieldLabel>To</FieldLabel>
+              <TextInput type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+            </div>
+          </div>
+        ) : null}
+        {error ? <Feedback variant="error" className="mt-3">{error}</Feedback> : null}
+      </Panel>
+
+      {breakdown ? (
+        <Panel className="mb-4">
+          <h2 className="text-base font-semibold text-textPrimary">Money collected — {breakdown.range.label}</h2>
+          <p className="mt-1 text-sm text-textSecondary">
+            Total received in this period: <strong>Rs {formatMoney(breakdown.totalCollected)}</strong>
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-success/35 bg-success/5 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-textMuted">Cash</p>
+              <p className="mt-1 text-2xl font-bold text-success">Rs {formatMoney(breakdown.cash)}</p>
+            </div>
+            <div className="rounded-xl border border-accent/40 bg-accent/5 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-textMuted">E-payment</p>
+              <p className="mt-1 text-2xl font-bold text-textPrimary">Rs {formatMoney(breakdown.ePayment)}</p>
+            </div>
+            <div className="rounded-xl border border-warning/35 bg-warning/5 p-4">
+              <p className="text-xs font-medium uppercase tracking-wide text-textMuted">Udhaar still open</p>
+              <p className="mt-1 text-2xl font-bold text-warning">Rs {formatMoney(breakdown.udhaar)}</p>
+            </div>
+          </div>
+          {breakdown.byAccount.length > 0 ? (
+            <div className="mt-4">
+                  <p className="mb-2 text-sm font-semibold text-textPrimary">Where money landed (matches total above)</p>
+              <ul className="divide-y divide-border rounded-lg border border-border">
+                {breakdown.byAccount.map((row) => (
+                  <li key={row.accountName} className="flex justify-between gap-3 px-3 py-2.5 text-sm">
+                    <span className="text-textSecondary">{row.accountName}</span>
+                    <span className="font-semibold tabular-nums">Rs {formatMoney(row.amount)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-textMuted">No collection detail for this period yet.</p>
+          )}
+        </Panel>
+      ) : null}
+
+      <Panel>
+        <h2 className="mb-1 text-base font-semibold text-textPrimary">Day-by-day list</h2>
+        <p className="mb-3 text-sm text-textSecondary">Each row is one calendar day in the selected period</p>
+        {loading ? <p className="text-sm text-textMuted">Loading…</p> : null}
+        <div className="overflow-x-auto">
+          <table className="app-data-table w-full min-w-[480px] text-left text-sm">
+            <thead>
+              <tr className="border-b border-border text-textMuted">
+                {headers.map((h) => (
+                  <th key={h} className="py-2 pr-3 font-medium">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={headers.length} className="py-4 text-textMuted">
+                    {loading ? 'Loading…' : 'No sales in this period.'}
+                  </td>
+                </tr>
+              ) : (
+                rows.map((row, i) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    {row.map((cell, j) => (
+                      <td key={j} className="py-2 pr-3">
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
+    </PageShell>
   );
 }
 
@@ -503,12 +694,73 @@ export function CurrentStockReportPage() {
 }
 
 export function LowStockReportPage() {
-  const r = usePaginatedReport<{ name: string; sku: string; currentStock: number }>(
-    '/stock/low',
-    (i) => [i.name, i.sku, i.currentStock],
-    () => ['Product', 'SKU', 'Stock'],
+  const [limit, setLimit] = useState<number | null>(null);
+  const [rows, setRows] = useState<(string | number)[][]>([]);
+  const [emptyMessage, setEmptyMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function load() {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await api.fetchReport<
+        PaginatedResult<{ name: string; sku: string; currentStock: number }> & {
+          lowStockLimit?: number;
+          emptyMessage?: string;
+        }
+      >('/stock/low', { page: 1, pageSize: 100 });
+      setLimit(data.lowStockLimit ?? null);
+      setEmptyMessage(data.emptyMessage ?? '');
+      setRows(data.items.map((i) => [i.name, i.sku, i.currentStock]));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  return (
+    <PageShell title="Low Stock" subtitle={limit != null ? `Products at or below limit of ${limit}` : 'Products below your stock limit'}>
+      <Panel>
+        {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
+        {loading ? <p className="text-sm text-textMuted">Loading…</p> : null}
+        {!loading && rows.length === 0 ? (
+          <p className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
+            {emptyMessage || 'Nothing is low stock from your set limit.'}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="app-data-table w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-textMuted">
+                  <th className="py-2 pr-3">Product</th>
+                  <th className="py-2 pr-3">SKU</th>
+                  <th className="py-2 pr-3">Stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row, i) => (
+                  <tr key={i} className="border-b border-border">
+                    {row.map((cell, j) => (
+                      <td key={j} className="py-2 pr-3">
+                        {cell}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
+    </PageShell>
   );
-  return <ReportShell {...bindPaginatedReport(r, { title: 'Low Stock' })} />;
 }
 
 export function OutOfStockReportPage() {

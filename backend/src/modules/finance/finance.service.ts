@@ -175,8 +175,7 @@ export async function createExpense(input: CreateExpenseInput) {
   const amount = roundMoney(input.amount);
   if (!(amount > 0)) throw new AppError(400, 'Amount must be greater than zero');
 
-  const description = input.description.trim();
-  if (!description) throw new AppError(400, 'Description is required');
+  const description = (input.description ?? '').trim() || 'Expense';
 
   const category = await prisma.expenseCategory.findUnique({ where: { id: input.categoryId } });
   if (!category || !category.isActive) throw new AppError(400, 'Expense category not found');
@@ -285,8 +284,7 @@ export async function createOtherIncome(input: CreateOtherIncomeInput) {
   const amount = roundMoney(input.amount);
   if (!(amount > 0)) throw new AppError(400, 'Amount must be greater than zero');
 
-  const description = input.description.trim();
-  if (!description) throw new AppError(400, 'Description is required');
+  const description = (input.description ?? '').trim() || 'Other income';
 
   const category = await prisma.otherIncomeCategory.findUnique({ where: { id: input.categoryId } });
   if (!category || !category.isActive) throw new AppError(400, 'Income category not found');

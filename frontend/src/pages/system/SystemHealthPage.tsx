@@ -118,9 +118,16 @@ export function SystemHealthPage() {
     writeDismissed(next);
   }
 
-  function agreeStock(m: { productId: number; expected: number; actual: number; name: string }) {
-    dismissStock(m.productId, mismatchSignature(m));
-    setMessage(`Acknowledged stock note for ${m.name}.`);
+  async function agreeStock(m: { productId: number; expected: number; actual: number; name: string }) {
+    setMessage('');
+    try {
+      await api.reconcileHealthStock(m.productId);
+      dismissStock(m.productId, mismatchSignature(m));
+      setMessage(`Cleared stock mismatch for ${m.name}. Records start fresh from here.`);
+      await load();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Could not clear stock mismatch');
+    }
   }
 
   const stockSettled =

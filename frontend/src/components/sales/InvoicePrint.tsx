@@ -1,5 +1,5 @@
 import JsBarcode from 'jsbarcode';
-import { formatDate, formatMoney } from '../../lib/format';
+import { formatDateTime, formatMoney } from '../../lib/format';
 import type { BusinessSettings, Invoice } from '../../lib/api';
 import { formatDeveloperCreditForPrint } from '../../config/printCredit';
 
@@ -52,13 +52,14 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
   const widthMm = settings.receiptSize === 'THERMAL_58' ? 58 : settings.receiptSize === 'THERMAL_80' ? 80 : 210;
   const amountReceived = invoice.amountReceived ?? invoice.paidAmount;
   const changeAmount =
-    invoice.changeAmount ?? Math.max(0, amountReceived - invoice.totalAmount);
+    invoice.changeAmount ??
+    Math.max(0, amountReceived - invoice.totalAmount - (invoice.udhaarRecoveryApplied ?? 0));
 
   const customerLine = invoice.customer
     ? `${escapeHtml(invoice.customer.name)}${
         invoice.customer.phone ? `<br/><span class="muted">${escapeHtml(invoice.customer.phone)}</span>` : ''
       }`
-    : 'Walk-in customer';
+    : null;
 
   const rows = invoice.items
     .map((item) => {
@@ -101,13 +102,22 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
       `<div class="sum-row sum-change"><span>Change due</span><span>Rs ${formatMoney(changeAmount)}</span></div>`,
     );
   }
+  if ((invoice.udhaarRecoveryApplied ?? 0) > 0) {
+    summaryParts.push(
+      `<div class="sum-row"><span>Udhaar recovery</span><span>Rs ${formatMoney(invoice.udhaarRecoveryApplied!)}</span></div>`,
+    );
+  }
   if (invoice.remainingAmount > 0) {
     summaryParts.push(
       `<div class="sum-row sum-due"><span>Remaining (udhaar)</span><span>Rs ${formatMoney(invoice.remainingAmount)}</span></div>`,
     );
   }
   summaryParts.push(
-    `<div class="sum-row"><span>Payment</span><span>${escapeHtml(paymentLabel(invoice.paymentMethod))}</span></div>`,
+    `<div class="sum-row"><span>Payment</span><span>${escapeHtml(
+      invoice.paymentMethod === 'CASH' || invoice.paymentMethod === 'UDHAAR'
+        ? paymentLabel(invoice.paymentMethod)
+        : 'E-payment',
+    )}</span></div>`,
   );
 
   const barcodeMarkup = invoiceBarcodeSvg(invoice.invoiceNumber);
@@ -130,13 +140,17 @@ export function buildInvoicePrintHtml(invoice: Invoice, settings: BusinessSettin
           <div class="meta-value strong">${escapeHtml(invoice.invoiceNumber)}</div>
         </div>
         <div class="meta-block">
-          <div class="meta-label">Date</div>
-          <div class="meta-value">${formatDate(invoice.date)}</div>
+          <div class="meta-label">Date & time</div>
+          <div class="meta-value">${escapeHtml(formatDateTime(invoice.date))}</div>
         </div>
-        <div class="meta-block">
+        ${
+          customerLine
+            ? `<div class="meta-block">
           <div class="meta-label">Customer</div>
           <div class="meta-value">${customerLine}</div>
-        </div>
+        </div>`
+            : ''
+        }
       </section>
 
       <div class="rule"></div>

@@ -5,6 +5,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { AccountManagePage } from './pages/accounts/AccountManagePage';
 import { AccountsFinancePage } from './pages/accounts/AccountsFinancePage';
+import { AddEPaymentPage } from './pages/accounts/AddEPaymentPage';
 import { CategoryManagePage } from './pages/accounts/CategoryManagePage';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -42,7 +43,6 @@ import { SettingsPage } from './pages/system/SettingsPage';
 import { SystemHealthPage } from './pages/system/SystemHealthPage';
 import { UserInfoPage } from './pages/user/UserInfoPage';
 import { ProductFormPage, ProductsListPage } from './pages/products/ProductPages';
-import { BarcodeScanPage } from './pages/products/BarcodeScanPage';
 import {
   PurchaseDetailPage,
   PurchaseEntryPage,
@@ -95,7 +95,6 @@ export default function App() {
               <Route path="/products" element={<ProductsHubPage />} />
               <Route path="/products/list" element={<ProductsListPage />} />
               <Route path="/products/add" element={<ProductFormPage mode="add" />} />
-              <Route path="/products/scan" element={<BarcodeScanPage />} />
               <Route path="/products/:id" element={<ProductFormPage mode="edit" />} />
 
               <Route path="/suppliers" element={<SuppliersHubPage />} />
@@ -130,7 +129,8 @@ export default function App() {
 
               <Route path="/accounts" element={<AccountsHubPage />} />
               <Route path="/accounts/overview" element={<AccountsFinancePage />} />
-              <Route path="/accounts/chart" element={<AccountsFinancePage />} />
+              <Route path="/accounts/e-payment" element={<AddEPaymentPage />} />
+              <Route path="/accounts/chart" element={<Navigate to="/accounts/overview" replace />} />
 
               <Route path="/reports" element={<ReportsHubPage />} />
               <Route path="/system" element={<SystemHubPage />} />

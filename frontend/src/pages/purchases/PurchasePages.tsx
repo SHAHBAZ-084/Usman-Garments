@@ -22,15 +22,7 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
-import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
-
-const PAYMENT_METHODS: { value: PurchasePaymentMethod; label: string }[] = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'CARD', label: 'Card' },
-  { value: 'EASYPAISA', label: 'Easypaisa' },
-  { value: 'JAZZCASH', label: 'JazzCash' },
-  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
-];
+import { PaymentMethodFields, toApiPaymentMethod, type SimplePayKind } from '../../components/ui/PaymentMethodFields';
 
 function todayInput() {
   const d = new Date();
@@ -57,7 +49,7 @@ export function PurchaseEntryPage() {
   );
   const [date, setDate] = useState(todayInput());
   const [invoiceNo, setInvoiceNo] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentKind, setPaymentKind] = useState<SimplePayKind>('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [notes, setNotes] = useState('');
@@ -74,6 +66,11 @@ export function PurchaseEntryPage() {
   const [quickSalePrice, setQuickSalePrice] = useState('');
   const [quickPurchasePrice, setQuickPurchasePrice] = useState('');
   const [quickBusy, setQuickBusy] = useState(false);
+  const [quickSupplierOpen, setQuickSupplierOpen] = useState(false);
+  const [quickSupplierName, setQuickSupplierName] = useState('');
+  const [quickSupplierPhone, setQuickSupplierPhone] = useState('');
+  const [quickSupplierBusy, setQuickSupplierBusy] = useState(false);
+  const [paidEdited, setPaidEdited] = useState(false);
 
   useEffect(() => {
     api.listSuppliers().then(setSuppliers).catch(() => setSuppliers([]));
@@ -100,7 +97,7 @@ export function PurchaseEntryPage() {
     }, 0);
   }, [lines]);
 
-  const paid = paidAmount.trim() === '' ? totalAmount : Number(paidAmount) || 0;
+  const paid = paidAmount.trim() === '' ? (paidEdited ? 0 : totalAmount) : Number(paidAmount) || 0;
   const remaining = Math.max(0, Math.round((totalAmount - paid) * 100) / 100);
 
   function addProduct(product: Product, variantId?: number) {
@@ -127,6 +124,31 @@ export function PurchaseEntryPage() {
     ]);
     setProductSearch('');
     setProducts([]);
+  }
+
+  async function onQuickAddSupplier() {
+    setError('');
+    const name = quickSupplierName.trim();
+    if (!name) {
+      setError('Enter a supplier name');
+      return;
+    }
+    setQuickSupplierBusy(true);
+    try {
+      const created = await api.createSupplier({
+        name,
+        phone: quickSupplierPhone.trim() || undefined,
+      });
+      setSuppliers((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setSupplierId(created.id);
+      setQuickSupplierOpen(false);
+      setQuickSupplierName('');
+      setQuickSupplierPhone('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Quick add supplier failed');
+    } finally {
+      setQuickSupplierBusy(false);
+    }
   }
 
   async function onQuickAddProduct() {
@@ -187,7 +209,7 @@ export function PurchaseEntryPage() {
         supplierId: Number(supplierId),
         date,
         supplierInvoiceNumber: invoiceNo.trim() || null,
-        paymentMethod,
+        paymentMethod: toApiPaymentMethod(paymentKind) as PurchasePaymentMethod,
         paidAmount: paid,
         notes: notes.trim() || null,
         paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
@@ -206,17 +228,26 @@ export function PurchaseEntryPage() {
     }
   }
 
-  function clearPurchaseForm() {
+  function clearPurchaseForm(keepSupplier = false) {
     setLines([]);
     setPaidAmount('');
+    setPaidEdited(false);
     setNotes('');
     setInvoiceNo('');
     setError('');
+    if (!keepSupplier) setSupplierId('');
+  }
+
+  function startAnotherPurchase(sameSupplier: boolean) {
+    const keepId = sameSupplier ? confirmation?.supplierId : undefined;
+    setConfirmation(null);
+    clearPurchaseForm(Boolean(keepId));
+    if (keepId) setSupplierId(keepId);
   }
 
   useFormShortcuts({
     onSave: () => purchaseFormRef.current?.requestSubmit(),
-    onClear: clearPurchaseForm,
+    onClear: () => clearPurchaseForm(true),
     saveEnabled: !saving && Boolean(supplierId) && lines.length > 0,
   });
 
@@ -231,15 +262,18 @@ export function PurchaseEntryPage() {
             <li>Added to supplier balance: Rs {formatMoney(confirmation.remainingAmount)}</li>
           </ul>
           <div className="mt-6 flex flex-wrap gap-2">
+            <PrimaryButton type="button" onClick={() => startAnotherPurchase(true)}>
+              Another purchase (same supplier)
+            </PrimaryButton>
+            <SecondaryButton type="button" onClick={() => startAnotherPurchase(false)}>
+              New purchase (other supplier)
+            </SecondaryButton>
             <Link to={`/purchases/${confirmation.id}`}>
-              <PrimaryButton type="button">View purchase</PrimaryButton>
+              <SecondaryButton type="button">View purchase</SecondaryButton>
             </Link>
             <Link to={`/suppliers/${confirmation.supplierId}`}>
               <SecondaryButton type="button">Supplier page</SecondaryButton>
             </Link>
-            <SecondaryButton type="button" onClick={() => { setConfirmation(null); setLines([]); setPaidAmount(''); }}>
-              New purchase
-            </SecondaryButton>
           </div>
         </Panel>
       </PageShell>
@@ -259,18 +293,50 @@ export function PurchaseEntryPage() {
       <form ref={purchaseFormRef} className="grid gap-6 lg:grid-cols-2" onSubmit={onSubmit}>
         <Panel className="space-y-4">
           <div>
-            <FieldLabel>Supplier</FieldLabel>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <FieldLabel>Supplier</FieldLabel>
+              <GhostButton
+                type="button"
+                onClick={() => setQuickSupplierOpen((o) => !o)}
+              >
+                {quickSupplierOpen ? 'Close quick add' : 'Quick add supplier'}
+              </GhostButton>
+            </div>
             <select
               className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
               value={supplierId}
               onChange={(e) => setSupplierId(e.target.value ? Number(e.target.value) : '')}
-              required
+              required={!quickSupplierOpen}
             >
               <option value="">Select supplier</option>
               {suppliers.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
               ))}
             </select>
+            {quickSupplierOpen ? (
+              <div className="mt-3 space-y-2 rounded-lg border border-dashed border-border bg-surface1 p-3">
+                <p className="text-sm font-medium text-textPrimary">Quick add supplier</p>
+                <div>
+                  <FieldLabel>Name</FieldLabel>
+                  <TextInput
+                    value={quickSupplierName}
+                    onChange={(e) => setQuickSupplierName(e.target.value)}
+                    placeholder="Supplier name"
+                    required
+                  />
+                </div>
+                <div>
+                  <FieldLabel>Phone (optional)</FieldLabel>
+                  <TextInput
+                    value={quickSupplierPhone}
+                    onChange={(e) => setQuickSupplierPhone(e.target.value)}
+                  />
+                </div>
+                <PrimaryButton type="button" disabled={quickSupplierBusy} onClick={() => void onQuickAddSupplier()}>
+                  {quickSupplierBusy ? 'Adding…' : 'Create & select'}
+                </PrimaryButton>
+              </div>
+            ) : null}
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -457,23 +523,12 @@ export function PurchaseEntryPage() {
         </Panel>
 
         <Panel className="space-y-4 h-fit">
-          <div>
-            <FieldLabel>Payment method</FieldLabel>
-            <select
-              className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PurchasePaymentMethod)}
-            >
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
-          <PaymentBankAccountSelect
-            paymentMethod={paymentMethod}
-            value={paymentAccountId}
-            onChange={setPaymentAccountId}
-          />
+          <PaymentMethodFields
+              kind={paymentKind}
+              onKindChange={setPaymentKind}
+              accountId={paymentAccountId}
+              onAccountChange={setPaymentAccountId}
+            />
           <div>
             <FieldLabel>Paid now</FieldLabel>
             <TextInput
@@ -481,10 +536,15 @@ export function PurchaseEntryPage() {
               min="0"
               step="0.01"
               value={paidAmount}
-              onChange={(e) => setPaidAmount(e.target.value)}
+              onChange={(e) => {
+                setPaidEdited(true);
+                setPaidAmount(e.target.value);
+              }}
               placeholder={String(totalAmount || 0)}
             />
-            <p className="mt-1 text-xs text-textSecondary">Leave blank to mark as fully paid.</p>
+            <p className="mt-1 text-xs text-textSecondary">
+              Starts as full total — clear to enter your own amount. Leave blank (without editing) to pay in full.
+            </p>
           </div>
           <div className="rounded-lg border border-border bg-surface1 p-4 text-sm">
             <div className="flex justify-between">
@@ -707,7 +767,7 @@ export function SupplierPaymentPage() {
     searchParams.get('supplierId') ? Number(searchParams.get('supplierId')) : '',
   );
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentKind, setPaymentKind] = useState<SimplePayKind>('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [date, setDate] = useState(todayInput());
   const [note, setNote] = useState('');
@@ -727,6 +787,10 @@ export function SupplierPaymentPage() {
       setError('Select a supplier');
       return;
     }
+    if (paymentKind === 'EPAY' && !paymentAccountId) {
+      setError('Select an e-payment account');
+      return;
+    }
     setSaving(true);
     setError('');
     setMessage('');
@@ -734,7 +798,7 @@ export function SupplierPaymentPage() {
       const result = await api.createSupplierPayment({
         supplierId: Number(supplierId),
         amount: Number(amount),
-        paymentMethod,
+        paymentMethod: toApiPaymentMethod(paymentKind) as PurchasePaymentMethod,
         date,
         note: note.trim() || null,
         paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
@@ -784,22 +848,11 @@ export function SupplierPaymentPage() {
             <FieldLabel>Amount</FieldLabel>
             <TextInput type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </div>
-          <div>
-            <FieldLabel>Payment method</FieldLabel>
-            <select
-              className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PurchasePaymentMethod)}
-            >
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
-          <PaymentBankAccountSelect
-            paymentMethod={paymentMethod}
-            value={paymentAccountId}
-            onChange={setPaymentAccountId}
+          <PaymentMethodFields
+            kind={paymentKind}
+            onKindChange={setPaymentKind}
+            accountId={paymentAccountId}
+            onAccountChange={setPaymentAccountId}
           />
           <div>
             <FieldLabel>Date</FieldLabel>

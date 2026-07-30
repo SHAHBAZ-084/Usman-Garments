@@ -19,15 +19,7 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
-import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
-
-const PAYMENT_METHODS: { value: PurchasePaymentMethod; label: string }[] = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'CARD', label: 'Card' },
-  { value: 'EASYPAISA', label: 'Easypaisa' },
-  { value: 'JAZZCASH', label: 'JazzCash' },
-  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
-];
+import { PaymentMethodFields, toApiPaymentMethod, type SimplePayKind } from '../../components/ui/PaymentMethodFields';
 
 function todayInput() {
   const d = new Date();
@@ -469,7 +461,7 @@ export function CustomerPaymentPage() {
     searchParams.get('customerId') ? Number(searchParams.get('customerId')) : '',
   );
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentKind, setPaymentKind] = useState<SimplePayKind>('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [date, setDate] = useState(todayInput());
   const [note, setNote] = useState('');
@@ -496,7 +488,7 @@ export function CustomerPaymentPage() {
       const result = await api.createCustomerPayment({
         customerId: Number(customerId),
         amount: Number(amount),
-        paymentMethod,
+        paymentMethod: toApiPaymentMethod(paymentKind) as PurchasePaymentMethod,
         date,
         note: note.trim() || null,
         paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
@@ -553,22 +545,11 @@ export function CustomerPaymentPage() {
               required
             />
           </div>
-          <div>
-            <FieldLabel>Payment method</FieldLabel>
-            <select
-              className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value as PurchasePaymentMethod)}
-            >
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
-          <PaymentBankAccountSelect
-            paymentMethod={paymentMethod}
-            value={paymentAccountId}
-            onChange={setPaymentAccountId}
+          <PaymentMethodFields
+            kind={paymentKind}
+            onKindChange={setPaymentKind}
+            accountId={paymentAccountId}
+            onAccountChange={setPaymentAccountId}
           />
           <div>
             <FieldLabel>Date</FieldLabel>

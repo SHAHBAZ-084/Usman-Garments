@@ -25,17 +25,13 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
-import { needsBankAccount, PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
+import {
+  PaymentMethodFields,
+  toApiPaymentMethod,
+  type SimplePayKind,
+} from '../../components/ui/PaymentMethodFields';
 
 const SELECT_CLASS = 'w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm';
-
-const PAYMENT_METHODS: { value: PurchasePaymentMethod; label: string }[] = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'CARD', label: 'Card' },
-  { value: 'EASYPAISA', label: 'Easypaisa' },
-  { value: 'JAZZCASH', label: 'JazzCash' },
-  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
-];
 
 type ReturnDraft = {
   invoiceItemId: number;
@@ -83,7 +79,7 @@ export function ReturnExchangePage() {
   const [mode, setMode] = useState<'return' | 'exchange'>('return');
   const [newItems, setNewItems] = useState<NewItemDraft[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentKind, setPaymentKind] = useState<SimplePayKind>('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [paidAmount, setPaidAmount] = useState('');
   const [applyToUdhaar, setApplyToUdhaar] = useState(true);
@@ -229,8 +225,9 @@ export function ReturnExchangePage() {
     setMessage('');
     try {
       const returnItems = buildReturnPayload();
-      if (needsBankAccount(paymentMethod) && !paymentAccountId) {
-        throw new Error('Select a bank account for card or bank transfer');
+      const paymentMethod = toApiPaymentMethod(paymentKind) as PurchasePaymentMethod;
+      if (paymentKind === 'EPAY' && !paymentAccountId) {
+        throw new Error('Select an e-payment account');
       }
       if (refundAmount > calculatedReturnTotal + 0.01) {
         throw new Error(`Refund cannot exceed calculated return Rs ${formatMoney(calculatedReturnTotal)}`);
@@ -549,23 +546,15 @@ export function ReturnExchangePage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-              <div>
-                <FieldLabel>Payment / refund method</FieldLabel>
-                <select
-                  className={SELECT_CLASS}
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value as PurchasePaymentMethod)}
-                >
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
+              <div className="md:col-span-2">
+                <PaymentMethodFields
+                  kind={paymentKind}
+                  onKindChange={setPaymentKind}
+                  accountId={paymentAccountId}
+                  onAccountChange={setPaymentAccountId}
+                  label="Payment / refund method"
+                />
               </div>
-              <PaymentBankAccountSelect
-                paymentMethod={paymentMethod}
-                value={paymentAccountId}
-                onChange={setPaymentAccountId}
-              />
               {mode === 'return' || (mode === 'exchange' && netAmount < 0) ? (
                 <div>
                   <FieldLabel>Refund amount (adjustable)</FieldLabel>
@@ -589,8 +578,9 @@ export function ReturnExchangePage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={paidAmount || String(netAmount)}
+                    value={paidAmount}
                     onChange={(e) => setPaidAmount(e.target.value)}
+                    placeholder={String(netAmount || 0)}
                   />
                 </div>
               ) : null}
@@ -633,8 +623,7 @@ export function ReturnExchangePage() {
                         </p>
                         <p className="mt-1 flex justify-between font-semibold">
                           <span>
-                            Remaining to return (
-                            {PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod})
+                            Remaining to return ({paymentKind === 'CASH' ? 'Cash' : 'E-payment'})
                           </span>
                           <span>Rs {formatMoney(cashRefundDue)}</span>
                         </p>
@@ -643,7 +632,7 @@ export function ReturnExchangePage() {
                   ) : (
                     <p className="pl-6 text-xs text-textMuted">
                       Full refund of Rs {formatMoney(refundAmount)} via{' '}
-                      {PAYMENT_METHODS.find((m) => m.value === paymentMethod)?.label ?? paymentMethod}.
+                      {paymentKind === 'CASH' ? 'Cash' : 'E-payment'}.
                     </p>
                   )}
                 </div>

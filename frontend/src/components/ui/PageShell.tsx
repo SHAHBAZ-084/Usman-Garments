@@ -7,6 +7,8 @@ type PageShellProps = {
   children?: ReactNode;
   actions?: ReactNode;
   centerTitle?: boolean;
+  /** Slightly wider content (dashboard / hubs). */
+  wide?: boolean;
   titleRef?: RefObject<HTMLHeadingElement | null>;
 };
 
@@ -16,11 +18,15 @@ export function PageShell({
   children,
   actions,
   centerTitle = false,
+  wide = false,
   titleRef,
 }: PageShellProps) {
+  const widthClass = wide ? 'w-full max-w-none' : 'mx-auto w-full max-w-[96rem]';
+  const padClass = wide ? 'px-2 py-4 sm:px-3 sm:py-5 lg:px-4' : 'px-3 py-6 sm:px-5';
+
   if (centerTitle) {
     return (
-      <div className="mx-auto max-w-6xl px-4 py-6">
+      <div className={`${widthClass} ${padClass}`}>
         <div className="mb-6 flex flex-col items-center gap-4">
           <h1
             ref={titleRef}
@@ -39,7 +45,7 @@ export function PageShell({
   const showHeader = Boolean(title || subtitle || actions);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6">
+    <div className={`${widthClass} ${padClass}`}>
       {showHeader ? (
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>

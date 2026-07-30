@@ -43,18 +43,22 @@ async function getLowStockThreshold() {
 // ─── Sales reports ───────────────────────────────────────────────────────────
 
 export async function reportDailySales(params: {
-  fromDate: string;
-  toDate: string;
+  fromDate?: string;
+  toDate?: string;
+  preset?: DateRangePreset;
   page?: number;
   pageSize?: number;
 }) {
-  const from = new Date(params.fromDate);
-  const to = new Date(params.toDate);
-  to.setHours(23, 59, 59, 999);
+  const preset = params.preset ?? (params.fromDate && params.toDate ? 'custom' : 'today');
+  const range = resolveDateRange(preset, params.fromDate, params.toDate);
   const { page, pageSize } = paginateParams(params.page, params.pageSize);
+  const dateCond = dateFilter(range.from, range.to);
 
   const invoices = await prisma.invoice.findMany({
-    where: { status: InvoiceStatus.ACTIVE, date: { gte: from, lte: to } },
+    where: {
+      status: InvoiceStatus.ACTIVE,
+      ...(dateCond ? { date: dateCond } : {}),
+    },
     select: {
       id: true,
       invoiceNumber: true,
@@ -326,6 +330,18 @@ export async function reportPaymentMethodBreakdown(params: {
   }));
 }
 
+export async function reportSalesCollectionBreakdown(params: {
+  preset?: DateRangePreset;
+  fromDate?: string;
+  toDate?: string;
+}) {
+  const { getSalesCollectionBreakdown } = await import('./financial-summary.service');
+  const preset = params.preset ?? 'today';
+  const range = resolveDateRange(preset, params.fromDate, params.toDate);
+  const breakdown = await getSalesCollectionBreakdown(range.from, range.to);
+  return { range, ...breakdown };
+}
+
 export async function reportReturnsExchanges(params: {
   preset?: DateRangePreset;
   fromDate?: string;
@@ -460,9 +476,17 @@ export async function reportCurrentStock(params: {
 export async function reportLowStock(params: { page?: number; pageSize?: number; search?: string }) {
   const threshold = await getLowStockThreshold();
   const all = await reportCurrentStock({ ...params, pageSize: 500, page: 1 });
-  const filtered = all.items.filter((p) => p.currentStock > 0 && p.currentStock <= threshold);
+  const filtered = all.items.filter((p) => p.currentStock <= threshold);
   const { page, pageSize } = paginateParams(params.page, params.pageSize);
-  return paginated(filtered, page, pageSize);
+  const result = paginated(filtered, page, pageSize);
+  return {
+    ...result,
+    lowStockLimit: threshold,
+    emptyMessage:
+      filtered.length === 0
+        ? `Nothing is low stock. No products are at or below your limit of ${threshold}.`
+        : undefined,
+  };
 }
 
 export async function reportOutOfStock(params: { page?: number; pageSize?: number; search?: string }) {

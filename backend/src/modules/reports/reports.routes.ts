@@ -48,12 +48,14 @@ reportsRouter.get(
 reportsRouter.get(
   '/sales/daily',
   asyncHandler(async (req, res) => {
-    const fromDate = String(req.query.fromDate ?? '');
-    const toDate = String(req.query.toDate ?? '');
+    const raw = typeof req.query.preset === 'string' ? req.query.preset : undefined;
+    const valid: DateRangePreset[] = ['today', 'week', 'month', 'year', 'custom', 'lifetime'];
+    const preset = raw && valid.includes(raw as DateRangePreset) ? (raw as DateRangePreset) : 'today';
     res.json(
       await reports.reportDailySales({
-        fromDate,
-        toDate,
+        preset,
+        fromDate: req.query.fromDate as string | undefined,
+        toDate: req.query.toDate as string | undefined,
         page: queryInt(req.query.page as string),
         pageSize: queryInt(req.query.pageSize as string),
       }),
@@ -145,6 +147,19 @@ reportsRouter.get(
   asyncHandler(async (req, res) => {
     res.json(
       await reports.reportPaymentMethodBreakdown({
+        preset: parsePreset(req.query.preset as string),
+        fromDate: req.query.fromDate as string,
+        toDate: req.query.toDate as string,
+      }),
+    );
+  }),
+);
+
+reportsRouter.get(
+  '/sales/collection-breakdown',
+  asyncHandler(async (req, res) => {
+    res.json(
+      await reports.reportSalesCollectionBreakdown({
         preset: parsePreset(req.query.preset as string),
         fromDate: req.query.fromDate as string,
         toDate: req.query.toDate as string,

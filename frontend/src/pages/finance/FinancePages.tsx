@@ -20,17 +20,9 @@ import {
   SecondaryButton,
   TextInput,
 } from '../../components/ui/PageShell';
-import { PaymentBankAccountSelect } from '../../components/ui/PaymentBankAccountSelect';
+import { PaymentMethodFields, toApiPaymentMethod, type SimplePayKind } from '../../components/ui/PaymentMethodFields';
 
 const SELECT_CLASS = 'w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm';
-
-const PAYMENT_METHODS: { value: PurchasePaymentMethod; label: string }[] = [
-  { value: 'CASH', label: 'Cash' },
-  { value: 'CARD', label: 'Card' },
-  { value: 'EASYPAISA', label: 'Easypaisa' },
-  { value: 'JAZZCASH', label: 'JazzCash' },
-  { value: 'BANK_TRANSFER', label: 'Bank transfer' },
-];
 
 function todayInput() {
   const d = new Date();
@@ -85,7 +77,7 @@ export function ExpenseEntryPage() {
   const [categoryId, setCategoryId] = useState<number | ''>('');
   const [date, setDate] = useState(todayInput());
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentKind, setPaymentKind] = useState<SimplePayKind>('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [description, setDescription] = useState('');
   const [paidTo, setPaidTo] = useState('');
@@ -109,6 +101,10 @@ export function ExpenseEntryPage() {
       setError('Select a category');
       return;
     }
+    if (paymentKind === 'EPAY' && !paymentAccountId) {
+      setError('Select an e-payment account');
+      return;
+    }
     setSaving(true);
     setError('');
     setMessage('');
@@ -117,7 +113,7 @@ export function ExpenseEntryPage() {
         categoryId: Number(categoryId),
         date,
         amount: Number(amount),
-        paymentMethod,
+        paymentMethod: toApiPaymentMethod(paymentKind) as PurchasePaymentMethod,
         description,
         paidTo: paidTo.trim() || null,
         note: note.trim() || null,
@@ -147,7 +143,7 @@ export function ExpenseEntryPage() {
   useFormShortcuts({
     onSave: () => expenseFormRef.current?.requestSubmit(),
     onClear: clearExpenseForm,
-    saveEnabled: !saving && Boolean(categoryId) && Boolean(description.trim()) && Boolean(amount),
+    saveEnabled: !saving && Boolean(categoryId) && Boolean(amount),
   });
 
   return (
@@ -194,22 +190,15 @@ export function ExpenseEntryPage() {
             <FieldLabel>Amount (Rs)</FieldLabel>
             <TextInput type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </div>
-          <div>
-            <FieldLabel>Payment method</FieldLabel>
-            <select className={SELECT_CLASS} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PurchasePaymentMethod)}>
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
-          <PaymentBankAccountSelect
-            paymentMethod={paymentMethod}
-            value={paymentAccountId}
-            onChange={setPaymentAccountId}
+          <PaymentMethodFields
+            kind={paymentKind}
+            onKindChange={setPaymentKind}
+            accountId={paymentAccountId}
+            onAccountChange={setPaymentAccountId}
           />
           <div>
-            <FieldLabel>Description</FieldLabel>
-            <TextInput value={description} onChange={(e) => setDescription(e.target.value)} required />
+            <FieldLabel>Description (optional)</FieldLabel>
+            <TextInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
           </div>
           <div>
             <FieldLabel>Paid to (optional)</FieldLabel>
@@ -312,7 +301,7 @@ export function OtherIncomeEntryPage() {
   const [categoryId, setCategoryId] = useState<number | ''>('');
   const [date, setDate] = useState(todayInput());
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('CASH');
+  const [paymentKind, setPaymentKind] = useState<SimplePayKind>('CASH');
   const [paymentAccountId, setPaymentAccountId] = useState('');
   const [description, setDescription] = useState('');
   const [note, setNote] = useState('');
@@ -334,6 +323,10 @@ export function OtherIncomeEntryPage() {
       setError('Select a category');
       return;
     }
+    if (paymentKind === 'EPAY' && !paymentAccountId) {
+      setError('Select an e-payment account');
+      return;
+    }
     setSaving(true);
     setError('');
     setMessage('');
@@ -342,7 +335,7 @@ export function OtherIncomeEntryPage() {
         categoryId: Number(categoryId),
         date,
         amount: Number(amount),
-        paymentMethod,
+        paymentMethod: toApiPaymentMethod(paymentKind) as PurchasePaymentMethod,
         description,
         note: note.trim() || null,
         paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
@@ -402,22 +395,15 @@ export function OtherIncomeEntryPage() {
             <FieldLabel>Amount (Rs)</FieldLabel>
             <TextInput type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
           </div>
-          <div>
-            <FieldLabel>Received via</FieldLabel>
-            <select className={SELECT_CLASS} value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PurchasePaymentMethod)}>
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m.value} value={m.value}>{m.label}</option>
-              ))}
-            </select>
-          </div>
-          <PaymentBankAccountSelect
-            paymentMethod={paymentMethod}
-            value={paymentAccountId}
-            onChange={setPaymentAccountId}
+          <PaymentMethodFields
+            kind={paymentKind}
+            onKindChange={setPaymentKind}
+            accountId={paymentAccountId}
+            onAccountChange={setPaymentAccountId}
           />
           <div>
-            <FieldLabel>Description</FieldLabel>
-            <TextInput value={description} onChange={(e) => setDescription(e.target.value)} required />
+            <FieldLabel>Description (optional)</FieldLabel>
+            <TextInput value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Optional" />
           </div>
           <div>
             <FieldLabel>Note (optional)</FieldLabel>

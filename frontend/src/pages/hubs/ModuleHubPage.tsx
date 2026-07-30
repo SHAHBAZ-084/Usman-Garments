@@ -7,7 +7,21 @@ export type HubAction = {
   to: string;
   description?: string;
   primary?: boolean;
+  /** Theme accent for the card */
+  tone?: 'gold' | 'green' | 'teal' | 'amber' | 'slate' | 'rose' | 'indigo';
 };
+
+const TONE_CLASS: Record<NonNullable<HubAction['tone']>, string> = {
+  gold: 'hub-action hub-action--gold',
+  green: 'hub-action hub-action--green',
+  teal: 'hub-action hub-action--teal',
+  amber: 'hub-action hub-action--amber',
+  slate: 'hub-action hub-action--slate',
+  rose: 'hub-action hub-action--rose',
+  indigo: 'hub-action hub-action--indigo',
+};
+
+const DEFAULT_TONES: HubAction['tone'][] = ['gold', 'green', 'teal', 'amber', 'indigo', 'rose', 'slate'];
 
 export function ModuleHubPage({
   title,
@@ -19,27 +33,24 @@ export function ModuleHubPage({
   actions: HubAction[];
 }) {
   return (
-    <PageShell title={title} subtitle={subtitle ?? 'Choose an action'}>
-      <Panel>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {actions.map((action) => {
+    <PageShell title={title} subtitle={subtitle ?? 'Choose an action'} wide>
+      <Panel className="border-0 bg-transparent p-0 shadow-none">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {actions.map((action, index) => {
             const Icon = navLinkIcon(action.label);
+            const tone = action.tone ?? DEFAULT_TONES[index % DEFAULT_TONES.length]!;
             return (
               <Link
                 key={action.to + action.label}
                 to={action.to}
-                className={`flex flex-col items-start gap-2 rounded-lg border px-4 py-4 text-left transition hover:border-accent ${
-                  action.primary
-                    ? 'border-accent bg-accent/10 text-textPrimary'
-                    : 'border-border bg-surface1 text-textPrimary hover:bg-surface2'
-                }`}
+                className={`${TONE_CLASS[tone]} ${action.primary ? 'hub-action--primary' : ''}`}
               >
-                <span className="flex items-center gap-2 text-sm font-semibold">
-                  {Icon ? <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden /> : null}
-                  {action.label}
+                <span className="hub-action-icon" aria-hidden>
+                  {Icon ? <Icon className="h-5 w-5" /> : null}
                 </span>
+                <span className="hub-action-label">{action.label}</span>
                 {action.description ? (
-                  <span className="text-xs text-textMuted">{action.description}</span>
+                  <span className="hub-action-desc">{action.description}</span>
                 ) : null}
               </Link>
             );

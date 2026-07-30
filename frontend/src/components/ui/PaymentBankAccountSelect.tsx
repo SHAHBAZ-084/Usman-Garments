@@ -5,16 +5,25 @@ import { api, type BankAccountOption } from '../../lib/api';
 const SELECT_CLASS =
   'w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm text-textPrimary';
 
-/** True when Card or Bank Transfer requires picking a Bank GL account. */
+/** Card / bank transfer require a wallet; JazzCash / Easypaisa can optionally pick a named account. */
 export function needsBankAccount(method: string) {
   return method === 'CARD' || method === 'BANK_TRANSFER';
+}
+
+export function canPickPaymentAccount(method: string) {
+  return (
+    method === 'CARD' ||
+    method === 'BANK_TRANSFER' ||
+    method === 'JAZZCASH' ||
+    method === 'EASYPAISA'
+  );
 }
 
 export function PaymentBankAccountSelect({
   paymentMethod,
   value,
   onChange,
-  required = true,
+  required,
 }: {
   paymentMethod: string;
   value: string;
@@ -23,7 +32,8 @@ export function PaymentBankAccountSelect({
 }) {
   const [accounts, setAccounts] = useState<BankAccountOption[]>([]);
   const [error, setError] = useState('');
-  const show = needsBankAccount(paymentMethod);
+  const show = canPickPaymentAccount(paymentMethod);
+  const mustPick = required ?? needsBankAccount(paymentMethod);
 
   useEffect(() => {
     if (!show) return;
@@ -52,14 +62,14 @@ export function PaymentBankAccountSelect({
 
   return (
     <div>
-      <FieldLabel>Bank account</FieldLabel>
+      <FieldLabel>{mustPick ? 'Payment account' : 'Payment account (optional)'}</FieldLabel>
       <select
         className={SELECT_CLASS}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        required={required}
+        required={mustPick}
       >
-        <option value="">Select bank account</option>
+        <option value="">{mustPick ? 'Select account' : 'Default for this method'}</option>
         {accounts.map((a) => (
           <option key={a.id} value={String(a.id)}>
             {a.name}
@@ -68,7 +78,7 @@ export function PaymentBankAccountSelect({
       </select>
       {accounts.length === 0 ? (
         <p className="mt-1 text-xs text-textMuted">
-          No bank accounts yet. Add one under Accounts → Add Bank Account.
+          No accounts yet. Add one under Accounts → Add E-payment methods.
         </p>
       ) : null}
       {error ? <p className="mt-1 text-xs text-danger">{error}</p> : null}

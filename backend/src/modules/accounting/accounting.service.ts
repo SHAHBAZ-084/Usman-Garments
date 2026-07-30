@@ -1786,8 +1786,31 @@ export async function getDashboardSummary() {
       date: v.date,
       status: v.status,
       accountLabel: voucherDashboardAccountLabel(v),
+      direction: voucherCashDirection(v.type),
     })),
   };
+}
+
+function voucherCashDirection(type: string): 'in' | 'out' | 'neutral' {
+  const t = type.toUpperCase();
+  if (
+    t === 'RECEIPT' ||
+    t === 'SALE' ||
+    t === 'CUSTOMER_PAYMENT' ||
+    t === 'OTHER_INCOME'
+  ) {
+    return 'in';
+  }
+  if (
+    t === 'PAYMENT' ||
+    t === 'PURCHASE' ||
+    t === 'SUPPLIER_PAYMENT' ||
+    t === 'EXPENSE' ||
+    t === 'SALE_RETURN'
+  ) {
+    return 'out';
+  }
+  return 'neutral';
 }
 
 /** Finance Command Center: liquid positions + outstanding + trial balance status + recent activity. */

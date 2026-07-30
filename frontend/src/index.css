@@ -505,7 +505,10 @@
   }
 
   .dashboard-quick-actions-inner {
-    max-width: 72rem;
+    max-width: none;
+    width: 100%;
+    margin-inline: 0;
+    padding-inline: 0.25rem;
   }
 
   .dashboard-quick-actions-header {
@@ -697,5 +700,89 @@
 
   .app-data-table tbody tr:last-child {
     border-bottom: none;
+  }
+
+  /* Module hub action cards — black & gold theme */
+  .hub-action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.65rem;
+    min-height: 8rem;
+    padding: 1.25rem 1.35rem;
+    border-radius: 0.75rem;
+    border: 1px solid rgba(201, 150, 24, 0.45);
+    background: linear-gradient(155deg, #1a1a1a 0%, #111111 55%, #1c1810 100%);
+    text-decoration: none;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+  }
+
+  .hub-action:hover {
+    transform: translateY(-3px);
+    border-color: #e2b93b;
+    box-shadow: 0 14px 28px rgba(201, 150, 24, 0.22);
+  }
+
+  .hub-action-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3.15rem;
+    height: 3.15rem;
+    border-radius: 0.75rem;
+    background: linear-gradient(145deg, rgba(201, 150, 24, 0.35), rgba(201, 150, 24, 0.12));
+    border: 1px solid rgba(201, 150, 24, 0.55);
+    color: #e2b93b;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  .hub-action-icon svg {
+    width: 1.45rem;
+    height: 1.45rem;
+    stroke-width: 2.15;
+  }
+
+  .hub-action-label {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: #f5f5f5;
+  }
+
+  .hub-action-desc {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: rgba(245, 245, 245, 0.62);
+  }
+
+  .hub-action--primary {
+    border-color: #c99618;
+    background: linear-gradient(145deg, #c99618 0%, #e2b93b 45%, #c99618 100%);
+    box-shadow: 0 10px 26px rgba(201, 150, 24, 0.35);
+  }
+
+  .hub-action--primary .hub-action-label {
+    color: #111111;
+  }
+
+  .hub-action--primary .hub-action-desc {
+    color: rgba(17, 17, 17, 0.72);
+  }
+
+  .hub-action--primary .hub-action-icon {
+    background: rgba(17, 17, 17, 0.12);
+    border-color: rgba(17, 17, 17, 0.25);
+    color: #111111;
+  }
+
+  .hub-action--gold,
+  .hub-action--green,
+  .hub-action--teal,
+  .hub-action--amber,
+  .hub-action--slate,
+  .hub-action--rose,
+  .hub-action--indigo {
+    /* all hub tones unify to black/gold brand */
   }
 }

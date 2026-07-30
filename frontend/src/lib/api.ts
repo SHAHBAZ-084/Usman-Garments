@@ -1093,8 +1093,10 @@ export type Invoice = {
   amountReceived?: number;
   paidAmount: number;
   remainingAmount: number;
-  /** Change returned when amountReceived > totalAmount. */
+  /** Change returned when amountReceived > totalAmount (after any udhaar recovery). */
   changeAmount?: number;
+  /** Prior udhaar cleared with surplus payment on this sale. */
+  udhaarRecoveryApplied?: number;
   paymentMethod: SalePaymentMethod;
   status: 'ACTIVE' | 'CANCELLED';
   notes: string | null;
@@ -1122,6 +1124,8 @@ export type CreateSaleInput = {
   paidAmount?: number;
   /** Cash tendered by customer (bill 750, give 1000 → amountReceived 1000). */
   amountReceived?: number;
+  /** Apply surplus payment to prior customer udhaar. */
+  udhaarRecoveryAmount?: number;
   customerId?: number | null;
   discount?: number;
   date?: string;
@@ -1305,6 +1309,7 @@ export type FinanceOverview = {
     date: string;
     status: string;
     accountLabel: string;
+    direction?: 'in' | 'out' | 'neutral';
   }[];
 };
 
@@ -1351,9 +1356,19 @@ export type PaymentMethodBreakdownRow = {
   paidAmount: number;
 };
 
+export type SalesCollectionBreakdown = {
+  totalCollected: number;
+  cash: number;
+  ePayment: number;
+  udhaar: number;
+  byMethod: PaymentMethodBreakdownRow[];
+  byAccount: Array<{ accountName: string; amount: number }>;
+};
+
 export type DashboardPayload = FinancialSummary & {
   comparisons: DashboardComparisons | null;
   paymentMethodBreakdown: PaymentMethodBreakdownRow[];
+  salesCollectionBreakdown?: SalesCollectionBreakdown;
   purchases: { today: number; month: number; year: number; lifetime: number };
   lowStockCount: number;
   outOfStockCount: number;

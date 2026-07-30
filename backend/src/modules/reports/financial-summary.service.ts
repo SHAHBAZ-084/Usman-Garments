@@ -78,9 +78,24 @@ export type PaymentMethodBreakdownRow = {
   paidAmount: number;
 };
 
+export type SalesCollectionAccountRow = {
+  accountName: string;
+  amount: number;
+};
+
+export type SalesCollectionBreakdown = {
+  totalCollected: number;
+  cash: number;
+  ePayment: number;
+  udhaar: number;
+  byMethod: PaymentMethodBreakdownRow[];
+  byAccount: SalesCollectionAccountRow[];
+};
+
 export type DashboardPayload = FinancialSummary & {
   comparisons: DashboardComparisons | null;
   paymentMethodBreakdown: PaymentMethodBreakdownRow[];
+  salesCollectionBreakdown: SalesCollectionBreakdown;
   purchases: PurchasePeriodTotals;
   lowStockCount: number;
   outOfStockCount: number;
@@ -353,6 +368,126 @@ async function getPaymentMethodBreakdown(from: Date | null, to: Date | null): Pr
   }));
 }
 
+/** How sales money was collected — cash vs e-payment; landed lines always sum to collected. */
+export async function getSalesCollectionBreakdown(
+  from: Date | null,
+  to: Date | null,
+): Promise<SalesCollectionBreakdown> {
+  const dateCond = dateFilter(from, to);
+  const invoices = await prisma.invoice.findMany({
+    where: {
+      status: InvoiceStatus.ACTIVE,
+      ...(dateCond ? { date: dateCond } : {}),
+    },
+    select: {
+      id: true,
+      paymentMethod: true,
+      paidAmount: true,
+      remainingAmount: true,
+    },
+  });
+
+  let cash = 0;
+  let ePayment = 0;
+  let udhaar = 0;
+  const invoiceIds: string[] = [];
+
+  for (const inv of invoices) {
+    const paid = toNumber(inv.paidAmount);
+    const rem = toNumber(inv.remainingAmount);
+    udhaar += rem;
+    const method = inv.paymentMethod.toUpperCase();
+    if (method === 'CASH') cash += paid;
+    else if (method !== 'UDHAAR' && paid > 0) {
+      ePayment += paid;
+      invoiceIds.push(String(inv.id));
+    }
+  }
+
+  cash = roundMoney(cash);
+  ePayment = roundMoney(ePayment);
+  udhaar = roundMoney(udhaar);
+
+  // Attribute e-payment to the Bank wallet used on each SALE voucher (same invoices only).
+  const ePayMap = new Map<string, number>();
+  if (invoiceIds.length > 0) {
+    const vouchers = await prisma.voucher.findMany({
+      where: {
+        type: 'SALE',
+        status: 'ACTIVE',
+        sourceType: 'SALE',
+        sourceRef: { in: invoiceIds },
+      },
+      select: {
+        sourceRef: true,
+        ledgerEntries: {
+          where: { isReversal: false, type: 'DEBIT' },
+          select: {
+            amount: true,
+            ledger: {
+              select: {
+                account: {
+                  select: {
+                    name: true,
+                    category: { select: { name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    for (const voucher of vouchers) {
+      for (const entry of voucher.ledgerEntries) {
+        const account = entry.ledger.account;
+        const cat = account.category?.name?.trim().toLowerCase() ?? '';
+        if (cat !== 'bank') continue;
+        const name = account.name;
+        ePayMap.set(name, roundMoney((ePayMap.get(name) ?? 0) + toNumber(entry.amount)));
+      }
+    }
+  }
+
+  let ePayRows = [...ePayMap.entries()]
+    .map(([accountName, amount]) => ({ accountName, amount }))
+    .sort((a, b) => b.amount - a.amount);
+  const ePaySum = roundMoney(ePayRows.reduce((s, r) => s + r.amount, 0));
+
+  // Keep landed total identical to collected: scale or fall back to a single E-payment line.
+  if (ePayment > 0 && ePaySum > 0 && Math.abs(ePaySum - ePayment) > 0.02) {
+    const factor = ePayment / ePaySum;
+    ePayRows = ePayRows.map((r) => ({
+      accountName: r.accountName,
+      amount: roundMoney(r.amount * factor),
+    }));
+    const adjusted = roundMoney(ePayRows.reduce((s, r) => s + r.amount, 0));
+    const drift = roundMoney(ePayment - adjusted);
+    if (Math.abs(drift) >= 0.01 && ePayRows[0]) {
+      ePayRows[0] = { ...ePayRows[0], amount: roundMoney(ePayRows[0].amount + drift) };
+    }
+  } else if (ePayment > 0 && ePayRows.length === 0) {
+    ePayRows = [{ accountName: 'E-payment', amount: ePayment }];
+  }
+
+  const byAccount: SalesCollectionAccountRow[] = [];
+  if (cash > 0) byAccount.push({ accountName: 'Cash', amount: cash });
+  byAccount.push(...ePayRows);
+
+  const byMethod = await getPaymentMethodBreakdown(from, to);
+  const totalCollected = roundMoney(cash + ePayment);
+
+  return {
+    totalCollected,
+    cash,
+    ePayment,
+    udhaar,
+    byMethod,
+    byAccount,
+  };
+}
+
 /** Core profit/sales summary for any date range. */
 export async function getFinancialSummary(
   preset: DateRangePreset,
@@ -619,7 +754,7 @@ export async function getDashboardPayload(
   const prevFrom = prevRange?.from?.toISOString().slice(0, 10);
   const prevTo = prevRange?.to?.toISOString().slice(0, 10);
 
-  const [summary, prevSummary, purchases, stockCounts, recentSales, recentExpenses, lowStockProducts, topSellingProducts, salesChart, paymentMethodBreakdown] =
+  const [summary, prevSummary, purchases, stockCounts, recentSales, recentExpenses, lowStockProducts, topSellingProducts, salesChart, paymentMethodBreakdown, salesCollectionBreakdown] =
     await Promise.all([
       getFinancialSummary(preset, fromDate, toDate),
       prevRange ? getFinancialSummary('custom', prevFrom, prevTo) : Promise.resolve(null),
@@ -631,6 +766,7 @@ export async function getDashboardPayload(
       getTopSellingProducts(range.from, range.to),
       getSalesChart(range.from, range.to),
       getPaymentMethodBreakdown(range.from, range.to),
+      getSalesCollectionBreakdown(range.from, range.to),
     ]);
 
   const comparisons = buildDashboardComparisons(summary, prevSummary);
@@ -639,6 +775,7 @@ export async function getDashboardPayload(
     ...summary,
     comparisons,
     paymentMethodBreakdown,
+    salesCollectionBreakdown,
     purchases,
     ...stockCounts,
     recentSales,
