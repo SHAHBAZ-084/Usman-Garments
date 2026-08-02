@@ -4,6 +4,17 @@
   "private": true,
   "description": "Offline desktop app for Usman Mall — Electron + React + Express + SQLite",
   "main": "dist-electron/main.js",
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "dev": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\" \"npm run electron:dev\"",
+    "dev:web": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "electron:dev": "npm run build:electron && wait-on http://127.0.0.1:5173 http://127.0.0.1:3847/api/health && cross-env NODE_ENV=development electron .",
+    "electron:build": "npm run build -w backend && npm run build -w frontend && npm run build:electron",
+    "dist:win": "npm run electron:build && npm run db:generate -w backend && electron-builder --win",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "start": "cross-env NODE_ENV=production electron .",
+    "postinstall": "npm run db:generate -w backend"
+  },
   "workspaces": [
     "backend",
     "frontend"
@@ -21,5 +32,85 @@
     "prisma": "^6.3.1",
     "xlsx": "^0.18.5",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^34.0.0",
+    "electron-builder": "^25.1.8",
+    "rcedit": "^5.0.2",
+    "typescript": "^5.7.3",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.usmanmall.desktop",
+    "productName": "Usman Mall",
+    "icon": "build/icon.ico",
+    "afterPack": "./scripts/after-pack.js",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist-electron/**/*",
+      "backend/dist/**/*",
+      "!backend/dist/**/*.test.js",
+      "!backend/dist/test-helpers/**/*",
+      "frontend/dist/**/*",
+      "backend/prisma/schema.prisma",
+      "backend/prisma/migrations/**/*",
+      "backend/package.json",
+      "package.json",
+      "build/icon.ico",
+      {
+        "from": "node_modules/.prisma",
+        "to": "node_modules/.prisma",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      },
+      {
+        "from": "backend/prisma",
+        "to": "prisma",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "**/node_modules/@prisma/**",
+      "**/node_modules/.prisma/**",
+      "**/node_modules/prisma/**",
+      "**/backend/prisma/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Usman-Mall-Setup-${version}.${ext}",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "SHAHBAZ-084",
+        "repo": "Usman-Garments"
+      }
+    ]
   }
 }
