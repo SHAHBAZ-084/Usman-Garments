@@ -132,7 +132,19 @@ export async function createBackup(options: {
   const uploadsDest = path.join(folderPath, 'uploads');
   copyDirRecursive(getUploadsDir(), uploadsDest);
 
-  const settings = await getBusinessSettings();
+  // Settings snapshot is best-effort. During upgrades the Prisma client may already
+  // know columns that migrate has not applied yet — never block a DB file backup on that.
+  let settingsSnapshot: Record<string, unknown> = {};
+  try {
+    const settings = await getBusinessSettings();
+    settingsSnapshot = { ...settings, logoUrl: undefined };
+  } catch (err) {
+    logger.warn('Backup settings snapshot skipped (schema may be mid-upgrade)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    settingsSnapshot = { note: 'settings snapshot unavailable' };
+  }
+
   const manifest: BackupManifest = {
     version: 1,
     app: 'usman-mall',
@@ -140,7 +152,7 @@ export async function createBackup(options: {
     databaseFile: 'usman-garments.db',
     databaseSha256,
     uploadsIncluded: true,
-    settingsSnapshot: { ...settings, logoUrl: undefined },
+    settingsSnapshot,
   };
   fs.writeFileSync(path.join(folderPath, 'manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
 
