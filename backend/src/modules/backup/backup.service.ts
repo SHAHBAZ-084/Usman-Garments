@@ -257,25 +257,39 @@ export async function runPreMigrationBackup(): Promise<BackupEntry | null> {
   return createBackup({ label: 'Pre-migration safety backup', automatic: false });
 }
 
+/**
+ * Replace the live DB file with a validated backup copy.
+ * Used after a failed migrate so half-applied schema never remains live.
+ */
+export async function restoreLiveDatabaseFromBackup(backupFolderPath: string): Promise<void> {
+  const manifest = validateBackupFolder(backupFolderPath);
+  const dbSrc = path.join(backupFolderPath, manifest.databaseFile);
+  const dbDest = getDatabasePath();
+
+  const { shutdownDatabase, configureSqlite } = await import('../../lib/prisma');
+  await shutdownDatabase();
+
+  for (const suffix of ['', '-wal', '-shm']) {
+    const p = dbDest + suffix;
+    if (fs.existsSync(p)) fs.unlinkSync(p);
+  }
+  fs.copyFileSync(dbSrc, dbDest);
+  await configureSqlite();
+  logger.info('Live database restored from backup', { from: backupFolderPath });
+}
+
 /** Safety-copy current data, then restore from validated backup folder. Caller must restart app. */
 export async function restoreBackup(backupFolderPath: string): Promise<{ safetyBackupPath: string }> {
   validateBackupFolder(backupFolderPath);
 
   const safety = await createBackup({ label: 'Pre-restore safety copy' });
 
-  const manifest = validateBackupFolder(backupFolderPath);
-  const dbSrc = path.join(backupFolderPath, manifest.databaseFile);
-  const dbDest = getDatabasePath();
-
-  await prisma.$queryRawUnsafe('PRAGMA wal_checkpoint(TRUNCATE)');
-  await prisma.$disconnect();
-
-  fs.copyFileSync(dbSrc, dbDest);
-
   const uploadsSrc = path.join(backupFolderPath, 'uploads');
   const uploadsDest = getUploadsDir();
   if (fs.existsSync(uploadsDest)) fs.rmSync(uploadsDest, { recursive: true, force: true });
   copyDirRecursive(uploadsSrc, uploadsDest);
+
+  await restoreLiveDatabaseFromBackup(backupFolderPath);
 
   logger.info('Backup restored', { from: backupFolderPath, safety: safety.folderPath });
   return { safetyBackupPath: safety.folderPath };

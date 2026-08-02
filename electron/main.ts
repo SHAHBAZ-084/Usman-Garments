@@ -157,7 +157,7 @@ app.whenReady().then(async () => {
         });
         dialog.showErrorBox(
           'Database update failed',
-          'Update failed to apply database changes. Please contact support.',
+          'Update failed to apply database changes. If a pre-migration backup was created, your previous data is safe there. Please contact support — do not keep using the app until this is resolved.',
         );
         app.quit();
         return;

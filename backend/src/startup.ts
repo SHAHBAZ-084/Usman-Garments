@@ -4,13 +4,14 @@ import { getDatabasePath, getDatabaseUrl, isAppDataMode } from './config/paths';
 import { ensureRequiredSchemaColumns } from './lib/ensure-schema';
 import { ensureFirstRunDefaults } from './lib/first-run';
 import { logger } from './lib/logger';
+import { hasPendingMigrationsLocal } from './lib/migrate-local';
 import {
-  hasPendingMigrationsLocal,
-  migrateDeployLocal,
-  resolveMigrationsDir,
-} from './lib/migrate-local';
+  MigrationApplyError,
+  migrationFailureUserMessage,
+  runSafeMigrations,
+} from './lib/migration-safety';
 import { configureSqlite, prisma } from './lib/prisma';
-import { runDailyBackupIfNeeded, runPreMigrationBackup } from './modules/backup/backup.service';
+import { runDailyBackupIfNeeded } from './modules/backup/backup.service';
 
 const CORE_TABLE = 'BusinessSettings';
 
@@ -36,48 +37,31 @@ async function coreTableExists(): Promise<boolean> {
   }
 }
 
-function showMigrationFailureDialog(detail?: string) {
+function showMigrationFailureDialog(detail?: string, backupFolderPath?: string | null) {
   try {
     // Available when backend is loaded inside the Electron main process.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const electron = require('electron') as {
       dialog?: { showErrorBox: (title: string, content: string) => void };
     };
-    const extra = detail ? `\n\nDetails: ${detail.slice(0, 400)}` : '';
-    electron.dialog?.showErrorBox(
-      'Database update failed',
-      `Update failed to apply database changes. Please contact support.${extra}`,
-    );
+    const body = migrationFailureUserMessage(backupFolderPath);
+    const extra = detail ? `\n\nTechnical details: ${detail.slice(0, 300)}` : '';
+    electron.dialog?.showErrorBox('Database update failed', `${body}${extra}`);
   } catch {
     // Not running inside Electron (e.g. `npm run dev -w backend`).
   }
 }
 
-async function runMigrations(): Promise<void> {
-  const dbExists = fs.existsSync(getDatabasePath());
-  if (dbExists) {
-    try {
-      await runPreMigrationBackup();
-    } catch (err) {
-      logger.error('Pre-migration backup failed', {
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
+/** Exported for tests — backup-then-migrate with restore-on-failure. */
+export async function runMigrations(): Promise<void> {
   try {
-    const migrationsDir = resolveMigrationsDir();
-    logger.info('Running in-process migrate deploy', { migrationsDir });
-    const result = await migrateDeployLocal();
-    logger.info('Migrate deploy finished', { applied: result.applied });
+    await runSafeMigrations();
   } catch (err) {
+    const backupPath = err instanceof MigrationApplyError ? err.backupFolderPath : null;
     const message = err instanceof Error ? err.message : String(err);
-    logger.error('migrate deploy failed', { error: message });
-    showMigrationFailureDialog(message);
-    throw new DatabaseMigrationError(
-      'Update failed to apply database changes. Please contact support.',
-      err,
-    );
+    logger.error('migrate deploy failed', { error: message, backupPath });
+    showMigrationFailureDialog(message, backupPath);
+    throw new DatabaseMigrationError(migrationFailureUserMessage(backupPath), err);
   }
 }
 
@@ -103,6 +87,8 @@ export async function runStartupTasks(): Promise<void> {
         await runMigrations();
       }
     } catch (err) {
+      // hasPendingMigrationsLocal itself failed — force safe migrate path.
+      if (err instanceof DatabaseMigrationError) throw err;
       logger.error('migrate status check failed — forcing migrate deploy', {
         error: err instanceof Error ? err.message : String(err),
       });
@@ -144,10 +130,7 @@ export async function runStartupTasks(): Promise<void> {
       const retryMessage = retryErr instanceof Error ? retryErr.message : String(retryErr);
       logger.error('Core table still missing after forced migrate deploy', { error: retryMessage });
       showMigrationFailureDialog(retryMessage);
-      throw new DatabaseMigrationError(
-        'Update failed to apply database changes. Please contact support.',
-        retryErr,
-      );
+      throw new DatabaseMigrationError(migrationFailureUserMessage(null), retryErr);
     }
   }
 }
