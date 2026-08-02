@@ -1,6 +1,6 @@
 {
   "name": "usman-garments",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Offline desktop app for Usman Mall — Electron + React + Express + SQLite",
   "main": "dist-electron/main.js",
