@@ -25,7 +25,6 @@
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "electron-updater": "^6.8.9",
     "express": "^4.21.2",
     "express-session": "^1.18.1",
     "multer": "^2.2.0",
@@ -103,14 +102,8 @@
       "uninstallerIcon": "build/icon.ico",
       "installerHeaderIcon": "build/icon.ico",
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    },
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "SHAHBAZ-084",
-        "repo": "Usman-Garments"
-      }
-    ]
+      "createStartMenuShortcut": true,
+      "deleteAppDataOnUninstall": false
+    }
   }
 }

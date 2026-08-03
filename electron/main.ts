@@ -1,5 +1,4 @@
 import { app, BrowserWindow, dialog, ipcMain } from 'electron';
-import { autoUpdater } from 'electron-updater';
 import fs from 'fs';
 import Module from 'module';
 import path from 'path';
@@ -107,41 +106,12 @@ function createWindow(): void {
   });
 }
 
-function setupAutoUpdater(): void {
-  if (isDev) return;
-
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  autoUpdater.on('update-available', () => {
-    mainWindow?.webContents.send('update-available');
-  });
-
-  autoUpdater.on('update-downloaded', () => {
-    mainWindow?.webContents.send('update-ready');
-  });
-
-  autoUpdater.on('error', (err: Error) => {
-    logError('Auto-update failed', { error: err.message });
-  });
-
-  void autoUpdater.checkForUpdates().catch((err: unknown) => {
-    logError('Auto-update check failed', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-  });
-}
-
 ipcMain.handle('restart-app', () => {
   app.relaunch();
   app.exit(0);
 });
 
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
-
-ipcMain.handle('install-update', () => {
-  autoUpdater.quitAndInstall();
-});
 
 registerPrintIpc();
 
@@ -185,7 +155,6 @@ app.whenReady().then(async () => {
   }
 
   createWindow();
-  setupAutoUpdater();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

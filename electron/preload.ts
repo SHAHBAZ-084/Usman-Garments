@@ -40,17 +40,6 @@ contextBridge.exposeInMainWorld('usmanGarments', {
   platform: process.platform,
   restartApp: () => ipcRenderer.invoke('restart-app'),
   getUserDataPath: () => ipcRenderer.invoke('get-user-data-path') as Promise<string>,
-  onUpdateAvailable: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on('update-available', listener);
-    return () => ipcRenderer.removeListener('update-available', listener);
-  },
-  onUpdateReady: (callback: () => void) => {
-    const listener = () => callback();
-    ipcRenderer.on('update-ready', listener);
-    return () => ipcRenderer.removeListener('update-ready', listener);
-  },
-  installUpdate: () => ipcRenderer.invoke('install-update') as Promise<void>,
   printHtml: (request: ElectronPrintRequest) =>
     ipcRenderer.invoke('print-html', request) as Promise<ElectronPrintResult>,
   listPrinters: () => ipcRenderer.invoke('list-printers') as Promise<ElectronPrinterInfo[]>,
@@ -62,9 +51,6 @@ declare global {
       platform: string;
       restartApp: () => Promise<void>;
       getUserDataPath: () => Promise<string>;
-      onUpdateAvailable: (callback: () => void) => () => void;
-      onUpdateReady: (callback: () => void) => () => void;
-      installUpdate: () => Promise<void>;
       printHtml: (request: ElectronPrintRequest) => Promise<ElectronPrintResult>;
       listPrinters: () => Promise<ElectronPrinterInfo[]>;
     };

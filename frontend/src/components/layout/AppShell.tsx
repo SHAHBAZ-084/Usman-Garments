@@ -1,5 +1,4 @@
 import { Outlet } from 'react-router-dom';
-import { UpdateBanner } from '../UpdateBanner';
 import { Sidebar } from './Sidebar';
 
 export function AppShell() {
@@ -7,12 +6,6 @@ export function AppShell() {
     <div className="flex min-h-screen bg-surface3">
       <Sidebar />
       <main className="app-main relative z-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden bg-surface3">
-        {/* Persistent update CTA — top-right of every authenticated page */}
-        <div className="pointer-events-none absolute right-3 top-3 z-30">
-          <div className="pointer-events-auto">
-            <UpdateBanner />
-          </div>
-        </div>
         <Outlet />
       </main>
     </div>
