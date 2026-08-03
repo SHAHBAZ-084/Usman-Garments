@@ -47,7 +47,7 @@ const updateProductSchema = createProductSchema.partial().omit({ variants: true 
 const stockAdjustSchema = z.object({
   variantId: z.number().int().optional(),
   quantity: z.number().int().positive(),
-  direction: z.enum(['add', 'reduce']),
+  direction: z.enum(['add', 'reduce', 'damage', 'discard_damaged']),
   note: z.string().max(500).optional(),
 });
 
@@ -138,6 +138,11 @@ productsRouter.get(
     const categoryId = req.query.categoryId ? parseInt(String(req.query.categoryId), 10) : undefined;
     const activeOnly = req.query.activeOnly !== 'false';
     const search = req.query.search ? String(req.query.search) : undefined;
+    const stockStatusRaw = req.query.stockStatus ? String(req.query.stockStatus) : 'all';
+    const allowedStatuses = ['all', 'in_stock', 'out_of_stock', 'low_stock', 'damaged'] as const;
+    const stockStatus = (allowedStatuses as readonly string[]).includes(stockStatusRaw)
+      ? (stockStatusRaw as (typeof allowedStatuses)[number])
+      : 'all';
 
     const result = await productsService.listProducts({
       page,
@@ -145,6 +150,7 @@ productsRouter.get(
       categoryId,
       activeOnly,
       search,
+      stockStatus,
     });
     res.json(result);
   }),

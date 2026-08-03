@@ -8,15 +8,19 @@ export type LabelSizePreset = {
   heightMm: number;
 };
 
+/** Physical sticker roll default: 58 × 40 mm. */
+export const STICKER_LABEL_WIDTH_MM = 58;
+export const STICKER_LABEL_HEIGHT_MM = 40;
+export const DEFAULT_BARCODE_LABEL_SIZE = '58x40';
+
 /** Common thermal roll sizes + A4 sheet mode. */
 export const BARCODE_LABEL_PRESETS: LabelSizePreset[] = [
+  { key: '58x40', label: '58 × 40 mm (sticker roll)', mode: 'thermal', widthMm: 58, heightMm: 40 },
   { key: '40x30', label: '40 × 30 mm (thermal)', mode: 'thermal', widthMm: 40, heightMm: 30 },
   { key: '50x25', label: '50 × 25 mm (thermal)', mode: 'thermal', widthMm: 50, heightMm: 25 },
   { key: '50x30', label: '50 × 30 mm (thermal)', mode: 'thermal', widthMm: 50, heightMm: 30 },
   { key: 'a4', label: 'A4 sheet (grid)', mode: 'a4', widthMm: 50, heightMm: 30 },
 ];
-
-export const DEFAULT_BARCODE_LABEL_SIZE = '50x30';
 
 export type ParsedLabelSize = {
   key: string;

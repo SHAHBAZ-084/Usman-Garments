@@ -363,6 +363,7 @@ export const api = {
     search?: string;
     categoryId?: number;
     activeOnly?: boolean;
+    stockStatus?: 'all' | 'in_stock' | 'out_of_stock' | 'low_stock' | 'damaged';
   }) {
     const query = new URLSearchParams();
     if (params?.page != null) query.set('page', String(params.page));
@@ -370,6 +371,7 @@ export const api = {
     if (params?.search) query.set('search', params.search);
     if (params?.categoryId != null) query.set('categoryId', String(params.categoryId));
     if (params?.activeOnly === false) query.set('activeOnly', 'false');
+    if (params?.stockStatus && params.stockStatus !== 'all') query.set('stockStatus', params.stockStatus);
     const suffix = query.toString() ? `?${query}` : '';
     return request<ProductListResult>(`/api/products${suffix}`);
   },
@@ -402,9 +404,14 @@ export const api = {
   },
   adjustProductStock(
     productId: number,
-    data: { variantId?: number; quantity: number; direction: 'add' | 'reduce'; note?: string },
+    data: {
+      variantId?: number;
+      quantity: number;
+      direction: 'add' | 'reduce' | 'damage' | 'discard_damaged';
+      note?: string;
+    },
   ) {
-    return request<{ movement: StockMovement; newStock: number }>(
+    return request<{ movement: StockMovement; newStock: number; damagedStock?: number }>(
       `/api/products/${productId}/stock-adjust`,
       { method: 'POST', body: JSON.stringify(data) },
     );
@@ -768,6 +775,7 @@ export type ProductVariant = {
   purchasePrice: number | null;
   salePrice: number | null;
   currentStock: number;
+  damagedStock?: number;
 };
 
 export type Product = {
@@ -781,9 +789,12 @@ export type Product = {
   salePrice: number;
   costNotSet: boolean;
   currentStock: number;
+  damagedStock?: number;
   lowStockLimit: number | null;
   effectiveLowStockLimit: number;
   isLowStock: boolean;
+  isOutOfStock?: boolean;
+  hasDamagedStock?: boolean;
   needsVariants?: boolean;
   supplierId: number | null;
   imagePath: string | null;

@@ -93,15 +93,16 @@ export function ProductsListPage() {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [search, setSearch] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [activeOnly, setActiveOnly] = useState(true);
+  const [stockStatus, setStockStatus] = useState<'all' | 'in_stock' | 'out_of_stock' | 'low_stock' | 'damaged'>('all');
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState<number | null>(null);
   const [preview, setPreview] = useState<ProductImportPreview | null>(null);
   const [labelItems, setLabelItems] = useState<LabelItem[] | null>(null);
-  const [labelSizeKey, setLabelSizeKey] = useState('50x30');
+  const [labelSizeKey, setLabelSizeKey] = useState('58x40');
   const [allowQtyEdit, setAllowQtyEdit] = useState(false);
   const [businessName, setBusinessName] = useState('Usman Mall');
   const [creditLine, setCreditLine] = useState('');
+  const [printerName, setPrinterName] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
@@ -118,7 +119,7 @@ export function ProductsListPage() {
         pageSize: 20,
         search: search.trim() || undefined,
         categoryId: categoryId ? Number(categoryId) : undefined,
-        activeOnly,
+        stockStatus,
       });
       if (requestId !== searchRequestId.current) return;
       setResult(next);
@@ -128,7 +129,7 @@ export function ProductsListPage() {
     } finally {
       if (requestId === searchRequestId.current) setLoading(false);
     }
-  }, [activeOnly, categoryId, page, search]);
+  }, [categoryId, page, search, stockStatus]);
 
   useEffect(() => {
     Promise.all([api.listProductCategories(), api.getSettings()])
@@ -136,7 +137,8 @@ export function ProductsListPage() {
         setCategories(cats);
         setBusinessName(settings.businessName);
         setCreditLine(settings.developerCreditLine ?? '');
-        setLabelSizeKey(settings.barcodeLabelSize || '50x30');
+        setLabelSizeKey(settings.barcodeLabelSize || '58x40');
+        setPrinterName(settings.printerName);
       })
       .catch(() => setCategories([]));
   }, []);
@@ -230,7 +232,23 @@ export function ProductsListPage() {
       <Panel className="mb-4"><div className="grid gap-4 md:grid-cols-4">
         <div className="md:col-span-2"><FieldLabel>Search</FieldLabel><TextInput value={search} onChange={(event) => { setSearch(event.target.value); setPage(1); }} placeholder="Name, product code, or barcode" /></div>
         <div><FieldLabel>Category</FieldLabel><select className={SELECT_CLASS} value={categoryId} onChange={(event) => { setCategoryId(event.target.value); setPage(1); }}><option value="">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></div>
-        <div><FieldLabel>Show</FieldLabel><select className={SELECT_CLASS} value={activeOnly ? 'active' : 'all'} onChange={(event) => { setActiveOnly(event.target.value === 'active'); setPage(1); }}><option value="active">Active only</option><option value="all">Include inactive</option></select></div>
+        <div>
+          <FieldLabel>Stock details</FieldLabel>
+          <select
+            className={SELECT_CLASS}
+            value={stockStatus}
+            onChange={(event) => {
+              setStockStatus(event.target.value as typeof stockStatus);
+              setPage(1);
+            }}
+          >
+            <option value="all">All stock</option>
+            <option value="in_stock">Existing stock</option>
+            <option value="out_of_stock">Out of stock</option>
+            <option value="low_stock">Low stock</option>
+            <option value="damaged">Damaged stock</option>
+          </select>
+        </div>
       </div></Panel>
       {error ? <Feedback variant="error" className="mb-4">{error}</Feedback> : null}
       {successMessage ? <Feedback variant="success" className="mb-4">{successMessage}</Feedback> : null}
@@ -266,6 +284,7 @@ export function ProductsListPage() {
         <th className="px-2 py-2 font-medium">Name</th>
         <th className="px-2 py-2 font-medium">Category</th>
         <th className="px-2 py-2 text-right font-medium">Total stock</th>
+        <th className="px-2 py-2 text-right font-medium">Damaged</th>
         <th className="px-2 py-2 text-right font-medium">Sale price</th>
         <th className="px-2 py-2 text-right font-medium">Purchase</th>
         <th className="px-2 py-2 font-medium">Actions</th>
@@ -294,7 +313,7 @@ export function ProductsListPage() {
             }}
           />
         ))}
-        {!loading && result?.items.length === 0 ? <tr><td colSpan={8} className="px-2 py-8 text-center text-textSecondary">No products found.</td></tr> : null}
+        {!loading && result?.items.length === 0 ? <tr><td colSpan={9} className="px-2 py-8 text-center text-textSecondary">No products found.</td></tr> : null}
       </tbody></table></div>
       {result ? <div className="mt-4 flex items-center justify-between"><p className="text-sm text-textSecondary">Page {result.page} of {result.totalPages} ({result.total} products)</p><div className="flex gap-2"><SecondaryButton disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>Previous</SecondaryButton><SecondaryButton disabled={page >= result.totalPages} onClick={() => setPage((value) => value + 1)}>Next</SecondaryButton></div></div> : null}
       </Panel>
@@ -304,6 +323,7 @@ export function ProductsListPage() {
           labelSizeKey={labelSizeKey}
           allowQuantityEdit={allowQtyEdit}
           creditLine={creditLine}
+          printerName={printerName}
           title="Print Labels — confirm barcode identity before print"
           onClose={() => {
             setLabelItems(null);
@@ -364,12 +384,24 @@ function ProductListRow({
         <td className="px-2 py-2">
           <Link className="font-medium text-accent hover:underline" to={`/products/${product.id}`}>{product.name}</Link>
           {product.needsVariants ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:text-amber-200">*Need Variants</span> : null}
-          {product.isLowStock ? <span className="ml-2 rounded bg-bgDanger px-1.5 py-0.5 text-xs text-danger">Low stock</span> : null}
+          {product.isOutOfStock || product.currentStock <= 0 ? (
+            <span className="ml-2 rounded bg-surface1 px-1.5 py-0.5 text-xs text-textMuted">Out of stock</span>
+          ) : product.isLowStock ? (
+            <span className="ml-2 rounded bg-bgDanger px-1.5 py-0.5 text-xs text-danger">Low stock</span>
+          ) : null}
+          {(product.damagedStock ?? 0) > 0 ? (
+            <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-900 dark:text-amber-200">
+              Damaged {product.damagedStock}
+            </span>
+          ) : null}
           {product.costNotSet ? <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs text-amber-800 dark:text-amber-200">Cost not set</span> : null}
           {!product.isActive ? <span className="ml-2 rounded bg-surface1 px-1.5 py-0.5 text-xs text-textMuted">Inactive</span> : null}
         </td>
         <td className="px-2 py-2">{product.category?.name ?? '—'}</td>
         <td className="px-2 py-2 text-right">{product.currentStock}</td>
+        <td className="px-2 py-2 text-right text-amber-800 dark:text-amber-200">
+          {(product.damagedStock ?? 0) > 0 ? product.damagedStock : '—'}
+        </td>
         <td className="px-2 py-2 text-right">{formatMoney(product.salePrice)}</td>
         <td className="px-2 py-2 text-right">
           {product.purchasePrice > 0 ? formatMoney(product.purchasePrice) : '—'}
@@ -401,7 +433,7 @@ function ProductListRow({
         <tr className="border-b border-border/60 bg-surface1">
           <td />
           <td />
-          <td colSpan={6} className="p-3">
+          <td colSpan={7} className="p-3">
             {hasVariants ? (
               <table className="w-full text-sm">
                 <thead>
@@ -411,6 +443,7 @@ function ProductListRow({
                     <th className="text-right">Sale</th>
                     <th className="text-right">Purchase</th>
                     <th className="text-right">Stock</th>
+                    <th className="text-right">Damaged</th>
                     <th>Barcode / Product Code</th>
                   </tr>
                 </thead>
@@ -428,6 +461,7 @@ function ProductListRow({
                             : '—'}
                       </td>
                       <td className="text-right">{variant.currentStock}</td>
+                      <td className="text-right">{(variant.damagedStock ?? 0) > 0 ? variant.damagedStock : '—'}</td>
                       <td className="font-mono text-xs">{variant.barcode ?? '—'} / {variant.productCode}</td>
                     </tr>
                   ))}
@@ -437,6 +471,7 @@ function ProductListRow({
               <p className="text-sm text-textSecondary">
                 No variants. Product Code: <span className="font-mono">{product.productCode}</span>
                 {product.barcode ? <> · Barcode: <span className="font-mono">{product.barcode}</span></> : null}
+                {(product.damagedStock ?? 0) > 0 ? <> · Damaged: {product.damagedStock}</> : null}
               </p>
             )}
           </td>
@@ -457,7 +492,7 @@ function StockAdjustModal({
 }) {
   const hasVariants = (product.variants?.length ?? 0) > 0;
   const [variantId, setVariantId] = useState<number | ''>('');
-  const [direction, setDirection] = useState<'add' | 'reduce'>('add');
+  const [direction, setDirection] = useState<'add' | 'reduce' | 'damage' | 'discard_damaged'>('add');
   const [quantity, setQuantity] = useState('1');
   const [note, setNote] = useState('');
   const [error, setError] = useState('');
@@ -496,7 +531,10 @@ function StockAdjustModal({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <Panel className="w-full max-w-md">
         <h2 className="text-lg font-semibold text-textPrimary">Adjust Stock</h2>
-        <p className="mt-1 text-sm text-textSecondary">{product.name}</p>
+        <p className="mt-1 text-sm text-textSecondary">
+          {product.name} · Sellable {product.currentStock}
+          {(product.damagedStock ?? 0) > 0 ? ` · Damaged ${product.damagedStock}` : ''}
+        </p>
         <form className="mt-4 space-y-4" onSubmit={onSubmit}>
           {hasVariants ? (
             <div>
@@ -511,21 +549,27 @@ function StockAdjustModal({
                 {product.variants!.map((v) => (
                   <option key={v.id} value={v.id}>
                     {variantLabel(v)} — stock {v.currentStock}
+                    {(v.damagedStock ?? 0) > 0 ? ` · damaged ${v.damagedStock}` : ''}
                   </option>
                 ))}
               </select>
             </div>
           ) : null}
           <div>
-            <FieldLabel>Direction</FieldLabel>
+            <FieldLabel>Stock details action</FieldLabel>
             <select
               className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
               value={direction}
-              onChange={(e) => setDirection(e.target.value as 'add' | 'reduce')}
+              onChange={(e) => setDirection(e.target.value as typeof direction)}
             >
-              <option value="add">Add stock</option>
-              <option value="reduce">Reduce stock</option>
+              <option value="add">Add sellable stock</option>
+              <option value="reduce">Reduce sellable stock</option>
+              <option value="damage">Move sellable → damaged</option>
+              <option value="discard_damaged">Discard damaged stock</option>
             </select>
+            <p className="mt-1 text-xs text-textMuted">
+              Damaged stock is unsellable and listed under Damaged stock filter.
+            </p>
           </div>
           <div>
             <FieldLabel>Quantity</FieldLabel>
@@ -605,7 +649,8 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
   const [categories, setCategories] = useState<ProductCategory[]>([]);
   const [businessName, setBusinessName] = useState('Usman Mall');
   const [creditLine, setCreditLine] = useState('');
-  const [labelSizeKey, setLabelSizeKey] = useState('50x30');
+  const [labelSizeKey, setLabelSizeKey] = useState('58x40');
+  const [printerName, setPrinterName] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [newCategoryName, setNewCategoryName] = useState('');
@@ -630,7 +675,8 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
         setCategories(cats);
         setBusinessName(settings.businessName);
         setCreditLine(settings.developerCreditLine ?? '');
-        setLabelSizeKey(settings.barcodeLabelSize || '50x30');
+        setLabelSizeKey(settings.barcodeLabelSize || '58x40');
+        setPrinterName(settings.printerName);
       })
       .catch(() => setCategories([]));
   }, []);
@@ -880,6 +926,24 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
         </div>
       }
     >
+      {mode === 'edit' && product ? (
+        <Panel className="mb-4">
+          <p className="text-sm font-semibold text-textPrimary">Stock details</p>
+          <div className="mt-2 flex flex-wrap gap-4 text-sm">
+            <span>
+              Sellable: <strong>{product.currentStock}</strong>
+            </span>
+            <span className="text-amber-800 dark:text-amber-200">
+              Damaged: <strong>{product.damagedStock ?? 0}</strong>
+            </span>
+            <span className="text-textMuted">
+              Low limit: {product.effectiveLowStockLimit}
+              {product.isLowStock ? ' · Low stock' : ''}
+              {product.currentStock <= 0 ? ' · Out of stock' : ''}
+            </span>
+          </div>
+        </Panel>
+      ) : null}
       <div className="grid gap-6 lg:grid-cols-2">
         <Panel>
           <form className="space-y-4" onSubmit={onSubmit}>
@@ -1197,7 +1261,14 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
       ) : null}
 
       {labelItems && labelItems.length > 0 ? (
-        <BarcodeLabelModal items={labelItems} labelSizeKey={labelSizeKey} creditLine={creditLine} allowQuantityEdit onClose={closeLabelModal} />
+        <BarcodeLabelModal
+          items={labelItems}
+          labelSizeKey={labelSizeKey}
+          creditLine={creditLine}
+          printerName={printerName}
+          allowQuantityEdit
+          onClose={closeLabelModal}
+        />
       ) : null}
     </PageShell>
   );

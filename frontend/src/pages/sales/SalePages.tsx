@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { printInvoice } from '../../components/sales/InvoicePrint';
+import { printInvoice, buildTestInvoice } from '../../components/sales/InvoicePrint';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import {
   api,
@@ -121,7 +121,11 @@ export function NewSalePage() {
   const [completedInvoice, setCompletedInvoice] = useState<Invoice | null>(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printMessage, setPrintMessage] = useState('');
   const checkoutFormRef = useRef<HTMLFormElement>(null);
+  const scanLockRef = useRef<{ key: string; at: number } | null>(null);
+  const barcodeFocusRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     Promise.all([api.getSettings(), api.listCustomers()])
@@ -161,15 +165,28 @@ export function NewSalePage() {
     return [...need.values()].filter((e) => e.need > e.have);
   }, [cart]);
 
-  function addOrIncrement(line: CartLine) {
+  function addOrIncrement(line: CartLine): boolean {
+    let blocked = false;
     setCart((prev) => {
       const existing = prev.find((l) => l.key === line.key);
-      if (existing) {
-        return prev.map((l) => (l.key === line.key ? { ...l, quantity: l.quantity + 1 } : l));
+      const nextQty = (existing?.quantity ?? 0) + 1;
+      if (nextQty > line.stock) {
+        blocked = true;
+        return prev;
       }
-      return [...prev, line];
+      if (existing) {
+        return prev.map((l) => (l.key === line.key ? { ...l, quantity: nextQty, stock: line.stock } : l));
+      }
+      return [...prev, { ...line, quantity: 1 }];
     });
+    if (blocked) {
+      setError(
+        `Stock limit: only ${line.stock} available for ${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ''}.`,
+      );
+      return false;
+    }
     setError('');
+    return true;
   }
 
   function onBarcodeMatch(result: BarcodeLookupResult) {
@@ -181,7 +198,35 @@ export function NewSalePage() {
       setError('Barcode matched a product but no variant — reprint the variant label.');
       return;
     }
-    addOrIncrement(lookupToCartLine(result));
+    const line = lookupToCartLine(result);
+    const now = Date.now();
+    const lock = scanLockRef.current;
+    // Guard duplicate wedge events for the same barcode within 350ms.
+    if (lock && lock.key === line.key && now - lock.at < 350) {
+      return;
+    }
+    scanLockRef.current = { key: line.key, at: now };
+    addOrIncrement(line);
+  }
+
+  async function handlePrintInvoice(invoice: Invoice, preview = false) {
+    if (!settings || printing) return;
+    setPrinting(true);
+    setPrintMessage('');
+    try {
+      const result = await printInvoice(invoice, settings, { preview });
+      if (!result.ok) {
+        setPrintMessage(result.failureReason || 'Print failed');
+      } else if (preview) {
+        setPrintMessage('Preview opened.');
+      } else {
+        setPrintMessage(`Sent to ${result.printer || 'printer'}.`);
+      }
+    } catch (err) {
+      setPrintMessage(err instanceof Error ? err.message : 'Print failed');
+    } finally {
+      setPrinting(false);
+    }
   }
 
   const runSearch = useCallback(async () => {
@@ -288,7 +333,7 @@ export function NewSalePage() {
 
   useFormShortcuts({
     onSave: () => checkoutFormRef.current?.requestSubmit(),
-    onPrint: completedInvoice && settings ? () => printInvoice(completedInvoice, settings) : undefined,
+    onPrint: completedInvoice && settings ? () => void handlePrintInvoice(completedInvoice) : undefined,
     onClear: clearBill,
     onCancel: completedInvoice ? () => setCompletedInvoice(null) : undefined,
     saveEnabled: !saving && cart.length > 0 && stockErrors.length === 0,
@@ -314,7 +359,12 @@ export function NewSalePage() {
       <div className="grid gap-6 xl:grid-cols-3">
         <div className="space-y-4 xl:col-span-2">
           <Panel>
-            <BarcodeScanField onMatch={onBarcodeMatch} />
+            <BarcodeScanField
+              onMatch={onBarcodeMatch}
+              onReadyFocus={(focus) => {
+                barcodeFocusRef.current = focus;
+              }}
+            />
           </Panel>
 
           <Panel>
@@ -393,18 +443,63 @@ export function NewSalePage() {
                           ) : null}
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <TextInput
-                            className="ml-auto w-16 text-right"
-                            type="number"
-                            min={1}
-                            value={String(line.quantity)}
-                            onChange={(e) => {
-                              const qty = Math.max(1, Number(e.target.value) || 1);
-                              setCart((prev) =>
-                                prev.map((l) => (l.key === line.key ? { ...l, quantity: qty } : l)),
-                              );
-                            }}
-                          />
+                          <div className="ml-auto flex w-28 items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              className="h-8 w-8 rounded border border-border text-sm font-bold"
+                              aria-label="Decrease quantity"
+                              onClick={() =>
+                                setCart((prev) =>
+                                  prev
+                                    .map((l) =>
+                                      l.key === line.key ? { ...l, quantity: Math.max(0, l.quantity - 1) } : l,
+                                    )
+                                    .filter((l) => l.quantity > 0),
+                                )
+                              }
+                            >
+                              −
+                            </button>
+                            <TextInput
+                              className="w-14 text-center"
+                              type="number"
+                              min={1}
+                              max={line.stock}
+                              value={String(line.quantity)}
+                              onChange={(e) => {
+                                const qty = Math.max(1, Math.min(line.stock, Number(e.target.value) || 1));
+                                if ((Number(e.target.value) || 1) > line.stock) {
+                                  setError(
+                                    `Stock limit: only ${line.stock} available for ${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ''}.`,
+                                  );
+                                }
+                                setCart((prev) =>
+                                  prev.map((l) => (l.key === line.key ? { ...l, quantity: qty } : l)),
+                                );
+                              }}
+                            />
+                            <button
+                              type="button"
+                              className="h-8 w-8 rounded border border-border text-sm font-bold"
+                              aria-label="Increase quantity"
+                              onClick={() => {
+                                if (line.quantity >= line.stock) {
+                                  setError(
+                                    `Stock limit: only ${line.stock} available for ${line.name}${line.variantLabel ? ` (${line.variantLabel})` : ''}.`,
+                                  );
+                                  return;
+                                }
+                                setCart((prev) =>
+                                  prev.map((l) =>
+                                    l.key === line.key ? { ...l, quantity: l.quantity + 1 } : l,
+                                  ),
+                                );
+                                setError('');
+                              }}
+                            >
+                              +
+                            </button>
+                          </div>
                         </td>
                         <td className="px-2 py-2 text-right">
                           <TextInput
@@ -614,10 +709,28 @@ export function NewSalePage() {
               </p>
             ) : null}
             <div className="mt-4 flex flex-wrap gap-2">
-              <PrimaryButton type="button" onClick={() => printInvoice(completedInvoice, settings)}>
+              <PrimaryButton
+                type="button"
+                disabled={printing}
+                onClick={() => void handlePrintInvoice(completedInvoice)}
+              >
                 <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
-                {shortcutLabel('Print Invoice', 'F10')}
+                {printing ? 'Printing…' : shortcutLabel('Print Invoice', 'F10')}
               </PrimaryButton>
+              <SecondaryButton
+                type="button"
+                disabled={printing}
+                onClick={() => void handlePrintInvoice(completedInvoice, true)}
+              >
+                Print Preview
+              </SecondaryButton>
+              <SecondaryButton
+                type="button"
+                disabled={printing}
+                onClick={() => void handlePrintInvoice(buildTestInvoice(settings, 5), true)}
+              >
+                Test Receipt
+              </SecondaryButton>
               <SecondaryButton
                 type="button"
                 onClick={() => {
@@ -631,6 +744,7 @@ export function NewSalePage() {
                 New sale
               </GhostButton>
             </div>
+            {printMessage ? <p className="mt-2 text-xs text-textSecondary">{printMessage}</p> : null}
           </Panel>
         </div>
       ) : null}
@@ -727,6 +841,8 @@ export function InvoiceDetailPage() {
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printMessage, setPrintMessage] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -737,6 +853,21 @@ export function InvoiceDetailPage() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load invoice'));
   }, [id]);
+
+  async function runPrint(target: Invoice, preview = false) {
+    if (!settings || printing) return;
+    setPrinting(true);
+    setPrintMessage('');
+    try {
+      const result = await printInvoice(target, settings, { preview });
+      if (!result.ok) setPrintMessage(result.failureReason || 'Print failed');
+      else setPrintMessage(preview ? 'Preview opened.' : `Sent to ${result.printer || 'printer'}.`);
+    } catch (err) {
+      setPrintMessage(err instanceof Error ? err.message : 'Print failed');
+    } finally {
+      setPrinting(false);
+    }
+  }
 
   async function onCancel() {
     if (!invoice || !window.confirm(`Cancel invoice ${invoice.invoiceNumber}? Stock and accounts will be reversed.`)) {
@@ -753,6 +884,11 @@ export function InvoiceDetailPage() {
       setBusy(false);
     }
   }
+
+  useFormShortcuts({
+    onPrint: invoice && settings ? () => void runPrint(invoice) : undefined,
+    printEnabled: Boolean(invoice && settings) && !printing,
+  });
 
   if (!invoice) {
     return (
@@ -772,10 +908,22 @@ export function InvoiceDetailPage() {
             <SecondaryButton type="button">Back</SecondaryButton>
           </Link>
           {settings ? (
-            <PrimaryButton type="button" onClick={() => printInvoice(invoice, settings)}>
-              <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
-              {shortcutLabel('Print Invoice', 'F10')}
-            </PrimaryButton>
+            <>
+              <PrimaryButton type="button" disabled={printing} onClick={() => void runPrint(invoice)}>
+                <Printer className="mr-1.5 inline h-4 w-4" aria-hidden />
+                {printing ? 'Printing…' : shortcutLabel('Print Invoice', 'F10')}
+              </PrimaryButton>
+              <SecondaryButton type="button" disabled={printing} onClick={() => void runPrint(invoice, true)}>
+                Print Preview
+              </SecondaryButton>
+              <SecondaryButton
+                type="button"
+                disabled={printing}
+                onClick={() => void runPrint(buildTestInvoice(settings, 8), true)}
+              >
+                Test Receipt
+              </SecondaryButton>
+            </>
           ) : null}
           {invoice.status === 'ACTIVE' ? (
             <DangerButton type="button" onClick={() => void onCancel()} disabled={busy}>
@@ -785,6 +933,12 @@ export function InvoiceDetailPage() {
         </div>
       }
     >
+      {printMessage ? (
+        <Feedback variant="info" className="mb-3">
+          {printMessage}
+        </Feedback>
+      ) : null}
+      {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
       <Panel>
         {invoice.customer ? (
           <p className="text-sm text-textSecondary">
@@ -858,7 +1012,6 @@ export function InvoiceDetailPage() {
             </div>
           ) : null}
         </div>
-        {error ? <Feedback variant="error" className="mt-4">{error}</Feedback> : null}
       </Panel>
     </PageShell>
   );

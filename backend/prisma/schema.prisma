@@ -316,6 +316,8 @@ model Product {
   purchasePrice Decimal
   salePrice     Decimal
   currentStock  Int      @default(0)
+  /// Units held as damaged / unsellable (separate from currentStock).
+  damagedStock  Int      @default(0)
   lowStockLimit Int?
   /// Set when imported without size/colour rows — prompts user to finish variants.
   needsVariants Boolean  @default(false)
@@ -349,6 +351,7 @@ model ProductVariant {
   purchasePrice Decimal?
   salePrice     Decimal?
   currentStock  Int      @default(0)
+  damagedStock  Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 

@@ -1,6 +1,6 @@
 /** Allowed barcode label size keys stored on BusinessSettings.barcodeLabelSize. */
 
-export const BARCODE_LABEL_SIZE_PRESETS = ['40x30', '50x25', '50x30', 'a4'] as const;
+export const BARCODE_LABEL_SIZE_PRESETS = ['58x40', '40x30', '50x25', '50x30', 'a4'] as const;
 
 const CUSTOM_RE = /^(\d{2,3})x(\d{2,3})$/i;
 

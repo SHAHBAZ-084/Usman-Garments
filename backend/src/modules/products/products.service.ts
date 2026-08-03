@@ -79,12 +79,70 @@ function mapUniqueConstraint(err: unknown, field: string, message: string): neve
 async function syncProductStockFromVariants(tx: Prisma.TransactionClient, productId: number) {
   const agg = await tx.productVariant.aggregate({
     where: { productId },
-    _sum: { currentStock: true },
+    _sum: { currentStock: true, damagedStock: true },
   });
   await tx.product.update({
     where: { id: productId },
-    data: { currentStock: agg._sum.currentStock ?? 0 },
+    data: {
+      currentStock: agg._sum.currentStock ?? 0,
+      damagedStock: agg._sum.damagedStock ?? 0,
+    },
   });
+}
+
+async function increaseDamagedStockInTx(
+  tx: Prisma.TransactionClient,
+  target: AdjustStockTarget,
+  quantity: number,
+) {
+  if (target.variantId != null) {
+    await tx.productVariant.update({
+      where: { id: target.variantId },
+      data: { damagedStock: { increment: quantity } },
+    });
+    await syncProductStockFromVariants(tx, target.productId);
+  } else {
+    await tx.product.update({
+      where: { id: target.productId },
+      data: { damagedStock: { increment: quantity } },
+    });
+  }
+}
+
+async function decreaseDamagedStockInTx(
+  tx: Prisma.TransactionClient,
+  target: AdjustStockTarget,
+  quantity: number,
+) {
+  if (target.variantId != null) {
+    const variant = await tx.productVariant.findFirst({
+      where: { id: target.variantId, productId: target.productId },
+    });
+    if (!variant) throw new AppError(404, 'Variant not found for this product');
+    if (variant.damagedStock < quantity) {
+      throw new AppError(
+        400,
+        `Insufficient damaged stock: current ${variant.damagedStock}, requested ${quantity}`,
+      );
+    }
+    await tx.productVariant.update({
+      where: { id: variant.id },
+      data: { damagedStock: variant.damagedStock - quantity },
+    });
+    await syncProductStockFromVariants(tx, target.productId);
+  } else {
+    const product = await tx.product.findUniqueOrThrow({ where: { id: target.productId } });
+    if (product.damagedStock < quantity) {
+      throw new AppError(
+        400,
+        `Insufficient damaged stock: current ${product.damagedStock}, requested ${quantity}`,
+      );
+    }
+    await tx.product.update({
+      where: { id: target.productId },
+      data: { damagedStock: product.damagedStock - quantity },
+    });
+  }
 }
 
 export type AdjustStockTarget =
@@ -140,6 +198,12 @@ export async function adjustStockInTx(
       where: { id: variant.id },
       data: { currentStock: newStock },
     });
+    if (type === StockMovementType.DAMAGED) {
+      await tx.productVariant.update({
+        where: { id: variant.id },
+        data: { damagedStock: { increment: quantity } },
+      });
+    }
     await syncProductStockFromVariants(tx, target.productId);
   } else {
     newStock = product.currentStock + delta;
@@ -148,7 +212,10 @@ export async function adjustStockInTx(
     }
     await tx.product.update({
       where: { id: target.productId },
-      data: { currentStock: newStock },
+      data: {
+        currentStock: newStock,
+        ...(type === StockMovementType.DAMAGED ? { damagedStock: { increment: quantity } } : {}),
+      },
     });
   }
 
@@ -167,7 +234,7 @@ export async function adjustStockInTx(
   return { movement, newStock };
 }
 
-/** Record a damaged return without changing sellable stock (audit trail only). */
+/** Record a damaged return: add to damaged inventory without changing sellable stock. */
 export async function recordDamagedReturnInTx(
   tx: Prisma.TransactionClient,
   target: AdjustStockTarget,
@@ -199,6 +266,8 @@ export async function recordDamagedReturnInTx(
     if (!variant) throw new AppError(404, 'Variant not found for this product');
   }
 
+  await increaseDamagedStockInTx(tx, target, quantity);
+
   const movement = await tx.stockMovement.create({
     data: {
       productId: target.productId,
@@ -211,12 +280,16 @@ export async function recordDamagedReturnInTx(
     },
   });
 
-  const newStock =
+  const refreshed =
     target.variantId != null
-      ? (await tx.productVariant.findUniqueOrThrow({ where: { id: target.variantId } })).currentStock
-      : product.currentStock;
+      ? await tx.productVariant.findUniqueOrThrow({ where: { id: target.variantId } })
+      : await tx.product.findUniqueOrThrow({ where: { id: target.productId } });
 
-  return { movement, newStock };
+  return {
+    movement,
+    newStock: refreshed.currentStock,
+    damagedStock: refreshed.damagedStock,
+  };
 }
 
 export async function adjustStock(
@@ -228,12 +301,16 @@ export async function adjustStock(
   return prisma.$transaction((tx) => adjustStockInTx(tx, target, quantity, type, options));
 }
 
+export type StockStatusFilter = 'all' | 'in_stock' | 'out_of_stock' | 'low_stock' | 'damaged';
+
 export type ProductListParams = {
   page?: number;
   pageSize?: number;
   search?: string;
   categoryId?: number;
   activeOnly?: boolean;
+  /** Stock details filter shown on product list (replaces active/inactive toggle usage). */
+  stockStatus?: StockStatusFilter;
 };
 
 function serializeProduct(row: {
@@ -246,6 +323,7 @@ function serializeProduct(row: {
   purchasePrice: Prisma.Decimal;
   salePrice: Prisma.Decimal;
   currentStock: number;
+  damagedStock?: number;
   lowStockLimit: number | null;
   needsVariants?: boolean;
   supplierId: number | null;
@@ -264,9 +342,11 @@ function serializeProduct(row: {
     purchasePrice: Prisma.Decimal | null;
     salePrice: Prisma.Decimal | null;
     currentStock: number;
+    damagedStock?: number;
   }>;
 }, defaultLowStockLimit: number) {
   const effectiveLow = row.lowStockLimit ?? defaultLowStockLimit;
+  const damagedStock = row.damagedStock ?? 0;
   const { sku, variants, ...rest } = row;
   return {
     ...rest,
@@ -275,8 +355,11 @@ function serializeProduct(row: {
     salePrice: Number(row.salePrice),
     costNotSet: Number(row.purchasePrice) === 0,
     needsVariants: Boolean(row.needsVariants) && (variants?.length ?? 0) === 0,
+    damagedStock,
     effectiveLowStockLimit: effectiveLow,
-    isLowStock: row.currentStock <= effectiveLow,
+    isLowStock: row.currentStock > 0 && row.currentStock <= effectiveLow,
+    isOutOfStock: row.currentStock <= 0,
+    hasDamagedStock: damagedStock > 0,
     category: row.category
       ? { id: row.category.id, name: row.category.name, code: row.category.code ?? '' }
       : null,
@@ -285,6 +368,7 @@ function serializeProduct(row: {
       return {
         ...variantRest,
         productCode: variantSku,
+        damagedStock: v.damagedStock ?? 0,
         purchasePrice: v.purchasePrice != null ? Number(v.purchasePrice) : null,
         salePrice: v.salePrice != null ? Number(v.salePrice) : null,
       };
@@ -316,6 +400,7 @@ export async function listProducts(params: ProductListParams = {}) {
   const page = Math.max(1, params.page ?? 1);
   const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
   const skip = (page - 1) * pageSize;
+  const stockStatus: StockStatusFilter = params.stockStatus ?? 'all';
 
   const where: Prisma.ProductWhereInput = {};
   if (params.activeOnly !== false) where.isActive = true;
@@ -337,25 +422,55 @@ export async function listProducts(params: ProductListParams = {}) {
     ];
   }
 
+  if (stockStatus === 'in_stock') where.currentStock = { gt: 0 };
+  else if (stockStatus === 'out_of_stock') where.currentStock = { lte: 0 };
+  else if (stockStatus === 'damaged') where.damagedStock = { gt: 0 };
+  else if (stockStatus === 'low_stock') where.currentStock = { gt: 0 };
+
+  const include = {
+    category: { select: { id: true, name: true, code: true } },
+    variants: {
+      select: {
+        id: true,
+        size: true,
+        colour: true,
+        sku: true,
+        barcode: true,
+        purchasePrice: true,
+        salePrice: true,
+        currentStock: true,
+        damagedStock: true,
+      },
+    },
+  } as const;
+
+  if (stockStatus === 'low_stock') {
+    const candidates = await prisma.product.findMany({
+      where,
+      include,
+      orderBy: { name: 'asc' },
+    });
+    const filtered = candidates.filter(
+      (p) => p.currentStock > 0 && p.currentStock <= (p.lowStockLimit ?? settings.lowStockLimit),
+    );
+    const total = filtered.length;
+    const rows = filtered.slice(skip, skip + pageSize);
+    return {
+      items: rows.map((r) => serializeProduct(r, settings.lowStockLimit)),
+      total,
+      page,
+      pageSize,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      defaultLowStockLimit: settings.lowStockLimit,
+      stockStatus,
+    };
+  }
+
   const [total, rows] = await Promise.all([
     prisma.product.count({ where }),
     prisma.product.findMany({
       where,
-      include: {
-        category: { select: { id: true, name: true, code: true } },
-        variants: {
-          select: {
-            id: true,
-            size: true,
-            colour: true,
-            sku: true,
-            barcode: true,
-            purchasePrice: true,
-            salePrice: true,
-            currentStock: true,
-          },
-        },
-      },
+      include,
       orderBy: { name: 'asc' },
       skip,
       take: pageSize,
@@ -369,6 +484,7 @@ export async function listProducts(params: ProductListParams = {}) {
     pageSize,
     totalPages: Math.max(1, Math.ceil(total / pageSize)),
     defaultLowStockLimit: settings.lowStockLimit,
+    stockStatus,
   };
 }
 
@@ -709,17 +825,49 @@ export async function manualStockAdjustment(
   input: {
     variantId?: number;
     quantity: number;
-    direction: 'add' | 'reduce';
+    direction: 'add' | 'reduce' | 'damage' | 'discard_damaged';
     note?: string;
   },
 ) {
-  const type =
-    input.direction === 'add' ? StockMovementType.MANUAL_ADD : StockMovementType.MANUAL_REDUCE;
-
   const target: AdjustStockTarget =
     input.variantId != null
       ? { productId, variantId: input.variantId }
       : { productId };
+
+  if (input.direction === 'damage') {
+    return adjustStock(target, input.quantity, StockMovementType.DAMAGED, {
+      note: input.note?.trim() || 'Marked as damaged',
+    });
+  }
+
+  if (input.direction === 'discard_damaged') {
+    return prisma.$transaction(async (tx) => {
+      await decreaseDamagedStockInTx(tx, target, input.quantity);
+      const movement = await tx.stockMovement.create({
+        data: {
+          productId,
+          variantId: input.variantId ?? null,
+          type: StockMovementType.CORRECTION,
+          quantity: input.quantity,
+          note: input.note?.trim() || 'Discarded damaged stock',
+          sourceType: 'DAMAGED_DISCARD',
+          sourceRef: null,
+        },
+      });
+      const refreshed =
+        input.variantId != null
+          ? await tx.productVariant.findUniqueOrThrow({ where: { id: input.variantId } })
+          : await tx.product.findUniqueOrThrow({ where: { id: productId } });
+      return {
+        movement,
+        newStock: refreshed.currentStock,
+        damagedStock: refreshed.damagedStock,
+      };
+    });
+  }
+
+  const type =
+    input.direction === 'add' ? StockMovementType.MANUAL_ADD : StockMovementType.MANUAL_REDUCE;
 
   return adjustStock(target, input.quantity, type, { note: input.note });
 }

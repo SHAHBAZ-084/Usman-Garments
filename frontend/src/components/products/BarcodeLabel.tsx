@@ -4,10 +4,15 @@ import { createPortal } from 'react-dom';
 import {
   a4GridColumns,
   a4GridRows,
+  BARCODE_LABEL_PRESETS,
+  DEFAULT_BARCODE_LABEL_SIZE,
   expandLabelCopies,
   parseLabelSize,
+  STICKER_LABEL_HEIGHT_MM,
+  STICKER_LABEL_WIDTH_MM,
   type ParsedLabelSize,
 } from '../../lib/barcodeLabels';
+import { LABEL_58X40_MICRONS, printHtmlDocument, type ElectronPrintResult } from '../../lib/electronPrint';
 import { formatMoney } from '../../lib/format';
 import { shortcutLabel } from '../../lib/shortcuts';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
@@ -35,6 +40,8 @@ const LABEL_LAYOUTS: Array<{ key: LabelLayoutKey; label: string; hint: string }>
   { key: 'compact', label: 'Compact', hint: 'Tighter fit for smaller labels' },
   { key: 'minimal', label: 'Minimal', hint: 'Name, size/colour, barcode only' },
 ];
+
+const TEST_QTYS = [1, 2, 5, 10] as const;
 
 /** Always CODE128 with the exact stored barcode — required for reliable sale scans. */
 const SCAN_FORMAT = 'CODE128' as const;
@@ -131,11 +138,151 @@ function LabelCard({
       </p>
       {variantLine ? <p className="mt-0.5 text-[10px] font-semibold text-neutral-800">{variantLine}</p> : null}
       {showPrice ? <p className={priceClass}>Rs {formatMoney(item.price)}</p> : null}
-      <div className={`flex justify-center overflow-hidden border-t border-neutral-200 ${showPrice || variantLine ? 'mt-1.5 pt-1.5' : 'mt-1 pt-1'}`}>
+      <div
+        className={`flex justify-center overflow-hidden border-t border-neutral-200 ${showPrice || variantLine ? 'mt-1.5 pt-1.5' : 'mt-1 pt-1'}`}
+      >
         <BarcodeSvg value={item.barcode} compact={compact || layout === 'minimal'} />
       </div>
     </div>
   );
+}
+
+function labelInnerHtml(
+  item: LabelItem,
+  layout: LabelLayoutKey,
+  _compact: boolean,
+  renderOpts: BarcodeRenderOpts,
+): string {
+  const variantLine = formatVariantLine(item.size, item.colour);
+  const showShop = layout !== 'minimal';
+  const showPrice = layout !== 'minimal';
+  return `
+      ${showShop ? `<p class="shop">${escapeHtml(item.businessName)}</p>` : ''}
+      <p class="name">${escapeHtml(item.productName)}</p>
+      ${variantLine ? `<p class="variant">${escapeHtml(variantLine)}</p>` : ''}
+      ${showPrice ? `<p class="price">Rs ${formatMoney(item.price)}</p>` : ''}
+      <div class="barcode-wrap">${barcodeSvgMarkup(item.barcode, renderOpts)}</div>
+    `;
+}
+
+/**
+ * Dedicated sticker-roll template: exactly one physical page per label.
+ * Does not reuse application screen CSS.
+ */
+export function buildStickerLabelPrintHtml(
+  items: LabelItem[],
+  layout: LabelLayoutKey = 'standard',
+  widthMm = STICKER_LABEL_WIDTH_MM,
+  heightMm = STICKER_LABEL_HEIGHT_MM,
+): string {
+  const compact = layout === 'compact' || heightMm <= 25 || widthMm <= 40;
+  const barcodeHeight = layout === 'minimal' ? 34 : compact ? 32 : 38;
+  const barcodeWidth = compact ? 1.15 : 1.35;
+  const priceSize = layout === 'priceFocus' ? (compact ? '11pt' : '13pt') : compact ? '9pt' : '11pt';
+  const renderOpts: BarcodeRenderOpts = {
+    height: barcodeHeight,
+    width: barcodeWidth,
+    fontSize: compact ? 9 : 11,
+  };
+
+  // One .label per physical page — never a continuous strip.
+  const pages = items
+    .map(
+      (item) =>
+        `<div class="label">${labelInnerHtml(item, layout, compact, renderOpts)}</div>`,
+    )
+    .join('');
+
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><title>Barcode Labels ${widthMm}x${heightMm}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: ${widthMm}mm;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    color: #111;
+    font-family: Arial, Helvetica, sans-serif;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  @page {
+    size: ${widthMm}mm ${heightMm}mm;
+    margin: 0;
+  }
+  .label {
+    width: ${widthMm}mm;
+    height: ${heightMm}mm;
+    max-width: ${widthMm}mm;
+    max-height: ${heightMm}mm;
+    padding: 1.2mm 1.8mm;
+    text-align: center;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .label:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+  .shop {
+    font-size: 7.5pt;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .name {
+    font-size: ${compact ? '8pt' : '9pt'};
+    font-weight: 700;
+    line-height: 1.15;
+    max-width: 100%;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
+  .variant {
+    font-size: 7.5pt;
+    font-weight: 600;
+    color: #222;
+    line-height: 1.1;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .price {
+    font-size: ${priceSize};
+    font-weight: 800;
+    line-height: 1.1;
+  }
+  .barcode-wrap {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    margin-top: auto;
+  }
+  .barcode-wrap svg {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+  }
+</style></head><body>${pages}</body></html>`;
 }
 
 function buildPrintHtml(
@@ -144,12 +291,15 @@ function buildPrintHtml(
   creditLine = '',
   layout: LabelLayoutKey = 'standard',
 ): string {
+  // Prefer dedicated sticker template for thermal rolls (one page = one sticker).
+  if (size.mode === 'thermal') {
+    return buildStickerLabelPrintHtml(items, layout, size.widthMm, size.heightMm);
+  }
+
   const compact = layout === 'compact' || size.heightMm <= 25 || size.widthMm <= 40;
   const barcodeHeight = layout === 'minimal' ? 32 : compact ? 28 : 36;
   const barcodeWidth = compact ? 1.1 : 1.3;
   const credit = creditLine.trim();
-  const showShop = layout !== 'minimal';
-  const showPrice = layout !== 'minimal';
   const priceSize =
     layout === 'priceFocus' ? (compact ? '11pt' : '13pt') : compact ? '9pt' : '11pt';
   const renderOpts: BarcodeRenderOpts = {
@@ -158,32 +308,22 @@ function buildPrintHtml(
     fontSize: compact ? 9 : 11,
   };
 
-  function labelInner(item: LabelItem): string {
-    const variantLine = formatVariantLine(item.size, item.colour);
-    return `
-      ${showShop ? `<p class="shop">${escapeHtml(item.businessName)}</p>` : ''}
-      <p class="name">${escapeHtml(item.productName)}</p>
-      ${variantLine ? `<p class="variant">${escapeHtml(variantLine)}</p>` : ''}
-      ${showPrice ? `<p class="price">Rs ${formatMoney(item.price)}</p>` : ''}
-      <div class="barcode-wrap">${barcodeSvgMarkup(item.barcode, renderOpts)}</div>
-    `;
+  const cols = a4GridColumns(size.widthMm);
+  const rows = a4GridRows(size.heightMm);
+  const perPage = cols * rows;
+  const pages: string[] = [];
+  for (let i = 0; i < items.length; i += perPage) {
+    const slice = items.slice(i, i + perPage);
+    const cells = slice
+      .map((item) => `<div class="label">${labelInnerHtml(item, layout, compact, renderOpts)}</div>`)
+      .join('');
+    pages.push(
+      `<div class="page">${cells}</div>${credit ? `<p class="sheet-credit">${escapeHtml(credit)}</p>` : ''}`,
+    );
   }
 
-  if (size.mode === 'a4') {
-    const cols = a4GridColumns(size.widthMm);
-    const rows = a4GridRows(size.heightMm);
-    const perPage = cols * rows;
-    const pages: string[] = [];
-    for (let i = 0; i < items.length; i += perPage) {
-      const slice = items.slice(i, i + perPage);
-      const cells = slice.map((item) => `<div class="label">${labelInner(item)}</div>`).join('');
-      pages.push(
-        `<div class="page">${cells}</div>${credit ? `<p class="sheet-credit">${escapeHtml(credit)}</p>` : ''}`,
-      );
-    }
-
-    return `<!DOCTYPE html>
-<html><head><title>Barcode Labels — A4</title>
+  return `<!DOCTYPE html>
+<html><head><meta charset="utf-8"/><title>Barcode Labels — A4</title>
 <style>
   * { box-sizing: border-box; }
   @page { size: A4; margin: 8mm; }
@@ -210,39 +350,7 @@ function buildPrintHtml(
   .barcode-wrap svg { max-width: 100%; height: auto; }
   .sheet-credit { font-size: 6pt; color: #888; text-align: center; margin: 2mm 0 0; page-break-after: always; }
   .sheet-credit:last-child { page-break-after: auto; }
-</style></head><body>${pages.join('')}
-<script>window.onload = function() { window.print(); };<\/script></body></html>`;
-  }
-
-  const cards = items
-    .map((item) => {
-      const itemCredit =
-        credit && size.heightMm >= 30 ? `<p class="credit">${escapeHtml(credit)}</p>` : '';
-      return `<div class="label">${labelInner(item)}${itemCredit}</div>`;
-    })
-    .join('');
-
-  return `<!DOCTYPE html>
-<html><head><title>Barcode Labels</title>
-<style>
-  * { box-sizing: border-box; }
-  @page { size: ${size.widthMm}mm ${size.heightMm}mm; margin: 0; }
-  body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #111; }
-  .label {
-    width: ${size.widthMm}mm; height: ${size.heightMm}mm;
-    padding: 1.5mm 2mm; text-align: center; page-break-after: always;
-    overflow: hidden; display: flex; flex-direction: column; justify-content: space-between;
-  }
-  .label:last-child { page-break-after: auto; }
-  .shop { font-size: 7.5pt; font-weight: 800; letter-spacing: 0.03em; text-transform: uppercase; color: #111; margin: 0; }
-  .name { font-size: ${compact ? '8pt' : '9pt'}; font-weight: 700; margin: 1mm 0 0; line-height: 1.15; }
-  .variant { font-size: 7.5pt; font-weight: 600; color: #333; margin: 0.5mm 0 0; }
-  .price { font-size: ${priceSize}; font-weight: 800; margin: 1mm 0 0; }
-  .barcode-wrap { margin-top: auto; }
-  .barcode-wrap svg { max-width: 100%; height: auto; }
-  .credit { font-size: 5pt; color: #888; margin: 0.5mm 0 0; line-height: 1.1; }
-</style></head><body>${cards}
-<script>window.onload = function() { window.print(); };<\/script></body></html>`;
+</style></head><body>${pages.join('')}</body></html>`;
 }
 
 function escapeHtml(text: string): string {
@@ -253,19 +361,51 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-export function printBarcodeLabels(
+export type PrintLabelsOptions = {
+  labelSizeKey?: string;
+  creditLine?: string;
+  labelLayout?: LabelLayoutKey;
+  printerName?: string | null;
+  preview?: boolean;
+};
+
+export async function printBarcodeLabels(
   items: LabelItem[],
-  labelSizeKey?: string,
+  labelSizeKeyOrOptions?: string | PrintLabelsOptions,
   creditLine = '',
   labelLayout: LabelLayoutKey = 'standard',
-) {
-  if (items.length === 0) return;
-  const size = parseLabelSize(labelSizeKey);
-  const html = buildPrintHtml(items, size, creditLine, labelLayout);
-  const win = window.open('', '_blank', 'width=720,height=900');
-  if (!win) return;
-  win.document.write(html);
-  win.document.close();
+): Promise<ElectronPrintResult> {
+  if (items.length === 0) {
+    return { ok: false, failureReason: 'No labels to print', jobType: 'barcode-label' };
+  }
+
+  const options: PrintLabelsOptions =
+    typeof labelSizeKeyOrOptions === 'object' && labelSizeKeyOrOptions
+      ? labelSizeKeyOrOptions
+      : {
+          labelSizeKey: typeof labelSizeKeyOrOptions === 'string' ? labelSizeKeyOrOptions : undefined,
+          creditLine,
+          labelLayout,
+        };
+
+  const size = parseLabelSize(options.labelSizeKey);
+  const layout = options.labelLayout ?? 'standard';
+  const html = buildPrintHtml(items, size, options.creditLine ?? '', layout);
+  const isSticker = size.mode === 'thermal';
+  const pageSize = isSticker
+    ? size.widthMm === 58 && size.heightMm === 40
+      ? LABEL_58X40_MICRONS
+      : { width: size.widthMm * 1000, height: size.heightMm * 1000 }
+    : 'A4';
+
+  return printHtmlDocument(html, {
+    deviceName: options.printerName,
+    pageSize,
+    jobType: 'barcode-label',
+    copies: items.length,
+    preview: options.preview,
+    contentWidthMm: size.widthMm,
+  });
 }
 
 export function BarcodeLabelModal({
@@ -275,6 +415,7 @@ export function BarcodeLabelModal({
   labelSizeKey,
   allowQuantityEdit = true,
   creditLine = '',
+  printerName = null,
 }: {
   items: LabelItem[];
   onClose: () => void;
@@ -282,12 +423,15 @@ export function BarcodeLabelModal({
   labelSizeKey?: string;
   allowQuantityEdit?: boolean;
   creditLine?: string;
+  printerName?: string | null;
 }) {
-  const [sizeKey, setSizeKey] = useState(labelSizeKey ?? '50x30');
+  const [sizeKey, setSizeKey] = useState(labelSizeKey ?? DEFAULT_BARCODE_LABEL_SIZE);
   const [labelLayout, setLabelLayout] = useState<LabelLayoutKey>('standard');
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(items.map((item) => [item.key, Math.max(1, Math.min(99, item.defaultQty ?? 1))])),
   );
+  const [printing, setPrinting] = useState(false);
+  const [printMessage, setPrintMessage] = useState('');
   const size = useMemo(() => parseLabelSize(sizeKey), [sizeKey]);
   const printable = useMemo(
     () => (allowQuantityEdit ? expandLabelCopies(items, quantities) : items),
@@ -299,10 +443,36 @@ export function BarcodeLabelModal({
     if (labelSizeKey) setSizeKey(labelSizeKey);
   }, [labelSizeKey]);
 
+  async function runPrint(list: LabelItem[], preview = false) {
+    if (printing || list.length === 0) return;
+    setPrinting(true);
+    setPrintMessage('');
+    try {
+      const result = await printBarcodeLabels(list, {
+        labelSizeKey: sizeKey,
+        creditLine,
+        labelLayout,
+        printerName,
+        preview,
+      });
+      if (!result.ok) {
+        setPrintMessage(result.failureReason || 'Print failed');
+      } else if (preview) {
+        setPrintMessage('Preview opened.');
+      } else {
+        setPrintMessage(`Sent ${list.length} label page(s) to ${result.printer || 'printer'}.`);
+      }
+    } catch (err) {
+      setPrintMessage(err instanceof Error ? err.message : 'Print failed');
+    } finally {
+      setPrinting(false);
+    }
+  }
+
   useFormShortcuts({
-    onPrint: () => printBarcodeLabels(printable, sizeKey, creditLine, labelLayout),
+    onPrint: () => void runPrint(printable),
     onCancel: onClose,
-    printEnabled: printable.length > 0,
+    printEnabled: printable.length > 0 && !printing,
   });
 
   useEffect(() => {
@@ -320,6 +490,8 @@ export function BarcodeLabelModal({
     }
     return Array.from(unique.values()).slice(0, 12);
   }, [printable]);
+
+  const sampleForTest = items[0];
 
   const modal = (
     <div
@@ -341,10 +513,15 @@ export function BarcodeLabelModal({
           </h2>
           <p className="mt-1 text-sm text-textSecondary">
             {printable.length} label{printable.length === 1 ? '' : 's'} ready · {size.label}
+            {size.mode === 'thermal' ? ' · one sticker per page' : ''}
           </p>
           <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-950 dark:text-amber-100">
-            Each label encodes the exact sale barcode (CODE128). Scan that barcode at New Sale to load the matching size/colour.
+            Sticker roll: set Windows printer to gap/label sensing for {STICKER_LABEL_WIDTH_MM}×
+            {STICKER_LABEL_HEIGHT_MM} mm. Qty 1 = 1 sticker, qty 5 = 5 stickers (separate pages).
           </p>
+          {printMessage ? (
+            <p className="mt-2 text-xs font-medium text-textSecondary">{printMessage}</p>
+          ) : null}
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-3">
@@ -395,15 +572,20 @@ export function BarcodeLabelModal({
               <select
                 className="mt-1 w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
                 value={
-                  ['40x30', '50x25', '50x30', 'a4'].includes(sizeKey) || size.isCustom ? sizeKey : '50x30'
+                  BARCODE_LABEL_PRESETS.some((p) => p.key === sizeKey) || size.isCustom
+                    ? sizeKey
+                    : DEFAULT_BARCODE_LABEL_SIZE
                 }
                 onChange={(event) => setSizeKey(event.target.value)}
               >
-                <option value="40x30">40 × 30 mm (thermal)</option>
-                <option value="50x25">50 × 25 mm (thermal)</option>
-                <option value="50x30">50 × 30 mm (thermal)</option>
-                <option value="a4">A4 sheet (grid)</option>
-                {size.isCustom ? <option value={size.key}>{size.label}</option> : null}
+                {BARCODE_LABEL_PRESETS.map((preset) => (
+                  <option key={preset.key} value={preset.key}>
+                    {preset.label}
+                  </option>
+                ))}
+                {size.isCustom && !BARCODE_LABEL_PRESETS.some((p) => p.key === sizeKey) ? (
+                  <option value={sizeKey}>{size.label}</option>
+                ) : null}
               </select>
             </div>
             <div>
@@ -423,6 +605,34 @@ export function BarcodeLabelModal({
             </div>
           </div>
 
+          {sampleForTest ? (
+            <div className="mt-3 rounded-lg border border-border bg-surface1 p-3">
+              <p className="text-sm font-medium text-textPrimary">Test Label</p>
+              <p className="mt-1 text-xs text-textMuted">
+                Prints sample stickers for alignment (qty 1 / 2 / 5 / 10). Uses {size.label}.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {TEST_QTYS.map((qty) => (
+                  <SecondaryButton
+                    key={qty}
+                    type="button"
+                    disabled={printing}
+                    onClick={() =>
+                      void runPrint(
+                        Array.from({ length: qty }, (_, i) => ({
+                          ...sampleForTest,
+                          key: `${sampleForTest.key}-test-${i}`,
+                        })),
+                      )
+                    }
+                  >
+                    Test ×{qty}
+                  </SecondaryButton>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {previewItems.map((item) => (
               <LabelCard key={item.key} item={item} size={size} layout={labelLayout} />
@@ -437,14 +647,24 @@ export function BarcodeLabelModal({
 
         <div className="shrink-0 border-t border-border bg-surface2 px-4 py-3">
           <div className="flex flex-wrap justify-end gap-2">
-            <SecondaryButton type="button" onClick={onClose}>
+            <SecondaryButton type="button" onClick={onClose} disabled={printing}>
               Done (Esc)
+            </SecondaryButton>
+            <SecondaryButton
+              type="button"
+              disabled={printing || printable.length === 0}
+              onClick={() => void runPrint(printable, true)}
+            >
+              Preview
             </SecondaryButton>
             <PrimaryButton
               type="button"
-              onClick={() => printBarcodeLabels(printable, sizeKey, creditLine, labelLayout)}
+              disabled={printing || printable.length === 0}
+              onClick={() => void runPrint(printable)}
             >
-              {shortcutLabel(printable.length > 1 ? 'Print Labels' : 'Print Label', 'F10')}
+              {printing
+                ? 'Printing…'
+                : shortcutLabel(printable.length > 1 ? 'Print Labels' : 'Print Label', 'F10')}
             </PrimaryButton>
           </div>
         </div>

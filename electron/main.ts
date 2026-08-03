@@ -3,6 +3,7 @@ import { autoUpdater } from 'electron-updater';
 import fs from 'fs';
 import Module from 'module';
 import path from 'path';
+import { registerPrintIpc } from './print';
 
 const isDev = process.env.NODE_ENV === 'development';
 const BACKEND_PORT = process.env.PORT ?? '3847';
@@ -141,6 +142,8 @@ ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 ipcMain.handle('install-update', () => {
   autoUpdater.quitAndInstall();
 });
+
+registerPrintIpc();
 
 app.whenReady().then(async () => {
   if (!isDev) {

@@ -1,5 +1,41 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+export type ElectronPrintPageSize =
+  | string
+  | {
+      width: number;
+      height: number;
+    };
+
+export type ElectronPrintRequest = {
+  html: string;
+  deviceName?: string | null;
+  silent?: boolean;
+  printBackground?: boolean;
+  scaleFactor?: number;
+  preferCSSPageSize?: boolean;
+  pageSize?: ElectronPrintPageSize;
+  jobType?: string;
+  copies?: number;
+};
+
+export type ElectronPrintResult = {
+  ok: boolean;
+  failureReason?: string;
+  printer?: string | null;
+  copies?: number;
+  pageSize?: ElectronPrintPageSize;
+  jobType?: string;
+};
+
+export type ElectronPrinterInfo = {
+  name: string;
+  displayName: string;
+  description: string;
+  isDefault: boolean;
+  status: number;
+};
+
 contextBridge.exposeInMainWorld('usmanGarments', {
   platform: process.platform,
   restartApp: () => ipcRenderer.invoke('restart-app'),
@@ -15,6 +51,9 @@ contextBridge.exposeInMainWorld('usmanGarments', {
     return () => ipcRenderer.removeListener('update-ready', listener);
   },
   installUpdate: () => ipcRenderer.invoke('install-update') as Promise<void>,
+  printHtml: (request: ElectronPrintRequest) =>
+    ipcRenderer.invoke('print-html', request) as Promise<ElectronPrintResult>,
+  listPrinters: () => ipcRenderer.invoke('list-printers') as Promise<ElectronPrinterInfo[]>,
 });
 
 declare global {
@@ -26,6 +65,8 @@ declare global {
       onUpdateAvailable: (callback: () => void) => () => void;
       onUpdateReady: (callback: () => void) => () => void;
       installUpdate: () => Promise<void>;
+      printHtml: (request: ElectronPrintRequest) => Promise<ElectronPrintResult>;
+      listPrinters: () => Promise<ElectronPrinterInfo[]>;
     };
   }
 }

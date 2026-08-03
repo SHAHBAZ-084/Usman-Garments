@@ -8,6 +8,9 @@ import {
 
 describe('barcodeLabels helpers', () => {
   it('parses thermal presets and a4', () => {
+    expect(parseLabelSize('58x40').mode).toBe('thermal');
+    expect(parseLabelSize('58x40').widthMm).toBe(58);
+    expect(parseLabelSize('58x40').heightMm).toBe(40);
     expect(parseLabelSize('40x30').mode).toBe('thermal');
     expect(parseLabelSize('40x30').widthMm).toBe(40);
     expect(parseLabelSize('a4').mode).toBe('a4');

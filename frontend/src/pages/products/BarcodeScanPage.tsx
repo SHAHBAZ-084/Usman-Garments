@@ -1,4 +1,4 @@
-import { FormEvent, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type BarcodeLookupResult } from '../../lib/api';
 import { formatMoney } from '../../lib/format';
@@ -11,20 +11,40 @@ import { FieldLabel, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput
 export function BarcodeScanField({
   onMatch,
   autoFocus = true,
+  onReadyFocus,
 }: {
   onMatch?: (result: BarcodeLookupResult) => void;
   autoFocus?: boolean;
+  /** Expose focus() so parent can return focus after cart updates. */
+  onReadyFocus?: (focus: () => void) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<BarcodeLookupResult | null>(null);
+  const lastSubmitRef = useRef<{ barcode: string; at: number } | null>(null);
+
+  useEffect(() => {
+    const focus = () => inputRef.current?.focus();
+    onReadyFocus?.(focus);
+  }, [onReadyFocus]);
 
   async function lookup(raw: string) {
     // Match printed CODE128 value; scanners may append CR/LF or spaces.
     const barcode = raw.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, '').trim();
     if (!barcode) return;
+
+    const now = Date.now();
+    const last = lastSubmitRef.current;
+    // One physical scan must not fire twice (Enter + duplicate submit).
+    if (last && last.barcode === barcode && now - last.at < 400) {
+      setValue('');
+      inputRef.current?.focus();
+      return;
+    }
+    lastSubmitRef.current = { barcode, at: now };
+
     setBusy(true);
     setError('');
     setResult(null);
@@ -38,7 +58,8 @@ export function BarcodeScanField({
     } finally {
       setBusy(false);
       setValue('');
-      inputRef.current?.focus();
+      // Keep scanning fast: always return focus to the input.
+      requestAnimationFrame(() => inputRef.current?.focus());
     }
   }
 
@@ -78,25 +99,15 @@ export function BarcodeScanField({
           <p className="mt-1 text-lg font-semibold text-textPrimary">{result.product.name}</p>
           {result.variant ? (
             <p className="mt-1 text-sm text-textSecondary">
-              {[result.variant.size, result.variant.colour].filter(Boolean).join(' · ') || 'Variant'}
-              {' · '}
-              Stock {result.variant.currentStock}
+              {[result.variant.size, result.variant.colour].filter(Boolean).join(' / ') || 'Variant'}
+              {' · '}Rs {formatMoney(result.variant.salePrice ?? result.product.salePrice)}
+              {' · '}Stock {result.variant.currentStock}
             </p>
           ) : (
-            <p className="mt-1 text-sm text-textSecondary">Stock {result.product.currentStock}</p>
+            <p className="mt-1 text-sm text-textSecondary">
+              Rs {formatMoney(result.product.salePrice)} · Stock {result.product.currentStock}
+            </p>
           )}
-          <p className="mt-2 text-sm text-textPrimary">
-            Price Rs {formatMoney(result.variant?.salePrice ?? result.product.salePrice)}
-          </p>
-          <p className="mt-1 font-mono text-xs text-textSecondary">
-            {(result.variant?.barcode ?? result.product.barcode) || '—'} ·{' '}
-            {result.variant?.productCode ?? result.product.productCode}
-          </p>
-          <div className="mt-3">
-            <Link to={`/products/${result.product.id}`}>
-              <SecondaryButton type="button">Open product</SecondaryButton>
-            </Link>
-          </div>
         </div>
       ) : null}
     </div>
@@ -105,17 +116,18 @@ export function BarcodeScanField({
 
 export function BarcodeScanPage() {
   return (
-    <PageShell
-      title="Barcode scan test"
-      subtitle="Point a USB scanner here to verify lookup before POS. Scanners type the code and press Enter."
-      actions={
-        <Link to="/products/list">
-          <SecondaryButton type="button">Back to products</SecondaryButton>
-        </Link>
-      }
-    >
+    <PageShell title="Scan barcode" subtitle="Look up a product by scanning its barcode">
       <Panel>
         <BarcodeScanField />
+        <p className="mt-4 text-sm text-textSecondary">
+          Prefer scanning from <Link className="text-accent underline" to="/sales/new">New Sale</Link> to add items to
+          the cart.
+        </p>
+        <div className="mt-4">
+          <Link to="/products/list">
+            <SecondaryButton type="button">Back to products</SecondaryButton>
+          </Link>
+        </div>
       </Panel>
     </PageShell>
   );

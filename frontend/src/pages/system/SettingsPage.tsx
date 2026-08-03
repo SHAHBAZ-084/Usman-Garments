@@ -38,7 +38,7 @@ const emptyForm = {
   receiptSize: 'THERMAL_80' as BusinessSettings['receiptSize'],
   a4InvoiceEnabled: true,
   printerName: '' as string,
-  barcodeLabelSize: '50x30',
+  barcodeLabelSize: '58x40',
   lowStockLimit: 5,
   backupFolderPath: '',
   themeMode: 'light' as BusinessSettings['themeMode'],
@@ -552,7 +552,7 @@ export function SettingsPage() {
                   onChange={(e) => patchField('receiptSize', e.target.value as typeof form.receiptSize)}
                 >
                   <option value="THERMAL_58">Thermal 58mm</option>
-                  <option value="THERMAL_80">Thermal 80mm</option>
+                  <option value="THERMAL_80">Thermal 78–80mm receipt (recommended)</option>
                   <option value="A4">A4</option>
                 </select>
               </div>
@@ -577,35 +577,40 @@ export function SettingsPage() {
                 <TextInput
                   value={form.printerName}
                   onChange={(e) => patchField('printerName', e.target.value)}
-                  placeholder="Optional Windows printer name"
+                  placeholder="Exact Windows printer name (Devices & Printers)"
                 />
+                <p className="mt-1 text-xs text-textMuted">
+                  Used for silent barcode/invoice printing in the desktop app. Leave blank to use the print dialog.
+                  For 58×40 stickers, set the printer driver to gap/label sensing and 58×40 mm media.
+                </p>
               </div>
               <div>
                 <FieldLabel>Barcode label size</FieldLabel>
                 <select
                   className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
                   value={
-                    ['40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize)
+                    ['58x40', '40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize)
                       ? form.barcodeLabelSize
                       : 'custom'
                   }
                   onChange={(e) => {
                     if (e.target.value === 'custom') {
                       const current = form.barcodeLabelSize;
-                      const isPreset = ['40x30', '50x25', '50x30', 'a4'].includes(current);
-                      patchField('barcodeLabelSize', isPreset ? '60x40' : current);
+                      const isPreset = ['58x40', '40x30', '50x25', '50x30', 'a4'].includes(current);
+                      patchField('barcodeLabelSize', isPreset ? '58x40' : current);
                     } else {
                       patchField('barcodeLabelSize', e.target.value);
                     }
                   }}
                 >
+                  <option value="58x40">58 × 40 mm (sticker roll)</option>
                   <option value="40x30">40 × 30 mm (thermal)</option>
                   <option value="50x25">50 × 25 mm (thermal)</option>
                   <option value="50x30">50 × 30 mm (thermal)</option>
                   <option value="a4">A4 sheet (grid)</option>
                   <option value="custom">Custom size…</option>
                 </select>
-                {!['40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize) ? (
+                {!['58x40', '40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize) ? (
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div>
                       <FieldLabel>Width (mm)</FieldLabel>
@@ -613,9 +618,9 @@ export function SettingsPage() {
                         type="number"
                         min={20}
                         max={200}
-                        value={String(Number(form.barcodeLabelSize.split('x')[0]) || 60)}
+                        value={String(Number(form.barcodeLabelSize.split('x')[0]) || 58)}
                         onChange={(e) => {
-                          const w = Math.max(20, Math.min(200, Number(e.target.value) || 60));
+                          const w = Math.max(20, Math.min(200, Number(e.target.value) || 58));
                           const h = Number(form.barcodeLabelSize.split('x')[1]) || 40;
                           patchField('barcodeLabelSize', `${w}x${h}`);
                         }}
@@ -630,7 +635,7 @@ export function SettingsPage() {
                         value={String(Number(form.barcodeLabelSize.split('x')[1]) || 40)}
                         onChange={(e) => {
                           const h = Math.max(15, Math.min(200, Number(e.target.value) || 40));
-                          const w = Number(form.barcodeLabelSize.split('x')[0]) || 60;
+                          const w = Number(form.barcodeLabelSize.split('x')[0]) || 58;
                           patchField('barcodeLabelSize', `${w}x${h}`);
                         }}
                       />

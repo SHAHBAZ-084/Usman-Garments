@@ -28,12 +28,14 @@ export type HealthReport = {
 };
 
 function expectedStockFromMovements(
-  movements: Array<{ type: string; _sum: { quantity: number | null } }>,
+  movements: Array<{ type: string; quantity: number; sourceType: string | null }>,
 ): number {
   let expected = 0;
   for (const m of movements) {
-    const qty = m._sum.quantity ?? 0;
+    const qty = m.quantity;
     const t = m.type as StockMovementType;
+    // Damaged returns add to damaged inventory only — they never left sellable stock as DAMAGED out.
+    if (t === StockMovementType.DAMAGED && m.sourceType === 'SALE_RETURN') continue;
     if (isStockInType(t)) expected += qty;
     else if (isStockOutType(t)) expected -= qty;
   }
@@ -63,10 +65,9 @@ export async function runHealthCheck(): Promise<HealthReport> {
 
   const mismatches: HealthReport['stockReconciliation']['mismatches'] = [];
   for (const p of products) {
-    const movements = await prisma.stockMovement.groupBy({
-      by: ['type'],
+    const movements = await prisma.stockMovement.findMany({
       where: { productId: p.id },
-      _sum: { quantity: true },
+      select: { type: true, quantity: true, sourceType: true },
     });
     const expected = expectedStockFromMovements(movements);
     if (expected !== p.currentStock) {
@@ -116,10 +117,9 @@ export async function reconcileProductStockToMovements(productId: number) {
   });
   if (!product) throw new AppError(404, 'Product not found');
 
-  const movements = await prisma.stockMovement.groupBy({
-    by: ['type'],
+  const movements = await prisma.stockMovement.findMany({
     where: { productId },
-    _sum: { quantity: true },
+    select: { type: true, quantity: true, sourceType: true },
   });
   const expected = expectedStockFromMovements(movements);
 

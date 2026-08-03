@@ -26,7 +26,7 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   receiptSize: ReceiptSize.THERMAL_80,
   a4InvoiceEnabled: true,
   printerName: null as string | null,
-  barcodeLabelSize: '50x30',
+  barcodeLabelSize: '58x40',
   lowStockLimit: 5,
   backupFolderPath: '',
   themeMode: ThemeMode.LIGHT,
