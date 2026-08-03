@@ -108,6 +108,8 @@ export async function createBackup(options: {
   destinationFolder?: string | null;
   automatic?: boolean;
   label?: string;
+  /** When true, never read BusinessSettings via Prisma (required during schema upgrades). */
+  skipSettingsSnapshot?: boolean;
 }): Promise<BackupEntry> {
   const destRoot = resolveBackupDestination(options.destinationFolder);
   const needed = estimateBackupBytes();
@@ -132,17 +134,19 @@ export async function createBackup(options: {
   const uploadsDest = path.join(folderPath, 'uploads');
   copyDirRecursive(getUploadsDir(), uploadsDest);
 
-  // Settings snapshot is best-effort. During upgrades the Prisma client may already
-  // know columns that migrate has not applied yet — never block a DB file backup on that.
-  let settingsSnapshot: Record<string, unknown> = {};
-  try {
-    const settings = await getBusinessSettings();
-    settingsSnapshot = { ...settings, logoUrl: undefined };
-  } catch (err) {
-    logger.warn('Backup settings snapshot skipped (schema may be mid-upgrade)', {
-      error: err instanceof Error ? err.message : String(err),
-    });
-    settingsSnapshot = { note: 'settings snapshot unavailable' };
+  // Never block a DB file backup on Prisma model reads. During upgrades the client
+  // may already know columns (e.g. releaseMarker) that migrate has not applied yet.
+  let settingsSnapshot: Record<string, unknown> = { note: 'settings snapshot skipped' };
+  if (!options.skipSettingsSnapshot) {
+    try {
+      const settings = await getBusinessSettings();
+      settingsSnapshot = { ...settings, logoUrl: undefined };
+    } catch (err) {
+      logger.warn('Backup settings snapshot skipped (schema may be mid-upgrade)', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      settingsSnapshot = { note: 'settings snapshot unavailable' };
+    }
   }
 
   const manifest: BackupManifest = {
@@ -266,7 +270,11 @@ export async function runPreMigrationBackup(): Promise<BackupEntry | null> {
     return null;
   }
 
-  return createBackup({ label: 'Pre-migration safety backup', automatic: false });
+  return createBackup({
+    label: 'Pre-migration safety backup',
+    automatic: false,
+    skipSettingsSnapshot: true,
+  });
 }
 
 /**

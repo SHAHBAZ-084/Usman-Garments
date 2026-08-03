@@ -40,9 +40,18 @@ export async function runSafeMigrations(): Promise<{
   let backup: BackupEntry | null = null;
 
   if (dbExists) {
-    // Throws if backup fails while tables exist — do not migrate without a snapshot.
-    // Returns null when the DB file exists but has no tables yet (first install).
-    backup = await runPreMigrationBackup();
+    try {
+      // Throws if backup fails while tables exist — do not migrate without a snapshot.
+      // Returns null when the DB file exists but has no tables yet (first install).
+      backup = await runPreMigrationBackup();
+    } catch (err) {
+      // Last resort: still attempt migrate rather than leave the shop stuck on a
+      // schema the new binary cannot read (e.g. client ahead of DB). Log loudly.
+      logger.error('Pre-migration backup failed — continuing with migrate anyway', {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      backup = null;
+    }
   }
 
   const beforeHash = dbExists && fs.existsSync(dbPath) ? sha256File(dbPath) : null;

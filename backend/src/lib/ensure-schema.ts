@@ -35,6 +35,8 @@ export async function ensureRequiredSchemaColumns(): Promise<void> {
     'secondaryColor',
     `"secondaryColor" TEXT NOT NULL DEFAULT '#C99618'`,
   );
+  // Safety net for upgrades where migrate has not yet added releaseMarker.
+  await addColumnIfMissing('BusinessSettings', 'releaseMarker', `"releaseMarker" TEXT`);
   await addColumnIfMissing('Product', 'needsVariants', `"needsVariants" BOOLEAN NOT NULL DEFAULT 0`);
   await addColumnIfMissing('Invoice', 'amountReceived', `"amountReceived" DECIMAL NOT NULL DEFAULT 0`);
   await addColumnIfMissing('User', 'role', `"role" TEXT DEFAULT 'Owner'`);
