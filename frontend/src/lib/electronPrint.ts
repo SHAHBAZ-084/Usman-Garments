@@ -43,35 +43,51 @@ export function isElectronPrintAvailable(): boolean {
   return typeof window !== 'undefined' && typeof window.usmanGarments?.printHtml === 'function';
 }
 
-/**
- * Resolve relative logo URLs (/uploads/…) to an absolute URL the print window can load,
- * then convert to a data URL so packaged builds still show the logo.
- */
 export async function resolveLogoDataUrl(logoUrl: string | null | undefined): Promise<string | null> {
   if (!logoUrl?.trim()) return null;
   const raw = logoUrl.trim();
-  try {
-    const absolute =
-      raw.startsWith('data:') || raw.startsWith('blob:') || /^https?:\/\//i.test(raw)
-        ? raw
-        : new URL(raw, window.location.origin).href;
-    if (absolute.startsWith('data:')) return absolute;
-    const response = await fetch(absolute, { credentials: 'include' });
-    if (!response.ok) {
-      clientLog('logo-fetch-failed', { status: response.status });
-      return absolute;
+  if (raw.startsWith('data:')) return raw;
+
+  const candidates: string[] = [];
+  if (raw.startsWith('blob:') || /^https?:\/\//i.test(raw)) {
+    candidates.push(raw);
+  } else {
+    const rel = raw.startsWith('/') ? raw : `/${raw}`;
+    if (typeof window !== 'undefined' && window.location?.origin && !window.location.origin.startsWith('file:')) {
+      candidates.push(new URL(rel, window.location.origin).href);
     }
-    const blob = await response.blob();
-    return await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.onerror = () => reject(reader.error ?? new Error('logo read failed'));
-      reader.readAsDataURL(blob);
-    });
-  } catch (err) {
-    clientLog('logo-resolve-failed', { error: err instanceof Error ? err.message : String(err) });
-    return raw.startsWith('/') ? new URL(raw, window.location.origin).href : raw;
+    candidates.push(`http://127.0.0.1:3847${rel}`);
+    candidates.push(`http://localhost:3847${rel}`);
   }
+
+  // Deduplicate candidates while keeping order
+  const uniqueCandidates = Array.from(new Set(candidates));
+
+  for (const candidate of uniqueCandidates) {
+    try {
+      const response = await fetch(candidate);
+      if (!response.ok) {
+        clientLog('logo-fetch-failed', { candidate, status: response.status });
+        continue;
+      }
+      const blob = await response.blob();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error ?? new Error('logo read failed'));
+        reader.readAsDataURL(blob);
+      });
+      clientLog('logo-resolve-success', { candidate, length: dataUrl.length });
+      return dataUrl;
+    } catch (err) {
+      clientLog('logo-fetch-error', { candidate, error: err instanceof Error ? err.message : String(err) });
+    }
+  }
+
+  clientLog('logo-resolve-all-failed', { raw, candidates: uniqueCandidates });
+  if (raw.startsWith('http://') || raw.startsWith('https://')) return raw;
+  const fallbackRel = raw.startsWith('/') ? raw : `/${raw}`;
+  return `http://127.0.0.1:3847${fallbackRel}`;
 }
 
 /**

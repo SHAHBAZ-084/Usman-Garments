@@ -1,5 +1,8 @@
+import fs from 'fs';
+import path from 'path';
 import bcrypt from 'bcryptjs';
 import { FinancialYearStatus } from '@prisma/client';
+import { getUploadsDir } from '../config/paths';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
 import {
@@ -7,7 +10,7 @@ import {
   fiscalYearLabelForDate,
 } from '../modules/accounting/accounting.service';
 import { ensureDeveloperPassphraseHash } from '../modules/settings/identity-access.service';
-import { ensureBusinessSettings } from '../modules/settings/settings.service';
+import { BUSINESS_SETTINGS_ID, ensureBusinessSettings } from '../modules/settings/settings.service';
 
 /**
  * Packaged installs run migrations but never `prisma/seed.ts`, so the User
@@ -60,8 +63,41 @@ export async function ensureFirstRunDefaults(): Promise<void> {
   try {
     await ensureBusinessSettings();
     await ensureDeveloperPassphraseHash();
+
+    const settings = await prisma.businessSettings.findUnique({ where: { id: BUSINESS_SETTINGS_ID } });
+    if (settings) {
+      const uploadsDir = getUploadsDir();
+      const currentLogoPath = settings.logoPath ? path.join(uploadsDir, path.basename(settings.logoPath)) : null;
+      const logoExists = currentLogoPath ? fs.existsSync(currentLogoPath) : false;
+
+      if (!logoExists) {
+        const candidates = [
+          path.resolve(__dirname, '../../frontend/dist/logo.png'),
+          path.resolve(__dirname, '../../frontend/public/logo.png'),
+          path.resolve(__dirname, '../../../frontend/public/logo.png'),
+          path.resolve(__dirname, '../../../frontend/dist/logo.png'),
+          path.resolve(process.cwd(), 'frontend/dist/logo.png'),
+          path.resolve(process.cwd(), 'frontend/public/logo.png'),
+          path.resolve(process.cwd(), 'resources/app/frontend/dist/logo.png'),
+          path.resolve(process.cwd(), 'resources/app.asar/frontend/dist/logo.png'),
+        ];
+        const source = candidates.find((c) => fs.existsSync(c));
+        if (source) {
+          const filename = 'logo-default.png';
+          const dest = path.join(uploadsDir, filename);
+          fs.copyFileSync(source, dest);
+          await prisma.businessSettings.update({
+            where: { id: BUSINESS_SETTINGS_ID },
+            data: { logoPath: path.join('uploads', filename) },
+          });
+          logger.info('Ensured default shop logo file in user data uploads.', { source, dest });
+        } else {
+          logger.warn('Default shop logo source not found in candidates.', { candidates });
+        }
+      }
+    }
   } catch (err) {
-    logger.warn('Business settings ensure skipped', {
+    logger.warn('Business settings / default logo ensure skipped', {
       error: err instanceof Error ? err.message : String(err),
     });
   }

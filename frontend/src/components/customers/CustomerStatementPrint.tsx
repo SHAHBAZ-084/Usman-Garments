@@ -1,5 +1,6 @@
 import { formatDate, formatMoney } from '../../lib/format';
 import type { BusinessSettings, CustomerStatement } from '../../lib/api';
+import { resolveLogoDataUrl } from '../../lib/electronPrint';
 
 function escapeHtml(text: string): string {
   return text
@@ -9,9 +10,14 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+export type BuildCustomerStatementHtmlOptions = {
+  logoSrc?: string | null;
+};
+
 export function buildCustomerStatementHtml(
   statement: CustomerStatement,
   settings: BusinessSettings,
+  options: BuildCustomerStatementHtmlOptions = {},
 ): string {
   const { customer, lines, closingBalance } = statement;
 
@@ -27,8 +33,9 @@ export function buildCustomerStatementHtml(
     )
     .join('');
 
-  const logo = settings.logoUrl
-    ? `<img src="${escapeHtml(settings.logoUrl)}" alt="" class="logo" />`
+  const logoSrc = options.logoSrc ?? settings.logoUrl;
+  const logo = logoSrc
+    ? `<img src="${escapeHtml(logoSrc)}" alt="" class="logo" />`
     : '';
 
   return `<!DOCTYPE html><html><head><title>Statement — ${escapeHtml(customer.name)}</title>
@@ -78,8 +85,9 @@ export function buildCustomerStatementHtml(
 </body></html>`;
 }
 
-export function printCustomerStatement(statement: CustomerStatement, settings: BusinessSettings) {
-  const html = buildCustomerStatementHtml(statement, settings);
+export async function printCustomerStatement(statement: CustomerStatement, settings: BusinessSettings) {
+  const logoSrc = await resolveLogoDataUrl(settings.logoUrl);
+  const html = buildCustomerStatementHtml(statement, settings, { logoSrc });
   const win = window.open('', '_blank', 'width=800,height=900');
   if (!win) return;
   win.document.write(html);

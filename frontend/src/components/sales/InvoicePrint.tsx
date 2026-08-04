@@ -102,6 +102,7 @@ export function buildInvoicePrintHtml(
     .join('');
 
   const logoSrc = options.logoSrc ?? settings.logoUrl;
+  console.info('[print-client] building invoice HTML logo check', { logoUrl: settings.logoUrl, logoSrc: logoSrc ? `${logoSrc.slice(0, 30)}...` : null });
   const logo = logoSrc
     ? `<img src="${escapeHtml(logoSrc)}" alt="" class="logo" />`
     : '';
