@@ -1,6 +1,8 @@
 import { formatDate, formatMoney } from '../../lib/format';
 import { formatDeveloperCreditForPrint } from '../../config/printCredit';
 import type { BusinessSettings, ExchangeResult, SaleReturn } from '../../lib/api';
+import { resolveLogoDataUrl } from '../../lib/electronPrint';
+import { RECEIPT_PAGE_WIDTH_MM, RECEIPT_CONTENT_WIDTH_MM } from './InvoicePrint';
 
 function escapeHtml(text: string): string {
   return text
@@ -16,10 +18,15 @@ function conditionLabel(c: string) {
   return 'Other';
 }
 
+export type BuildReturnReceiptHtmlOptions = {
+  logoSrc?: string | null;
+};
+
 export function buildReturnReceiptHtml(
   data: SaleReturn | ExchangeResult,
   settings: BusinessSettings,
   kind: 'return' | 'exchange',
+  options: BuildReturnReceiptHtmlOptions = {},
 ): string {
   const isExchange = kind === 'exchange';
   const exchange = isExchange ? (data as ExchangeResult) : null;
@@ -63,11 +70,23 @@ export function buildReturnReceiptHtml(
        <p class="row total"><span>Net ${exchange!.netAmount >= 0 ? 'due' : 'refund'}</span><span>Rs ${formatMoney(Math.abs(exchange!.netAmount))}</span></p>`
     : `<p class="row total"><span>Refund</span><span>Rs ${formatMoney(saleReturn!.refundAmount)}</span></p>`;
 
+  const logoSrc = options.logoSrc ?? settings.logoUrl;
+  const logo = logoSrc ? `<img src="${escapeHtml(logoSrc)}" alt="" class="logo" />` : '';
+
   return `<!DOCTYPE html><html><head><title>${title}</title>
 <style>
   * { box-sizing: border-box; }
-  @page { size: 80mm auto; margin: 2mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0 auto; width: 76mm; max-width: 76mm; overflow-x: hidden; }
+  @page { size: ${RECEIPT_PAGE_WIDTH_MM}mm auto; margin: 2mm; }
+  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0 auto; width: ${RECEIPT_CONTENT_WIDTH_MM}mm; max-width: ${RECEIPT_CONTENT_WIDTH_MM}mm; overflow-x: hidden; font-weight: 700; }
+  .logo {
+    display: block;
+    max-height: 42px;
+    max-width: 55%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    margin: 0 auto 5px;
+  }
   h1 { font-size: 14px; text-align: center; margin: 0 0 4px; word-wrap: break-word; }
   .meta { text-align: center; font-size: 10px; color: #444; margin: 2px 0; word-wrap: break-word; }
   table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10px; table-layout: fixed; }
@@ -78,6 +97,7 @@ export function buildReturnReceiptHtml(
   .footer { text-align: center; font-size: 9px; color: #555; margin-top: 10px; word-wrap: break-word; }
   .credit { text-align: center; font-size: 9px; font-weight: 600; color: #333; margin-top: 8px; }
 </style></head><body>
+  ${logo}
   <h1>${escapeHtml(settings.businessName)}</h1>
   <p class="meta">${title}</p>
   <p class="meta">Invoice: ${escapeHtml(invoiceNumber)} · ${formatDate(data.date)}</p>
@@ -91,12 +111,14 @@ export function buildReturnReceiptHtml(
 </body></html>`;
 }
 
-export function printReturnReceipt(
+export async function printReturnReceipt(
   data: SaleReturn | ExchangeResult,
   settings: BusinessSettings,
   kind: 'return' | 'exchange',
+  options: BuildReturnReceiptHtmlOptions = {},
 ) {
-  const html = buildReturnReceiptHtml(data, settings, kind);
+  const logoSrc = await resolveLogoDataUrl(options.logoSrc ?? settings.logoUrl);
+  const html = buildReturnReceiptHtml(data, settings, kind, { ...options, logoSrc });
   const win = window.open('', '_blank', 'width=480,height=720');
   if (!win) return;
   win.document.write(html);
