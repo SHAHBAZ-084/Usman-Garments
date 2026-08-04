@@ -1,7 +1,10 @@
 import { Outlet } from 'react-router-dom';
 import { Sidebar } from './Sidebar';
+import { useGlobalBarcodeScanner } from '../../hooks/useGlobalBarcodeScanner';
 
 export function AppShell() {
+  useGlobalBarcodeScanner();
+
   return (
     <div className="flex min-h-screen bg-surface3">
       <Sidebar />

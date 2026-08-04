@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { printReturnReceipt } from '../../components/sales/ReturnReceiptPrint';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import { BarcodeScanField } from '../products/BarcodeScanPage';
@@ -94,10 +94,52 @@ export function ReturnExchangePage() {
   const returnFormRef = useRef<HTMLFormElement>(null);
   const lastPrintRef = useRef<{ data: Parameters<typeof printReturnReceipt>[0]; kind: 'return' | 'exchange' } | null>(null);
 
+  const location = useLocation();
+  const initialInvoiceHandledRef = useRef<string | null>(null);
+
   useEffect(() => {
     api.getSettings().then(setSettings).catch(() => setSettings(null));
     api.listProducts({ pageSize: 200, activeOnly: true }).then((r) => setProducts(r.items)).catch(() => setProducts([]));
   }, []);
+
+  useEffect(() => {
+    const passedInvoice = (location.state as { invoiceNumber?: string } | null)?.invoiceNumber;
+    if (passedInvoice && initialInvoiceHandledRef.current !== passedInvoice) {
+      initialInvoiceHandledRef.current = passedInvoice;
+      const raw = passedInvoice.replace(/[\u0000-\u001F\u007F]/g, '').replace(/\s+/g, '').trim();
+      if (raw) {
+        setInvoiceQuery(raw);
+        setLoading(true);
+        setError('');
+        api
+          .lookupInvoiceForReturn(raw)
+          .then((found) => {
+            setInvoice(found);
+            setInvoiceQuery(found.invoiceNumber);
+            setReturnDrafts(
+              found.items
+                .filter((i) => i.returnableQty > 0)
+                .map((i) => ({
+                  invoiceItemId: i.id,
+                  quantity: '0',
+                  condition: 'GOOD' as ReturnCondition,
+                  maxQty: i.returnableQty,
+                  label: `${i.product.name}${i.variant ? ` (${[i.variant.size, i.variant.colour].filter(Boolean).join(' / ')})` : ''} — sold ${i.quantity}, returnable ${i.returnableQty}`,
+                })),
+            );
+          })
+          .catch((err) => {
+            setInvoice(null);
+            setReturnDrafts([]);
+            setError(err instanceof Error ? err.message : 'Invoice not found');
+          })
+          .finally(() => {
+            setLoading(false);
+          });
+      }
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   async function onLookup(e?: FormEvent) {
     e?.preventDefault();

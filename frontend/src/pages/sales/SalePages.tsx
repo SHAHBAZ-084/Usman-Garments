@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { printInvoice, buildTestInvoice } from '../../components/sales/InvoicePrint';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import {
@@ -127,6 +127,9 @@ export function NewSalePage() {
   const scanLockRef = useRef<{ key: string; at: number } | null>(null);
   const barcodeFocusRef = useRef<(() => void) | null>(null);
 
+  const location = useLocation();
+  const initialScanHandledRef = useRef<string | null>(null);
+
   useEffect(() => {
     Promise.all([api.getSettings(), api.listCustomers()])
       .then(([s, c]) => {
@@ -135,6 +138,20 @@ export function NewSalePage() {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    const scanBarcode = (location.state as { scanBarcode?: string } | null)?.scanBarcode;
+    if (scanBarcode && initialScanHandledRef.current !== scanBarcode) {
+      initialScanHandledRef.current = scanBarcode;
+      api
+        .getProductByBarcode(scanBarcode)
+        .then((match) => onBarcodeMatch(match))
+        .catch((err) => {
+          setError(err instanceof Error ? err.message : 'Scanned product not found');
+        });
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
 
   const subtotal = useMemo(() => cart.reduce((sum, line) => sum + lineTotal(line), 0), [cart]);
   const discount = Number(overallDiscount) || 0;
