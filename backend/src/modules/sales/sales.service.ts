@@ -543,5 +543,59 @@ export async function cancelSale(id: number, userId: number) {
   return getInvoice(id);
 }
 
+export async function deleteSale(id: number, userId: number) {
+  const existing = await prisma.invoice.findUnique({
+    where: { id },
+    include: {
+      items: true,
+      customer: { select: { id: true, accountId: true } },
+      saleReturns: { select: { id: true } },
+      exchanges: { select: { id: true } },
+    },
+  });
+  if (!existing) throw new AppError(404, 'Invoice not found');
+
+  if (existing.saleReturns.length > 0 || existing.exchanges.length > 0) {
+    throw new AppError(
+      400,
+      'Cannot delete a sale that has associated return or exchange records.',
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const sourceRef = String(existing.id);
+
+    if (existing.status !== InvoiceStatus.CANCELLED) {
+      for (const item of existing.items) {
+        const target =
+          item.variantId != null
+            ? { productId: item.productId, variantId: item.variantId }
+            : { productId: item.productId };
+
+        await adjustStockInTx(tx, target, item.quantity, StockMovementType.CANCELLATION, {
+          note: `Delete sale ${existing.invoiceNumber}`,
+          sourceType: 'SALE_DELETE',
+          sourceRef,
+        });
+      }
+
+      await cancelActiveVouchersBySourceInTx(tx, 'SALE', sourceRef, userId);
+
+      if (Number(existing.remainingAmount) > 0 && existing.customerId) {
+        await tx.customer.update({
+          where: { id: existing.customerId },
+          data: { currentBalance: { decrement: Number(existing.remainingAmount) } },
+        });
+      }
+    }
+
+    await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
+    await tx.invoice.delete({ where: { id } });
+  });
+
+  return { ok: true, deletedInvoiceNumber: existing.invoiceNumber };
+}
+
 /** @internal exported for tests */
 export { resolveSaleLines, allocateInvoiceNumber };
+

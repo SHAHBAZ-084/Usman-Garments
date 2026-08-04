@@ -818,31 +818,44 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           notes: notes.trim() || null,
         });
 
-        for (const v of variants) {
-          const data = {
-            size: v.size?.trim() || null,
-            colour: v.colour?.trim() || null,
-            salePrice: v.salePrice != null ? Number(v.salePrice) : null,
-            purchasePrice: v.purchasePrice != null ? Number(v.purchasePrice) : null,
-          };
-          if (v.existingId) {
-            await api.updateProductVariant(productId, v.existingId, data);
-            const nextStock = Math.max(0, Number(v.currentStock) || 0);
-            const prevStock = Math.max(0, Number(v.originalStock) || 0);
-            const delta = nextStock - prevStock;
-            if (delta !== 0) {
-              await api.adjustProductStock(productId, {
-                variantId: v.existingId,
-                quantity: Math.abs(delta),
-                direction: delta > 0 ? 'add' : 'reduce',
-                note: 'Stock updated on product edit',
+        if (variants.length === 0) {
+          const nextStock = Math.max(0, Number(totalStock) || 0);
+          const prevStock = Math.max(0, Number(product?.currentStock) || 0);
+          const delta = nextStock - prevStock;
+          if (delta !== 0) {
+            await api.adjustProductStock(productId, {
+              quantity: Math.abs(delta),
+              direction: delta > 0 ? 'add' : 'reduce',
+              note: 'Stock updated on product edit',
+            });
+          }
+        } else {
+          for (const v of variants) {
+            const data = {
+              size: v.size?.trim() || null,
+              colour: v.colour?.trim() || null,
+              salePrice: v.salePrice != null ? Number(v.salePrice) : null,
+              purchasePrice: v.purchasePrice != null ? Number(v.purchasePrice) : null,
+            };
+            if (v.existingId) {
+              await api.updateProductVariant(productId, v.existingId, data);
+              const nextStock = Math.max(0, Number(v.currentStock) || 0);
+              const prevStock = Math.max(0, Number(v.originalStock) || 0);
+              const delta = nextStock - prevStock;
+              if (delta !== 0) {
+                await api.adjustProductStock(productId, {
+                  variantId: v.existingId,
+                  quantity: Math.abs(delta),
+                  direction: delta > 0 ? 'add' : 'reduce',
+                  note: 'Stock updated on product edit',
+                });
+              }
+            } else if (v.size?.trim() || v.colour?.trim()) {
+              await api.createProductVariant(productId, {
+                ...data,
+                openingStock: Number(v.currentStock) || 0,
               });
             }
-          } else if (v.size?.trim() || v.colour?.trim()) {
-            await api.createProductVariant(productId, {
-              ...data,
-              openingStock: Number(v.currentStock) || 0,
-            });
           }
         }
 

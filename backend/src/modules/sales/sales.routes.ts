@@ -152,3 +152,14 @@ salesRouter.post(
     res.json(invoice);
   }),
 );
+
+salesRouter.delete(
+  '/:id',
+  asyncHandler(async (req, res) => {
+    const userId = req.session.userId;
+    if (!userId) throw new AppError(401, 'Not authenticated');
+    const result = await salesService.deleteSale(parseInt(param(req.params.id), 10), userId);
+    res.json(result);
+  }),
+);
+

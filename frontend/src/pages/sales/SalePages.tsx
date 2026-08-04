@@ -804,6 +804,7 @@ export function InvoicesListPage() {
                 <th className="px-2 py-2 text-right">Total</th>
                 <th className="px-2 py-2 text-right">Paid</th>
                 <th className="px-2 py-2">Status</th>
+                <th className="px-2 py-2 text-right">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -819,11 +820,41 @@ export function InvoicesListPage() {
                   <td className="px-2 py-2 text-right">{formatMoney(inv.totalAmount)}</td>
                   <td className="px-2 py-2 text-right">{formatMoney(inv.paidAmount)}</td>
                   <td className="px-2 py-2">{inv.status === 'ACTIVE' ? 'Active' : 'Cancelled'}</td>
+                  <td className="px-2 py-2 text-right">
+                    <button
+                      type="button"
+                      className="text-xs font-semibold text-danger hover:underline"
+                      onClick={async () => {
+                        if (
+                          window.confirm(
+                            `Permanently delete invoice ${inv.invoiceNumber}? This cannot be undone, and will restock all items if active.`,
+                          )
+                        ) {
+                          try {
+                            await api.deleteSale(inv.id);
+                            setResult((prev) =>
+                              prev
+                                ? {
+                                    ...prev,
+                                    items: prev.items.filter((i) => i.id !== inv.id),
+                                    total: Math.max(0, prev.total - 1),
+                                  }
+                                : null,
+                            );
+                          } catch (err) {
+                            alert(err instanceof Error ? err.message : 'Delete failed');
+                          }
+                        }
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </td>
                 </tr>
               ))}
               {!loading && result?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-2 py-8 text-center text-textSecondary">
+                  <td colSpan={7} className="px-2 py-8 text-center text-textSecondary">
                     No invoices yet.
                   </td>
                 </tr>
@@ -853,6 +884,7 @@ export function InvoicesListPage() {
 
 export function InvoiceDetailPage() {
   const params = useParams();
+  const navigate = useNavigate();
   const id = Number(params.id);
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [settings, setSettings] = useState<BusinessSettings | null>(null);
@@ -902,6 +934,26 @@ export function InvoiceDetailPage() {
     }
   }
 
+  async function onDelete() {
+    if (
+      !invoice ||
+      !window.confirm(
+        `Permanently delete sale ${invoice.invoiceNumber}? This cannot be undone, and will restock all items if active.`,
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      await api.deleteSale(invoice.id);
+      navigate('/sales/list');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+      setBusy(false);
+    }
+  }
+
   useFormShortcuts({
     onPrint: invoice && settings ? () => void runPrint(invoice) : undefined,
     printEnabled: Boolean(invoice && settings) && !printing,
@@ -947,6 +999,9 @@ export function InvoiceDetailPage() {
               Cancel sale
             </DangerButton>
           ) : null}
+          <DangerButton type="button" onClick={() => void onDelete()} disabled={busy}>
+            Delete sale
+          </DangerButton>
         </div>
       }
     >

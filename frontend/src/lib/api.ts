@@ -598,6 +598,9 @@ export const api = {
   cancelSale(id: number) {
     return request<Invoice>(`/api/sales/${id}/cancel`, { method: 'POST' });
   },
+  deleteSale(id: number) {
+    return request<{ ok: boolean; deletedInvoiceNumber: string }>(`/api/sales/${id}`, { method: 'DELETE' });
+  },
 
   lookupInvoiceForReturn(invoiceNumber: string) {
     return request<InvoiceForReturn>(`/api/sales/invoice-lookup/${encodeURIComponent(invoiceNumber)}`);
