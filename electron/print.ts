@@ -185,10 +185,18 @@ export function printHtmlInHiddenWindow(request: ElectronPrintRequest): Promise<
               const imgs = Array.from(document.images || []);
               if (!imgs.length) { resolve(true); return; }
               Promise.all(imgs.map((img) => {
-                if (img.complete) return Promise.resolve();
-                return new Promise((r) => {
-                  img.onload = () => r(null);
-                  img.onerror = () => r(null);
+                const load = new Promise((r) => {
+                  if (img.complete) r(null);
+                  else {
+                    img.onload = () => r(null);
+                    img.onerror = () => r(null);
+                  }
+                });
+                return load.then(() => {
+                  if (typeof img.decode === 'function') {
+                    return img.decode().catch(() => null);
+                  }
+                  return null;
                 });
               })).then(() => resolve(true));
             };
@@ -199,7 +207,7 @@ export function printHtmlInHiddenWindow(request: ElectronPrintRequest): Promise<
             }
           })`,
         )
-        .then(() => setTimeout(runPrint, 150))
+        .then(() => setTimeout(runPrint, 250))
         .catch((err: unknown) => {
           finish({
             ok: false,

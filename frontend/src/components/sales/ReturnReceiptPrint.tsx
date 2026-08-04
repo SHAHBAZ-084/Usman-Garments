@@ -77,34 +77,35 @@ export function buildReturnReceiptHtml(
 <style>
   * { box-sizing: border-box; }
   @page { size: ${RECEIPT_PAGE_WIDTH_MM}mm auto; margin: 0; }
-  body { font-family: Arial, sans-serif; font-size: 10px; color: #111; margin: 0 auto; width: ${RECEIPT_CONTENT_WIDTH_MM}mm; max-width: ${RECEIPT_CONTENT_WIDTH_MM}mm; overflow-x: hidden; font-weight: 700; padding: 1.5mm 0 2mm; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #000; margin: 0 auto; width: ${RECEIPT_CONTENT_WIDTH_MM}mm; max-width: ${RECEIPT_CONTENT_WIDTH_MM}mm; overflow-x: hidden; font-weight: 700; padding: 1.5mm 0 2mm; }
   .logo {
     display: block;
-    max-height: 42px;
-    max-width: 55%;
+    max-height: 75px;
+    max-width: 80%;
     width: auto;
     height: auto;
     object-fit: contain;
-    margin: 0 auto 5px;
+    margin: 0 auto 6px;
+    background: #ffffff;
   }
-  h1 { font-size: 14px; font-weight: 800; text-align: center; margin: 0 0 4px; word-wrap: break-word; }
-  .meta { text-align: center; font-size: 10px; font-weight: 700; color: #111; margin: 2px 0; word-wrap: break-word; }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 9.5px; font-weight: 700; table-layout: fixed; }
-  th { font-weight: 800; border-bottom: 1.5px solid #111; padding: 3px 1px 4px; }
-  td { padding: 4px 1px; border-bottom: 1px dotted #888; word-wrap: break-word; overflow-wrap: anywhere; font-weight: 700; }
+  h1 { font-size: 18px; font-weight: 800; text-align: center; margin: 0 0 4px; word-wrap: break-word; color: #000; }
+  .meta { text-align: center; font-size: 11px; font-weight: 700; color: #000; margin: 2px 0; word-wrap: break-word; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 12px; font-weight: 700; table-layout: fixed; }
+  th { font-size: 12px; font-weight: 800; border-bottom: 2px solid #000; padding: 4px 1px 5px; color: #000; }
+  td { padding: 4px 1px; border-bottom: 1px dotted #000; word-wrap: break-word; overflow-wrap: anywhere; font-size: 12px; font-weight: 700; color: #000; }
   .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 700; }
-  .total { font-weight: 800; font-size: 11.5px; }
-  .footer { text-align: center; font-size: 9.5px; font-weight: 700; color: #111; margin-top: 10px; word-wrap: break-word; }
-  .credit { text-align: center; font-size: 8px; font-weight: 700; color: #111; margin-top: 8px; }
+  .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-size: 12.5px; font-weight: 700; color: #000; }
+  .total { font-weight: 800; font-size: 15px; }
+  .footer { text-align: center; font-size: 11.5px; font-weight: 700; color: #000; margin-top: 10px; word-wrap: break-word; }
+  .credit { text-align: center; font-size: 10px; font-weight: 700; color: #000; margin-top: 8px; }
 </style></head><body>
   ${logo}
   <h1>${escapeHtml(settings.businessName)}</h1>
   <p class="meta">${title}</p>
   <p class="meta">Invoice: ${escapeHtml(invoiceNumber)} · ${formatDate(data.date)}</p>
-  <h2 style="font-size:12px;margin:8px 0 4px;">Returned items</h2>
+  <h2 style="font-size:14px;font-weight:800;margin:8px 0 4px;color:#000;">Returned items</h2>
   <table><thead><tr><th>Item</th><th>Qty</th><th>Cond.</th><th>Total</th></tr></thead><tbody>${returnRows}</tbody></table>
-  ${newRows ? `<h2 style="font-size:12px;margin:8px 0 4px;">New items</h2><table><thead><tr><th>Item</th><th>Qty</th><th></th><th>Total</th></tr></thead><tbody>${newRows}</tbody></table>` : ''}
+  ${newRows ? `<h2 style="font-size:14px;font-weight:800;margin:8px 0 4px;color:#000;">New items</h2><table><thead><tr><th>Item</th><th>Qty</th><th></th><th>Total</th></tr></thead><tbody>${newRows}</tbody></table>` : ''}
   ${summary}
   <p class="footer">${escapeHtml(settings.invoiceFooter)}</p>
   <p class="credit">${escapeHtml(formatDeveloperCreditForPrint(settings.developerCreditLine))}</p>

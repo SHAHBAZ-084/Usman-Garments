@@ -230,7 +230,9 @@ export function buildInvoicePrintHtml(
   img, svg, table, td, th, div, p, span { max-width: 100%; }
   body {
     font-family: Arial, Helvetica, sans-serif;
-    color: #111;
+    font-size: 13px;
+    font-weight: 700;
+    color: #000;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
@@ -238,71 +240,76 @@ export function buildInvoicePrintHtml(
   .header { text-align: center; padding: 0 0 2px; }
   .logo {
     display: block;
-    max-height: 42px;
-    max-width: 55%;
+    max-height: 75px;
+    max-width: 80%;
     width: auto;
     height: auto;
     object-fit: contain;
-    margin: 0 auto 5px;
+    margin: 0 auto 6px;
+    background: #ffffff;
   }
-  .shop-name { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.2; word-wrap: break-word; }
-  .tagline { font-size: 9px; color: #111; font-weight: 700; margin: 2px 0 4px; }
-  .address { font-size: 9px; color: #111; font-weight: 700; line-height: 1.35; word-wrap: break-word; }
+  .shop-name { font-size: 18px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.2; word-wrap: break-word; color: #000; }
+  .tagline { font-size: 11px; color: #000; font-weight: 700; margin: 2px 0 4px; }
+  .address { font-size: 11px; color: #000; font-weight: 700; line-height: 1.35; word-wrap: break-word; }
   .contacts { margin-top: 3px; }
-  .contact { font-size: 9px; color: #111; margin: 1px 0; font-weight: 700; }
-  .rule { border: none; border-top: 1px dashed #444; margin: 6px 0; height: 0; }
+  .contact { font-size: 11px; color: #000; margin: 1px 0; font-weight: 700; }
+  .rule { border: none; border-top: 1.5px dashed #000; margin: 6px 0; height: 0; }
   .meta { display: block; width: 100%; }
   .meta-block {
     display: block;
     width: 100%;
     padding: 4px 3px;
     margin: 0 0 4px;
-    border: 1px solid #aaa;
+    border: 1px solid #000;
     border-radius: 3px;
-    background: #fafafa;
+    background: #fff;
   }
   .meta-label {
     display: block;
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #111;
+    color: #000;
     margin: 0 0 2px;
   }
   .meta-value {
     display: block;
-    font-size: 11px;
+    font-size: 12.5px;
     font-weight: 700;
-    color: #111;
+    color: #000;
     line-height: 1.3;
     word-break: break-word;
     overflow-wrap: anywhere;
   }
-  .meta-value.strong { font-size: 12px; font-weight: 800; }
-  .muted { color: #111; font-size: 9px; font-weight: 700; }
+  .meta-value.strong { font-size: 15px; font-weight: 800; }
+  .muted { color: #000; font-size: 11px; font-weight: 700; }
   table.items {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 9.5px;
+    font-size: 12px;
     font-weight: 700;
   }
   col.c-item { width: 44%; }
-  col.c-qty { width: 12%; }
-  col.c-rate { width: 22%; }
-  col.c-total { width: 22%; }
+  col.c-qty { width: 11%; }
+  col.c-rate { width: 22.5%; }
+  col.c-total { width: 22.5%; }
   table.items th {
+    font-size: 12px;
     font-weight: 800;
-    border-bottom: 1.5px solid #111;
-    padding: 3px 1px 4px;
+    border-bottom: 2px solid #000;
+    padding: 4px 1px 5px;
     vertical-align: bottom;
+    color: #000;
   }
   table.items td {
     padding: 4px 1px;
     vertical-align: top;
-    border-bottom: 1px dotted #888;
+    border-bottom: 1px dotted #000;
+    font-size: 12px;
     font-weight: 700;
+    color: #000;
   }
   .col-item { text-align: left; word-wrap: break-word; overflow-wrap: anywhere; }
   .col-qty, .col-rate, .col-total {
@@ -311,9 +318,9 @@ export function buildInvoicePrintHtml(
     font-variant-numeric: tabular-nums;
     font-weight: 700;
   }
-  .item-name { font-weight: 700; line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; }
-  .variant { color: #111; font-size: 8px; margin-top: 1px; font-weight: 700; }
-  .line-disc { color: #111; font-size: 8px; margin-top: 1px; font-weight: 700; }
+  .item-name { font-weight: 700; font-size: 12px; line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; }
+  .variant { color: #000; font-size: 10px; margin-top: 1px; font-weight: 700; }
+  .line-disc { color: #000; font-size: 10px; margin-top: 1px; font-weight: 700; }
   .summary { padding: 2px 0; width: 100%; font-weight: 700; }
   .sum-row {
     display: flex;
@@ -321,8 +328,9 @@ export function buildInvoicePrintHtml(
     align-items: baseline;
     gap: 4px;
     margin: 3px 0;
-    font-size: 10px;
+    font-size: 12.5px;
     font-weight: 700;
+    color: #000;
     width: 100%;
   }
   .sum-row span:first-child { flex: 1 1 auto; min-width: 0; word-break: break-word; font-weight: 700; }
@@ -334,44 +342,44 @@ export function buildInvoicePrintHtml(
     font-weight: 700;
   }
   .sum-total {
-    font-size: 12px;
+    font-size: 15px;
     font-weight: 800;
-    border-top: 1.5px solid #111;
+    border-top: 2px solid #000;
     margin-top: 5px;
     padding-top: 5px;
   }
-  .sum-total span:last-child { font-weight: 800; }
-  .sum-change { font-weight: 800; }
-  .sum-due { font-weight: 800; color: #111; }
+  .sum-total span:last-child { font-weight: 800; font-size: 15px; }
+  .sum-change { font-weight: 800; font-size: 13px; }
+  .sum-due { font-weight: 800; font-size: 13px; color: #000; }
   .footer { text-align: center; padding: 2px; }
-  .footer-note { font-size: 10px; font-weight: 700; margin: 3px 0; word-wrap: break-word; }
-  .policy { font-size: 8px; color: #111; font-weight: 700; line-height: 1.35; margin: 3px 0 0; word-wrap: break-word; }
+  .footer-note { font-size: 12px; font-weight: 700; margin: 3px 0; word-wrap: break-word; color: #000; }
+  .policy { font-size: 10.5px; color: #000; font-weight: 700; line-height: 1.35; margin: 3px 0 0; word-wrap: break-word; }
   .invoice-barcode {
     text-align: center;
     margin-top: 8px;
     padding-top: 6px;
-    border-top: 1px dashed #444;
+    border-top: 1.5px dashed #000;
   }
   .barcode-caption {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #111;
+    color: #000;
     margin-bottom: 4px;
   }
   .barcode-wrap { display: flex; justify-content: center; width: 100%; overflow: hidden; }
   .barcode-wrap svg { max-width: 100%; height: auto; }
   .barcode-fallback {
     font-family: ui-monospace, monospace;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     padding: 4px;
   }
   .credit {
-    font-size: 8px;
+    font-size: 10px;
     font-weight: 700;
-    color: #111;
+    color: #000;
     margin-top: 8px;
     text-align: center;
     line-height: 1.3;
