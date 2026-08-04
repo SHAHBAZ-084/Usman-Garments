@@ -12,7 +12,7 @@ import {
 
 /** Physical invoice paper width (mm). Content is slightly narrower and centered. */
 export const RECEIPT_PAGE_WIDTH_MM = 78;
-export const RECEIPT_CONTENT_WIDTH_MM = 73;
+export const RECEIPT_CONTENT_WIDTH_MM = 62;
 
 function escapeHtml(text: string): string {
   return text
@@ -49,7 +49,7 @@ function invoiceBarcodeSvg(invoiceNumber: string): string {
       fontSize: 11,
       height: 36,
       margin: 0,
-      width: 1.35,
+      width: 1.15,
       textMargin: 2,
     });
   } catch {
@@ -246,114 +246,118 @@ export function buildInvoicePrintHtml(
     margin: 0 auto 5px;
   }
   .shop-name { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; line-height: 1.2; word-wrap: break-word; }
-  .tagline { font-size: 9px; color: #555; margin: 2px 0 4px; }
-  .address { font-size: 9px; color: #333; line-height: 1.35; word-wrap: break-word; }
+  .tagline { font-size: 9px; color: #111; font-weight: 700; margin: 2px 0 4px; }
+  .address { font-size: 9px; color: #111; font-weight: 700; line-height: 1.35; word-wrap: break-word; }
   .contacts { margin-top: 3px; }
-  .contact { font-size: 9px; color: #222; margin: 1px 0; font-weight: 600; }
-  .rule { border: none; border-top: 1px dashed #888; margin: 6px 0; height: 0; }
+  .contact { font-size: 9px; color: #111; margin: 1px 0; font-weight: 700; }
+  .rule { border: none; border-top: 1px dashed #444; margin: 6px 0; height: 0; }
   .meta { display: block; width: 100%; }
   .meta-block {
     display: block;
     width: 100%;
     padding: 4px 3px;
     margin: 0 0 4px;
-    border: 1px solid #ddd;
+    border: 1px solid #aaa;
     border-radius: 3px;
     background: #fafafa;
   }
   .meta-label {
     display: block;
     font-size: 8px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #666;
+    color: #111;
     margin: 0 0 2px;
   }
   .meta-value {
     display: block;
     font-size: 11px;
-    font-weight: 600;
+    font-weight: 700;
     color: #111;
     line-height: 1.3;
     word-break: break-word;
     overflow-wrap: anywhere;
   }
   .meta-value.strong { font-size: 12px; font-weight: 800; }
-  .muted { color: #555; font-size: 9px; font-weight: 500; }
+  .muted { color: #111; font-size: 9px; font-weight: 700; }
   table.items {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
     font-size: 9.5px;
-  }
-  col.c-item { width: 46%; }
-  col.c-qty { width: 12%; }
-  col.c-rate { width: 21%; }
-  col.c-total { width: 21%; }
-  table.items th {
     font-weight: 700;
-    border-bottom: 1.5px solid #222;
+  }
+  col.c-item { width: 44%; }
+  col.c-qty { width: 12%; }
+  col.c-rate { width: 22%; }
+  col.c-total { width: 22%; }
+  table.items th {
+    font-weight: 800;
+    border-bottom: 1.5px solid #111;
     padding: 3px 1px 4px;
     vertical-align: bottom;
   }
   table.items td {
     padding: 4px 1px;
     vertical-align: top;
-    border-bottom: 1px dotted #ccc;
+    border-bottom: 1px dotted #888;
+    font-weight: 700;
   }
   .col-item { text-align: left; word-wrap: break-word; overflow-wrap: anywhere; }
   .col-qty, .col-rate, .col-total {
     text-align: right;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
+    font-weight: 700;
   }
   .item-name { font-weight: 700; line-height: 1.25; word-break: break-word; overflow-wrap: anywhere; }
-  .variant { color: #555; font-size: 8px; margin-top: 1px; font-weight: 600; }
-  .line-disc { color: #666; font-size: 8px; margin-top: 1px; }
-  .summary { padding: 2px 0; width: 100%; }
+  .variant { color: #111; font-size: 8px; margin-top: 1px; font-weight: 700; }
+  .line-disc { color: #111; font-size: 8px; margin-top: 1px; font-weight: 700; }
+  .summary { padding: 2px 0; width: 100%; font-weight: 700; }
   .sum-row {
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 6px;
+    gap: 4px;
     margin: 3px 0;
     font-size: 10px;
+    font-weight: 700;
     width: 100%;
   }
-  .sum-row span:first-child { flex: 1 1 auto; min-width: 0; word-break: break-word; }
+  .sum-row span:first-child { flex: 1 1 auto; min-width: 0; word-break: break-word; font-weight: 700; }
   .sum-row span:last-child {
     flex: 0 0 auto;
     text-align: right;
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
-    font-weight: 600;
+    font-weight: 700;
   }
   .sum-total {
     font-size: 12px;
     font-weight: 800;
-    border-top: 1.5px solid #222;
+    border-top: 1.5px solid #111;
     margin-top: 5px;
     padding-top: 5px;
   }
   .sum-total span:last-child { font-weight: 800; }
-  .sum-change { font-weight: 700; }
-  .sum-due { font-weight: 700; color: #9a3412; }
+  .sum-change { font-weight: 800; }
+  .sum-due { font-weight: 800; color: #111; }
   .footer { text-align: center; padding: 2px; }
   .footer-note { font-size: 10px; font-weight: 700; margin: 3px 0; word-wrap: break-word; }
-  .policy { font-size: 8px; color: #555; line-height: 1.35; margin: 3px 0 0; word-wrap: break-word; }
+  .policy { font-size: 8px; color: #111; font-weight: 700; line-height: 1.35; margin: 3px 0 0; word-wrap: break-word; }
   .invoice-barcode {
     text-align: center;
     margin-top: 8px;
     padding-top: 6px;
-    border-top: 1px dashed #888;
+    border-top: 1px dashed #444;
   }
   .barcode-caption {
     font-size: 8px;
-    font-weight: 700;
+    font-weight: 800;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-    color: #666;
+    color: #111;
     margin-bottom: 4px;
   }
   .barcode-wrap { display: flex; justify-content: center; width: 100%; overflow: hidden; }
@@ -366,8 +370,8 @@ export function buildInvoicePrintHtml(
   }
   .credit {
     font-size: 8px;
-    font-weight: 600;
-    color: #333;
+    font-weight: 700;
+    color: #111;
     margin-top: 8px;
     text-align: center;
     line-height: 1.3;

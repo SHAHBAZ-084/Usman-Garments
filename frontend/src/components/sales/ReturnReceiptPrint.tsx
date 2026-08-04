@@ -76,8 +76,8 @@ export function buildReturnReceiptHtml(
   return `<!DOCTYPE html><html><head><title>${title}</title>
 <style>
   * { box-sizing: border-box; }
-  @page { size: ${RECEIPT_PAGE_WIDTH_MM}mm auto; margin: 2mm; }
-  body { font-family: Arial, sans-serif; font-size: 11px; color: #111; margin: 0 auto; width: ${RECEIPT_CONTENT_WIDTH_MM}mm; max-width: ${RECEIPT_CONTENT_WIDTH_MM}mm; overflow-x: hidden; font-weight: 700; }
+  @page { size: ${RECEIPT_PAGE_WIDTH_MM}mm auto; margin: 0; }
+  body { font-family: Arial, sans-serif; font-size: 10px; color: #111; margin: 0 auto; width: ${RECEIPT_CONTENT_WIDTH_MM}mm; max-width: ${RECEIPT_CONTENT_WIDTH_MM}mm; overflow-x: hidden; font-weight: 700; padding: 1.5mm 0 2mm; }
   .logo {
     display: block;
     max-height: 42px;
@@ -87,15 +87,16 @@ export function buildReturnReceiptHtml(
     object-fit: contain;
     margin: 0 auto 5px;
   }
-  h1 { font-size: 14px; text-align: center; margin: 0 0 4px; word-wrap: break-word; }
-  .meta { text-align: center; font-size: 10px; color: #444; margin: 2px 0; word-wrap: break-word; }
-  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 10px; table-layout: fixed; }
-  th, td { padding: 3px 1px; border-bottom: 1px dashed #ccc; word-wrap: break-word; overflow-wrap: anywhere; }
-  .num { text-align: right; white-space: nowrap; }
-  .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; }
-  .total { font-weight: 700; font-size: 12px; }
-  .footer { text-align: center; font-size: 9px; color: #555; margin-top: 10px; word-wrap: break-word; }
-  .credit { text-align: center; font-size: 9px; font-weight: 600; color: #333; margin-top: 8px; }
+  h1 { font-size: 14px; font-weight: 800; text-align: center; margin: 0 0 4px; word-wrap: break-word; }
+  .meta { text-align: center; font-size: 10px; font-weight: 700; color: #111; margin: 2px 0; word-wrap: break-word; }
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 9.5px; font-weight: 700; table-layout: fixed; }
+  th { font-weight: 800; border-bottom: 1.5px solid #111; padding: 3px 1px 4px; }
+  td { padding: 4px 1px; border-bottom: 1px dotted #888; word-wrap: break-word; overflow-wrap: anywhere; font-weight: 700; }
+  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .row { display: flex; justify-content: space-between; margin: 3px 0; gap: 4px; font-weight: 700; }
+  .total { font-weight: 800; font-size: 11.5px; }
+  .footer { text-align: center; font-size: 9.5px; font-weight: 700; color: #111; margin-top: 10px; word-wrap: break-word; }
+  .credit { text-align: center; font-size: 8px; font-weight: 700; color: #111; margin-top: 8px; }
 </style></head><body>
   ${logo}
   <h1>${escapeHtml(settings.businessName)}</h1>

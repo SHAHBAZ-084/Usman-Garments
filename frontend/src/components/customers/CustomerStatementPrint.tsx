@@ -41,17 +41,17 @@ export function buildCustomerStatementHtml(
   return `<!DOCTYPE html><html><head><title>Statement — ${escapeHtml(customer.name)}</title>
 <style>
   @page { size: A4; margin: 12mm; }
-  body { font-family: Arial, sans-serif; color: #111; margin: 0; }
+  body { font-family: Arial, sans-serif; color: #111; font-weight: 600; margin: 0; }
   .sheet { max-width: 180mm; margin: 0 auto; }
-  h1 { font-size: 16pt; margin: 0 0 4px; }
-  .meta { font-size: 10pt; color: #444; margin: 2px 0; }
+  h1 { font-size: 16pt; font-weight: 800; margin: 0 0 4px; }
+  .meta { font-size: 10pt; font-weight: 700; color: #111; margin: 2px 0; }
   .logo { max-height: 48px; margin-bottom: 8px; }
-  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 10pt; }
-  th, td { border-bottom: 1px solid #ddd; padding: 6px 4px; text-align: left; }
-  th { font-weight: 600; background: #f5f5f5; }
-  .num { text-align: right; white-space: nowrap; }
-  .closing { display: flex; justify-content: space-between; font-size: 12pt; font-weight: 700; margin-top: 12px; padding-top: 8px; border-top: 2px solid #333; }
-  .footer { font-size: 9pt; color: #555; margin-top: 24px; text-align: center; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 10pt; font-weight: 600; }
+  th, td { border-bottom: 1px solid #aaa; padding: 6px 4px; text-align: left; }
+  th { font-weight: 800; background: #f0f0f0; }
+  .num { text-align: right; white-space: nowrap; font-weight: 700; }
+  .closing { display: flex; justify-content: space-between; font-size: 12pt; font-weight: 800; margin-top: 12px; padding-top: 8px; border-top: 2px solid #111; }
+  .footer { font-size: 9.5pt; font-weight: 700; color: #111; margin-top: 24px; text-align: center; }
 </style></head><body>
 <div class="sheet">
   ${logo}
