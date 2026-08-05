@@ -142,7 +142,6 @@ export async function previewImportRows(rawRows: ImportRowInput[]): Promise<Impo
   }
 
   const existingProducts = await prisma.product.findMany({
-    where: { isActive: true },
     select: { id: true, name: true, variants: { select: { id: true } } },
   });
   const byName = new Map(existingProducts.map((p) => [p.name.trim().toLowerCase(), p]));
@@ -221,7 +220,7 @@ export async function commitImport(products: ImportPreviewProduct[]) {
         where: { id: p.mergeIntoProductId },
         include: { variants: { select: { id: true, currentStock: true } } },
       });
-      if (!existing || !existing.isActive) {
+      if (!existing) {
         throw new AppError(400, `Cannot merge into missing product: ${p.name}`);
       }
 

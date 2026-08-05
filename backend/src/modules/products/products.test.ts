@@ -6,7 +6,7 @@ import {
   adjustStock,
   createProduct,
   createProductVariant,
-  deactivateProduct,
+  deleteProduct,
   getProductByBarcode,
   isStockInType,
   isStockOutType,
@@ -127,24 +127,27 @@ describe('products inventory foundation', () => {
     ).rejects.toThrow(/Barcode is already in use/i);
   });
 
-  it('soft-deactivate does not hard-delete and hides from default list', async () => {
-    const product = await createProduct({
-      name: `${TEST_NAME_PREFIX}Deactivate Me`,
+  it('hard-deletes product with no history, and rejects delete when history exists', async () => {
+    const productNoHistory = await createProduct({
+      name: `${TEST_NAME_PREFIX}Clean Delete`,
+      salePrice: 80,
+    });
+
+    const delResult = await deleteProduct(productNoHistory.id);
+    expect(delResult.deleted).toBe(true);
+
+    const deletedRow = await prisma.product.findUnique({ where: { id: productNoHistory.id } });
+    expect(deletedRow).toBeNull();
+
+    const productWithHistory = await createProduct({
+      name: `${TEST_NAME_PREFIX}History Delete`,
       salePrice: 80,
       openingStock: 1,
     });
 
-    await adjustStock({ productId: product.id }, 1, StockMovementType.MANUAL_ADD, {
-      note: 'extra',
-    });
-
-    await deactivateProduct(product.id);
-
-    const row = await prisma.product.findUniqueOrThrow({ where: { id: product.id } });
-    expect(row.isActive).toBe(false);
-
-    const movementCount = await prisma.stockMovement.count({ where: { productId: product.id } });
-    expect(movementCount).toBeGreaterThan(0);
+    await expect(deleteProduct(productWithHistory.id)).rejects.toThrow(
+      /historical sales, purchases, returns, or stock movement/i,
+    );
   });
 
   it('creates a stock movement on every adjustment', async () => {

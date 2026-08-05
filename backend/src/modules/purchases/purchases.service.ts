@@ -177,8 +177,8 @@ export async function createPurchase(input: CreatePurchaseInput) {
         where: { id: item.productId },
         include: { variants: { select: { id: true } } },
       });
-      if (!product || !product.isActive) {
-        throw new AppError(400, `Product #${item.productId} not found or inactive`);
+      if (!product) {
+        throw new AppError(400, `Product #${item.productId} not found`);
       }
       if (product.variants.length > 0) {
         if (item.variantId == null) {

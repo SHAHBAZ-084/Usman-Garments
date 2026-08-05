@@ -193,8 +193,8 @@ productsRouter.patch(
 productsRouter.delete(
   '/:id',
   asyncHandler(async (req, res) => {
-    const product = await productsService.deactivateProduct(parseInt(param(req.params.id), 10));
-    res.json(product);
+    const result = await productsService.deleteProduct(parseInt(param(req.params.id), 10));
+    res.json(result);
   }),
 );
 

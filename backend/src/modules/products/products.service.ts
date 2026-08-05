@@ -170,7 +170,6 @@ export async function adjustStockInTx(
     include: { variants: { select: { id: true } } },
   });
   if (!product) throw new AppError(404, 'Product not found');
-  if (!product.isActive) throw new AppError(400, 'Cannot adjust stock for an inactive product');
 
   const hasVariants = product.variants.length > 0;
 
@@ -250,7 +249,6 @@ export async function recordDamagedReturnInTx(
     include: { variants: { select: { id: true } } },
   });
   if (!product) throw new AppError(404, 'Product not found');
-  if (!product.isActive) throw new AppError(400, 'Cannot record return for an inactive product');
 
   const hasVariants = product.variants.length > 0;
   if (hasVariants && target.variantId == null) {
@@ -403,7 +401,6 @@ export async function listProducts(params: ProductListParams = {}) {
   const stockStatus: StockStatusFilter = params.stockStatus ?? 'all';
 
   const where: Prisma.ProductWhereInput = {};
-  if (params.activeOnly !== false) where.isActive = true;
   if (params.categoryId != null) where.categoryId = params.categoryId;
   if (params.search?.trim()) {
     const q = params.search.trim();
@@ -690,15 +687,81 @@ export async function updateProduct(id: number, input: UpdateProductInput) {
   }
 }
 
-export async function deactivateProduct(id: number) {
-  const product = await prisma.product.findUnique({ where: { id } });
+export async function deleteProduct(id: number) {
+  const product = await prisma.product.findUnique({
+    where: { id },
+    include: { variants: { select: { id: true } } },
+  });
   if (!product) throw new AppError(404, 'Product not found');
 
-  const updated = await prisma.product.update({
-    where: { id },
-    data: { isActive: false },
+  const variantIds = product.variants.map((v) => v.id);
+
+  const [invoiceItems, purchaseItems, stockMovements, saleReturnItems, exchangeItems] =
+    await Promise.all([
+      prisma.invoiceItem.count({
+        where: {
+          OR: [
+            { productId: id },
+            ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+          ],
+        },
+      }),
+      prisma.purchaseItem.count({
+        where: {
+          OR: [
+            { productId: id },
+            ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+          ],
+        },
+      }),
+      prisma.stockMovement.count({
+        where: {
+          OR: [
+            { productId: id },
+            ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+          ],
+        },
+      }),
+      prisma.saleReturnItem.count({
+        where: {
+          OR: [
+            { productId: id },
+            ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+          ],
+        },
+      }),
+      prisma.exchangeItem.count({
+        where: {
+          OR: [
+            { productId: id },
+            ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
+          ],
+        },
+      }),
+    ]);
+
+  const hasHistory =
+    invoiceItems > 0 ||
+    purchaseItems > 0 ||
+    stockMovements > 0 ||
+    saleReturnItems > 0 ||
+    exchangeItems > 0;
+
+  if (hasHistory) {
+    throw new AppError(
+      400,
+      'Cannot delete product because it has historical sales, purchases, returns, or stock movement records.',
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (variantIds.length > 0) {
+      await tx.productVariant.deleteMany({ where: { productId: id } });
+    }
+    await tx.product.delete({ where: { id } });
   });
-  return updated;
+
+  return { id, deleted: true };
 }
 
 export type CreateVariantInput = {
@@ -717,7 +780,6 @@ export async function createProductVariant(productId: number, input: CreateVaria
     include: { variants: { select: { id: true } } },
   });
   if (!product) throw new AppError(404, 'Product not found');
-  if (!product.isActive) throw new AppError(400, 'Cannot add variants to an inactive product');
 
   try {
     return await prisma.$transaction(async (tx) => {
@@ -938,9 +1000,6 @@ export async function getProductByBarcode(barcode: string) {
   });
 
   if (variantRow) {
-    if (!variantRow.product.isActive) {
-      throw new AppError(400, 'This product is inactive and cannot be sold');
-    }
     const product = serializeProduct(variantRow.product, settings.lowStockLimit);
     const variant = product.variants?.find((v) => v.id === variantRow.id) ?? null;
     return {
@@ -959,9 +1018,6 @@ export async function getProductByBarcode(barcode: string) {
   });
 
   if (!productRow) throw new AppError(404, 'No product found for this barcode');
-  if (!productRow.isActive) {
-    throw new AppError(400, 'This product is inactive and cannot be sold');
-  }
 
   // Printed labels use variant barcodes. Parent barcode must not add a non-variant sale line.
   if (productRow.variants.length > 0) {

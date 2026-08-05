@@ -99,8 +99,8 @@ async function resolveSaleLines(tx: Prisma.TransactionClient, items: SaleItemInp
         variants: true,
       },
     });
-    if (!product || !product.isActive) {
-      throw new AppError(400, `Product #${item.productId} not found or inactive`);
+    if (!product) {
+      throw new AppError(400, `Product #${item.productId} not found`);
     }
 
     const hasVariants = product.variants.length > 0;

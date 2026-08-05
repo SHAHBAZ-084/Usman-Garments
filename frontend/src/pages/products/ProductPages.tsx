@@ -359,13 +359,13 @@ function ProductListRow({
   async function onDelete() {
     if (
       !window.confirm(
-        `Delete "${product.name}" from the product list?\n\nIt will be deactivated and hidden from the default list. Past sales keep their history.`,
+        `Permanently delete "${product.name}"? This cannot be undone.`,
       )
     ) {
       return;
     }
     try {
-      await api.deactivateProduct(product.id);
+      await api.deleteProduct(product.id);
       onDeleted();
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to delete product');
@@ -417,15 +417,13 @@ function ProductListRow({
                 Barcode
               </GhostButton>
             ) : null}
-            {product.isActive ? (
-              <GhostButton
-                type="button"
-                className="text-xs text-danger"
-                onClick={() => void onDelete()}
-              >
-                Delete
-              </GhostButton>
-            ) : null}
+            <GhostButton
+              type="button"
+              className="text-xs text-danger"
+              onClick={() => void onDelete()}
+            >
+              Delete
+            </GhostButton>
           </div>
         </td>
       </tr>
@@ -892,16 +890,14 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
     }
   }
 
-  async function onDeactivate() {
-    if (!productId || !window.confirm('Deactivate this product? It will be hidden from the default list.')) return;
+  async function onDeleteProduct() {
+    if (!productId || !product || !window.confirm(`Permanently delete "${product.name}"? This cannot be undone.`)) return;
     setError('');
     try {
-      await api.deactivateProduct(productId);
-      setMessage('Product deactivated.');
-      const refreshed = await api.getProduct(productId);
-      setProduct(refreshed);
+      await api.deleteProduct(productId);
+      navigate('/products/list');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Deactivate failed');
+      setError(err instanceof Error ? err.message : 'Delete failed');
     }
   }
 
@@ -924,7 +920,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
           <Link to="/products/list">
             <SecondaryButton type="button">Back to list</SecondaryButton>
           </Link>
-          {mode === 'edit' && product?.isActive ? (
+          {mode === 'edit' && product ? (
             <>
               {printableLabels.length > 0 ? (
                 <SecondaryButton type="button" onClick={() => setLabelItems(printableLabels)}>
@@ -933,7 +929,7 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
                 </SecondaryButton>
               ) : null}
               <PrimaryButton type="button" onClick={() => setShowAdjust(true)}>Adjust Stock</PrimaryButton>
-              <DangerButton type="button" onClick={() => void onDeactivate()}>Deactivate</DangerButton>
+              <DangerButton type="button" onClick={() => void onDeleteProduct()}>Delete Product</DangerButton>
             </>
           ) : null}
         </div>

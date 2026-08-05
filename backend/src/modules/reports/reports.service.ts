@@ -425,7 +425,7 @@ export async function reportCurrentStock(params: {
   search?: string;
 }) {
   const { page, pageSize, skip, take } = paginateParams(params.page, params.pageSize);
-  const where: Prisma.ProductWhereInput = { isActive: true };
+  const where: Prisma.ProductWhereInput = {};
   if (params.search?.trim()) {
     const q = params.search.trim();
     where.OR = [

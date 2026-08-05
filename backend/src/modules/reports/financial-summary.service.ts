@@ -295,7 +295,6 @@ async function getSupplierOutstanding(): Promise<number> {
 
 async function getStockValuation(): Promise<{ costValue: number; sellingValue: number }> {
   const products = await prisma.product.findMany({
-    where: { isActive: true },
     select: { currentStock: true, purchasePrice: true, salePrice: true },
   });
   let costValue = 0;
@@ -592,7 +591,6 @@ async function getLowStockThreshold(): Promise<number> {
 async function getStockCounts(): Promise<{ lowStockCount: number; outOfStockCount: number }> {
   const threshold = await getLowStockThreshold();
   const products = await prisma.product.findMany({
-    where: { isActive: true },
     select: { currentStock: true, lowStockLimit: true },
   });
   let lowStockCount = 0;
@@ -654,7 +652,6 @@ async function getRecentExpenses(limit = 8) {
 async function getLowStockProducts(limit = 15) {
   const threshold = await getLowStockThreshold();
   const products = await prisma.product.findMany({
-    where: { isActive: true },
     select: { id: true, name: true, sku: true, currentStock: true, lowStockLimit: true },
     orderBy: { currentStock: 'asc' },
     take: 200,

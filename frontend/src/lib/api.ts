@@ -387,8 +387,8 @@ export const api = {
   updateProduct(id: number, data: Partial<CreateProductInput>) {
     return request<Product>(`/api/products/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
   },
-  deactivateProduct(id: number) {
-    return request<{ id: number; isActive: boolean }>(`/api/products/${id}`, { method: 'DELETE' });
+  deleteProduct(id: number) {
+    return request<{ id: number; deleted: boolean }>(`/api/products/${id}`, { method: 'DELETE' });
   },
   createProductVariant(productId: number, data: ProductVariantInput) {
     return request<ProductVariant>(`/api/products/${productId}/variants`, {
