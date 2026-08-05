@@ -117,6 +117,16 @@ export function DashboardPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const handleSalesChanged = () => {
+      void load();
+    };
+    window.addEventListener('sales-changed', handleSalesChanged);
+    return () => {
+      window.removeEventListener('sales-changed', handleSalesChanged);
+    };
+  }, [load]);
+
   const dash = data;
   const comparisons = dash?.comparisons ?? null;
 

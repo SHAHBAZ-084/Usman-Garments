@@ -2,6 +2,8 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   InvoiceStatus,
   LedgerEntryType,
+  PurchasePaymentMethod,
+  ReturnCondition,
   SalePaymentMethod,
   StockMovementType,
   VoucherStatus,
@@ -18,7 +20,8 @@ import {
 } from '../accounting/accounting.service';
 import { createCustomer } from '../customers/customers.service';
 import { createProduct } from '../products/products.service';
-import { cancelSale, createSale } from './sales.service';
+import { cancelSale, createSale, deleteSale } from './sales.service';
+import { createExchange, createSaleReturn } from './returns.service';
 
 const PREFIX = 'TEST-P7-';
 
@@ -320,5 +323,129 @@ describe('POS sales (Phase 7)', () => {
       where: { sourceType: 'SALE', sourceRef: String(invoice.id), status: VoucherStatus.ACTIVE },
     });
     expect(activeVoucher).toBeNull();
+  });
+
+  it('deletes sale with GOOD-condition return and reverses stock and return records', async () => {
+    const product = await createProduct({
+      name: `${PREFIX}GoodReturn ${runId}`,
+      salePrice: 500,
+      purchasePrice: 200,
+      openingStock: 10,
+    });
+
+    const invoice = await createSale({
+      items: [{ productId: product.id, quantity: 3 }],
+      paymentMethod: SalePaymentMethod.CASH,
+      paidAmount: 1500,
+      createdById: userId,
+    });
+
+    const afterSaleStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
+    expect(afterSaleStock).toBe(7);
+
+    const saleReturn = await createSaleReturn({
+      invoiceId: invoice.id,
+      items: [{ invoiceItemId: invoice.items[0]!.id, quantity: 1, condition: ReturnCondition.GOOD }],
+      refundMethod: PurchasePaymentMethod.CASH,
+      refundToCash: true,
+      createdById: userId,
+    });
+
+    const afterReturnStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
+    expect(afterReturnStock).toBe(8);
+
+    await deleteSale(invoice.id, userId);
+
+    const finalStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
+    expect(finalStock).toBe(10);
+
+    const remainingReturns = await prisma.saleReturn.findMany({ where: { invoiceId: invoice.id } });
+    expect(remainingReturns).toHaveLength(0);
+    const remainingReturnItems = await prisma.saleReturnItem.findMany({
+      where: { saleReturnId: saleReturn.id },
+    });
+    expect(remainingReturnItems).toHaveLength(0);
+  });
+
+  it('deletes sale with DAMAGED-condition return without incorrectly restocking sellable stock', async () => {
+    const product = await createProduct({
+      name: `${PREFIX}DamagedReturn ${runId}`,
+      salePrice: 400,
+      purchasePrice: 150,
+      openingStock: 10,
+    });
+
+    const invoice = await createSale({
+      items: [{ productId: product.id, quantity: 2 }],
+      paymentMethod: SalePaymentMethod.CASH,
+      paidAmount: 800,
+      createdById: userId,
+    });
+
+    const afterSaleStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
+    expect(afterSaleStock).toBe(8);
+
+    await createSaleReturn({
+      invoiceId: invoice.id,
+      items: [{ invoiceItemId: invoice.items[0]!.id, quantity: 1, condition: ReturnCondition.DAMAGED }],
+      refundMethod: PurchasePaymentMethod.CASH,
+      refundToCash: true,
+      createdById: userId,
+    });
+
+    const afterReturnStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
+    expect(afterReturnStock).toBe(8);
+
+    await deleteSale(invoice.id, userId);
+
+    const finalStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
+    expect(finalStock).toBe(10);
+  });
+
+  it('deletes sale with Exchange and reverses both returned and new item stocks', async () => {
+    const productA = await createProduct({
+      name: `${PREFIX}ExchA ${runId}`,
+      salePrice: 600,
+      purchasePrice: 250,
+      openingStock: 10,
+    });
+    const productB = await createProduct({
+      name: `${PREFIX}ExchB ${runId}`,
+      salePrice: 600,
+      purchasePrice: 250,
+      openingStock: 10,
+    });
+
+    const invoice = await createSale({
+      items: [{ productId: productA.id, quantity: 2 }],
+      paymentMethod: SalePaymentMethod.CASH,
+      paidAmount: 1200,
+      createdById: userId,
+    });
+
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: productA.id } })).currentStock).toBe(8);
+
+    const exchange = await createExchange({
+      invoiceId: invoice.id,
+      returnItems: [{ invoiceItemId: invoice.items[0]!.id, quantity: 1, condition: ReturnCondition.GOOD }],
+      newItems: [{ productId: productB.id, quantity: 1, rate: 600 }],
+      paymentMethod: PurchasePaymentMethod.CASH,
+      createdById: userId,
+    });
+
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: productA.id } })).currentStock).toBe(9);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: productB.id } })).currentStock).toBe(9);
+
+    await deleteSale(invoice.id, userId);
+
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: productA.id } })).currentStock).toBe(10);
+    expect((await prisma.product.findUniqueOrThrow({ where: { id: productB.id } })).currentStock).toBe(10);
+
+    const remainingExchanges = await prisma.exchange.findMany({ where: { id: exchange.id } });
+    expect(remainingExchanges).toHaveLength(0);
+    const remainingExchangeItems = await prisma.exchangeItem.findMany({
+      where: { exchangeId: exchange.id },
+    });
+    expect(remainingExchangeItems).toHaveLength(0);
   });
 });

@@ -19,6 +19,7 @@ import {
 } from '../accounting/accounting.service';
 import { adjustStockInTx } from '../products/products.service';
 import { resolvePaymentAccount } from '../purchases/purchases.service';
+import { restocksInventory } from './returns.service';
 
 function roundMoney(n: number) {
   return Math.round(n * 100) / 100;
@@ -549,22 +550,76 @@ export async function deleteSale(id: number, userId: number) {
     include: {
       items: true,
       customer: { select: { id: true, accountId: true } },
-      saleReturns: { select: { id: true } },
-      exchanges: { select: { id: true } },
+      exchanges: {
+        include: {
+          newItems: true,
+        },
+      },
+      saleReturns: {
+        include: {
+          items: true,
+        },
+      },
     },
   });
   if (!existing) throw new AppError(404, 'Invoice not found');
 
-  if (existing.saleReturns.length > 0 || existing.exchanges.length > 0) {
-    throw new AppError(
-      400,
-      'Cannot delete a sale that has associated return or exchange records.',
-    );
-  }
-
   await prisma.$transaction(async (tx) => {
     const sourceRef = String(existing.id);
 
+    // 1. Reversals for each Exchange linked to this invoice
+    for (const exchange of existing.exchanges) {
+      const exchangeSourceRef = String(exchange.id);
+      // Reverse stock taken for the exchange's new items
+      for (const item of exchange.newItems) {
+        const target =
+          item.variantId != null
+            ? { productId: item.productId, variantId: item.variantId }
+            : { productId: item.productId };
+
+        await adjustStockInTx(tx, target, item.quantity, StockMovementType.CANCELLATION, {
+          note: 'Delete sale — reverse exchange',
+          sourceType: 'SALE_DELETE',
+          sourceRef,
+        });
+      }
+
+      // Cancel active exchange vouchers
+      await cancelActiveVouchersBySourceInTx(tx, 'EXCHANGE', exchangeSourceRef, userId);
+
+      // Delete ExchangeItem rows, then the Exchange row
+      await tx.exchangeItem.deleteMany({ where: { exchangeId: exchange.id } });
+      await tx.exchange.delete({ where: { id: exchange.id } });
+    }
+
+    // 2. Reversals for each SaleReturn linked to this invoice
+    for (const saleReturn of existing.saleReturns) {
+      const returnSourceRef = String(saleReturn.id);
+      // Reverse stock movement: deduct quantity back out if item condition restocked inventory
+      for (const item of saleReturn.items) {
+        if (restocksInventory(item.condition)) {
+          const target =
+            item.variantId != null
+              ? { productId: item.productId, variantId: item.variantId }
+              : { productId: item.productId };
+
+          await adjustStockInTx(tx, target, item.quantity, StockMovementType.SALE, {
+            note: 'Delete sale — reverse return stock',
+            sourceType: 'SALE_DELETE',
+            sourceRef,
+          });
+        }
+      }
+
+      // Cancel active sale return vouchers
+      await cancelActiveVouchersBySourceInTx(tx, 'SALE_RETURN', returnSourceRef, userId);
+
+      // Delete SaleReturnItem rows, then the SaleReturn row
+      await tx.saleReturnItem.deleteMany({ where: { saleReturnId: saleReturn.id } });
+      await tx.saleReturn.delete({ where: { id: saleReturn.id } });
+    }
+
+    // 3. Reverse original sale items, cancel sale active vouchers, adjust customer balance
     if (existing.status !== InvoiceStatus.CANCELLED) {
       for (const item of existing.items) {
         const target =

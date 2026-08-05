@@ -832,6 +832,7 @@ export function InvoicesListPage() {
                         ) {
                           try {
                             await api.deleteSale(inv.id);
+                            window.dispatchEvent(new CustomEvent('sales-changed'));
                             setResult((prev) =>
                               prev
                                 ? {
@@ -947,6 +948,7 @@ export function InvoiceDetailPage() {
     setError('');
     try {
       await api.deleteSale(invoice.id);
+      window.dispatchEvent(new CustomEvent('sales-changed'));
       navigate('/sales/list');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
