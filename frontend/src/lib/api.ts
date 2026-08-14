@@ -1223,6 +1223,8 @@ export type ExchangeResult = {
     quantity: number;
     lineTotal: number;
     condition: ReturnCondition;
+    product: { id: number; name: string; productCode: string };
+    variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
   }>;
   newItems: Array<{
     id: number;
@@ -1231,6 +1233,8 @@ export type ExchangeResult = {
     quantity: number;
     rate: number;
     lineTotal: number;
+    product: { id: number; name: string; productCode: string };
+    variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
   }>;
 };
 

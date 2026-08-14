@@ -84,8 +84,6 @@ export function ReturnExchangePage() {
   const [paidAmount, setPaidAmount] = useState('');
   const [applyToUdhaar, setApplyToUdhaar] = useState(true);
   const [udhaarApplyAmount, setUdhaarApplyAmount] = useState('');
-  const [refundAmountInput, setRefundAmountInput] = useState('');
-  const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
@@ -164,7 +162,6 @@ export function ReturnExchangePage() {
           })),
       );
       setNewItems([]);
-      setRefundAmountInput('');
       setUdhaarApplyAmount('');
       setApplyToUdhaar(true);
       setPaymentAccountId('');
@@ -194,24 +191,7 @@ export function ReturnExchangePage() {
     return Math.round(Math.max(0, gross - share) * 100) / 100;
   }, [invoice, returnDrafts]);
 
-  const refundAmount = useMemo(() => {
-    if (refundAmountInput.trim() === '') return calculatedReturnTotal;
-    const n = Number(refundAmountInput);
-    if (!Number.isFinite(n) || n < 0) return calculatedReturnTotal;
-    return Math.min(calculatedReturnTotal, n);
-  }, [refundAmountInput, calculatedReturnTotal]);
-
-  const customerOwed = invoice?.customerBalance ?? 0;
-  const maxUdhaarApply = Math.min(customerOwed, refundAmount);
-  const udhaarApply = useMemo(() => {
-    if (!applyToUdhaar || !invoice?.customer) return 0;
-    if (udhaarApplyAmount.trim() === '') return maxUdhaarApply;
-    const n = Number(udhaarApplyAmount);
-    if (!Number.isFinite(n) || n < 0) return 0;
-    return Math.min(maxUdhaarApply, n);
-  }, [applyToUdhaar, invoice?.customer, udhaarApplyAmount, maxUdhaarApply]);
-
-  const cashRefundDue = Math.round(Math.max(0, refundAmount - udhaarApply) * 100) / 100;
+  const refundAmount = calculatedReturnTotal;
 
   const newTotal = useMemo(() => {
     return newItems.reduce((sum, line) => {
@@ -222,6 +202,23 @@ export function ReturnExchangePage() {
   }, [newItems]);
 
   const netAmount = useMemo(() => newTotal - refundAmount, [newTotal, refundAmount]);
+
+  /** Cash/bank refund the shop owes (exchange uses net after new items). */
+  const customerRefundDue =
+    mode === 'exchange' ? Math.round(Math.max(0, -netAmount) * 100) / 100 : refundAmount;
+
+  const customerOwed = invoice?.customerBalance ?? 0;
+  const maxUdhaarApply = Math.min(customerOwed, customerRefundDue);
+  const udhaarApply = useMemo(() => {
+    if (!applyToUdhaar || !invoice?.customer || customerRefundDue <= 0) return 0;
+    if (udhaarApplyAmount.trim() === '') return maxUdhaarApply;
+    const n = Number(udhaarApplyAmount);
+    if (!Number.isFinite(n) || n < 0) return 0;
+    return Math.min(maxUdhaarApply, n);
+  }, [applyToUdhaar, invoice?.customer, udhaarApplyAmount, maxUdhaarApply, customerRefundDue]);
+
+  const cashRefundDue = Math.round(Math.max(0, customerRefundDue - udhaarApply) * 100) / 100;
+  const showUdhaarRefund = Boolean(invoice?.customer) && customerRefundDue > 0;
 
   function addNewFromScan(result: BarcodeLookupResult) {
     const line = lookupToNewItem(result);
@@ -271,15 +268,12 @@ export function ReturnExchangePage() {
       if (paymentKind === 'EPAY' && !paymentAccountId) {
         throw new Error('Select an e-payment account');
       }
-      if (refundAmount > calculatedReturnTotal + 0.01) {
-        throw new Error(`Refund cannot exceed calculated return Rs ${formatMoney(calculatedReturnTotal)}`);
-      }
 
       const udhaarPayload = {
-        applyToUdhaar: Boolean(invoice.customer) && applyToUdhaar,
+        applyToUdhaar: showUdhaarRefund && applyToUdhaar,
         applyToUdhaarAmount:
-          invoice.customer && applyToUdhaar ? udhaarApply : undefined,
-        refundToCash: !(invoice.customer && applyToUdhaar) || undefined,
+          showUdhaarRefund && applyToUdhaar ? udhaarApply : undefined,
+        refundToCash: !(showUdhaarRefund && applyToUdhaar) || undefined,
         paymentAccountId: paymentAccountId ? Number(paymentAccountId) : undefined,
       };
 
@@ -289,7 +283,7 @@ export function ReturnExchangePage() {
           items: returnItems,
           refundMethod: paymentMethod,
           refundAmount,
-          note: note.trim() || null,
+          note: null,
           ...udhaarPayload,
         });
         setMessage(
@@ -316,7 +310,7 @@ export function ReturnExchangePage() {
           })),
           paymentMethod,
           paidAmount: netAmount > 0 ? Number(paidAmount || netAmount) : 0,
-          note: note.trim() || null,
+          note: null,
           ...udhaarPayload,
         });
         setMessage(
@@ -340,7 +334,6 @@ export function ReturnExchangePage() {
 
   function clearReturnForm() {
     setNewItems([]);
-    setNote('');
     setPaidAmount('');
     setError('');
     setMessage('');
@@ -597,22 +590,6 @@ export function ReturnExchangePage() {
                   label="Payment / refund method"
                 />
               </div>
-              {mode === 'return' || (mode === 'exchange' && netAmount < 0) ? (
-                <div>
-                  <FieldLabel>Refund amount (adjustable)</FieldLabel>
-                  <TextInput
-                    type="number"
-                    min="0"
-                    max={calculatedReturnTotal}
-                    step="0.01"
-                    value={refundAmountInput || String(calculatedReturnTotal || '')}
-                    onChange={(e) => setRefundAmountInput(e.target.value)}
-                  />
-                  <p className="mt-1 text-xs text-textMuted">
-                    Max Rs {formatMoney(calculatedReturnTotal)} (after line + invoice discounts).
-                  </p>
-                </div>
-              ) : null}
               {mode === 'exchange' && netAmount > 0 ? (
                 <div>
                   <FieldLabel>Amount received</FieldLabel>
@@ -626,7 +603,7 @@ export function ReturnExchangePage() {
                   />
                 </div>
               ) : null}
-              {invoice.customer ? (
+              {showUdhaarRefund ? (
                 <div className="space-y-2 rounded-lg border border-border p-3 md:col-span-2">
                   <p className="text-sm font-medium text-textPrimary">
                     Customer udhaar balance: Rs {formatMoney(customerOwed)}
@@ -673,16 +650,12 @@ export function ReturnExchangePage() {
                     </div>
                   ) : (
                     <p className="pl-6 text-xs text-textMuted">
-                      Full refund of Rs {formatMoney(refundAmount)} via{' '}
+                      Full refund of Rs {formatMoney(customerRefundDue)} via{' '}
                       {paymentKind === 'CASH' ? 'Cash' : 'E-payment'}.
                     </p>
                   )}
                 </div>
               ) : null}
-              <div className="md:col-span-2">
-                <FieldLabel>Note (optional)</FieldLabel>
-                <TextInput value={note} onChange={(e) => setNote(e.target.value)} />
-              </div>
             </div>
           </Panel>
 

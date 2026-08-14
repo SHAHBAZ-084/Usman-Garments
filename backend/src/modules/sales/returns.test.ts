@@ -200,6 +200,52 @@ describe('Sale returns & exchanges (Phase 9)', () => {
     expect(tb.isBalanced).toBe(true);
   });
 
+  it('exchange with net refund posts a balanced voucher', async () => {
+    const { product, invoice } = await makeSale(2, 1000, 300);
+    const newProduct = await createProduct({
+      name: `${PREFIX}Cheap ${runId}`,
+      salePrice: 250,
+      purchasePrice: 100,
+      openingStock: 5,
+    });
+
+    const returnLine = invoice.items[0]!;
+    const exchange = await createExchange({
+      invoiceId: invoice.id,
+      returnItems: [{ invoiceItemId: returnLine.id, quantity: 1, condition: ReturnCondition.GOOD }],
+      newItems: [{ productId: newProduct.id, quantity: 1, rate: 250 }],
+      paymentMethod: PurchasePaymentMethod.CASH,
+      refundToCash: true,
+      createdById: userId,
+    });
+
+    expect(exchange.returnTotal).toBe(1000);
+    expect(exchange.newSaleTotal).toBe(250);
+    expect(exchange.netAmount).toBe(-750);
+    expect(exchange.refundedAmount).toBe(750);
+
+    const voucher = await prisma.voucher.findFirst({
+      where: { sourceType: 'EXCHANGE', sourceRef: String(exchange.id), status: VoucherStatus.ACTIVE },
+      include: { ledgerEntries: true },
+    });
+    expect(voucher).toBeTruthy();
+    const d = voucher!.ledgerEntries
+      .filter((e) => e.type === LedgerEntryType.DEBIT)
+      .reduce((s, e) => s + Number(e.amount), 0);
+    const c = voucher!.ledgerEntries
+      .filter((e) => e.type === LedgerEntryType.CREDIT)
+      .reduce((s, e) => s + Number(e.amount), 0);
+    expect(d).toBeCloseTo(c, 2);
+
+    const oldStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
+    const newStock = (await prisma.product.findUniqueOrThrow({ where: { id: newProduct.id } })).currentStock;
+    expect(oldStock).toBe(9);
+    expect(newStock).toBe(4);
+
+    const tb = await getTrialBalance();
+    expect(tb.isBalanced).toBe(true);
+  });
+
   it('blocks return quantity exceeding sold quantity', async () => {
     const { invoice } = await makeSale(2);
     const line = invoice.items[0]!;

@@ -39,6 +39,10 @@ type CartLine = {
   rate: number;
   quantity: number;
   discount: number;
+  /** Local UI only — not sent to API. */
+  discountMode: 'FLAT' | 'PERCENT';
+  /** Local UI only — percent value while mode is PERCENT. */
+  discountPercent: number;
   stock: number;
 };
 
@@ -46,6 +50,14 @@ const SELECT_CLASS = 'w-full rounded-lg border border-border bg-surface2 px-3 py
 
 function lineKey(productId: number, variantId: number | null) {
   return `${productId}:${variantId ?? 'p'}`;
+}
+
+function roundMoney(amount: number) {
+  return Math.round((amount + Number.EPSILON) * 100) / 100;
+}
+
+function discountFromPercent(quantity: number, rate: number, percent: number) {
+  return roundMoney(Math.max(0, quantity) * Math.max(0, rate) * Math.max(0, percent) / 100);
 }
 
 function lineTotal(line: CartLine) {
@@ -67,6 +79,8 @@ function lookupToCartLine(result: BarcodeLookupResult): CartLine {
     rate,
     quantity: 1,
     discount: 0,
+    discountMode: 'FLAT',
+    discountPercent: 0,
     stock,
   };
 }
@@ -86,6 +100,8 @@ function productToCartLine(product: Product, variantId?: number): CartLine | nul
       rate: variant.salePrice ?? product.salePrice,
       quantity: 1,
       discount: 0,
+      discountMode: 'FLAT',
+      discountPercent: 0,
       stock: variant.currentStock,
     };
   }
@@ -98,6 +114,8 @@ function productToCartLine(product: Product, variantId?: number): CartLine | nul
     rate: product.salePrice,
     quantity: 1,
     discount: 0,
+    discountMode: 'FLAT',
+    discountPercent: 0,
     stock: product.currentStock,
   };
 }
@@ -192,7 +210,14 @@ export function NewSalePage() {
         return prev;
       }
       if (existing) {
-        return prev.map((l) => (l.key === line.key ? { ...l, quantity: nextQty, stock: line.stock } : l));
+        // Keep percent discount in sync when qty increases via scan.
+        const discount =
+          existing.discountMode === 'PERCENT'
+            ? discountFromPercent(nextQty, existing.rate, existing.discountPercent)
+            : existing.discount;
+        return prev.map((l) =>
+          l.key === line.key ? { ...l, quantity: nextQty, stock: line.stock, discount } : l,
+        );
       }
       return [...prev, { ...line, quantity: 1 }];
     });
@@ -468,9 +493,15 @@ export function NewSalePage() {
                               onClick={() =>
                                 setCart((prev) =>
                                   prev
-                                    .map((l) =>
-                                      l.key === line.key ? { ...l, quantity: Math.max(0, l.quantity - 1) } : l,
-                                    )
+                                    .map((l) => {
+                                      if (l.key !== line.key) return l;
+                                      const quantity = Math.max(0, l.quantity - 1);
+                                      const discount =
+                                        l.discountMode === 'PERCENT'
+                                          ? discountFromPercent(quantity, l.rate, l.discountPercent)
+                                          : l.discount;
+                                      return { ...l, quantity, discount };
+                                    })
                                     .filter((l) => l.quantity > 0),
                                 )
                               }
@@ -491,7 +522,14 @@ export function NewSalePage() {
                                   );
                                 }
                                 setCart((prev) =>
-                                  prev.map((l) => (l.key === line.key ? { ...l, quantity: qty } : l)),
+                                  prev.map((l) => {
+                                    if (l.key !== line.key) return l;
+                                    const discount =
+                                      l.discountMode === 'PERCENT'
+                                        ? discountFromPercent(qty, l.rate, l.discountPercent)
+                                        : l.discount;
+                                    return { ...l, quantity: qty, discount };
+                                  }),
                                 );
                               }}
                             />
@@ -507,9 +545,15 @@ export function NewSalePage() {
                                   return;
                                 }
                                 setCart((prev) =>
-                                  prev.map((l) =>
-                                    l.key === line.key ? { ...l, quantity: l.quantity + 1 } : l,
-                                  ),
+                                  prev.map((l) => {
+                                    if (l.key !== line.key) return l;
+                                    const quantity = l.quantity + 1;
+                                    const discount =
+                                      l.discountMode === 'PERCENT'
+                                        ? discountFromPercent(quantity, l.rate, l.discountPercent)
+                                        : l.discount;
+                                    return { ...l, quantity, discount };
+                                  }),
                                 );
                                 setError('');
                               }}
@@ -528,24 +572,70 @@ export function NewSalePage() {
                             onChange={(e) => {
                               const rate = Math.max(0, Number(e.target.value) || 0);
                               setCart((prev) =>
-                                prev.map((l) => (l.key === line.key ? { ...l, rate } : l)),
+                                prev.map((l) => {
+                                  if (l.key !== line.key) return l;
+                                  const discount =
+                                    l.discountMode === 'PERCENT'
+                                      ? discountFromPercent(l.quantity, rate, l.discountPercent)
+                                      : l.discount;
+                                  return { ...l, rate, discount };
+                                }),
                               );
                             }}
                           />
                         </td>
                         <td className="px-2 py-2 text-right">
-                          <TextInput
-                            className="ml-auto w-20 text-right"
-                            type="number"
-                            min={0}
-                            value={String(line.discount)}
-                            onChange={(e) => {
-                              const d = Math.max(0, Number(e.target.value) || 0);
-                              setCart((prev) =>
-                                prev.map((l) => (l.key === line.key ? { ...l, discount: d } : l)),
-                              );
-                            }}
-                          />
+                          <div className="ml-auto flex w-[7.5rem] items-center justify-end gap-1">
+                            <button
+                              type="button"
+                              className="h-8 shrink-0 rounded border border-border px-1.5 text-[11px] font-bold leading-none"
+                              title={line.discountMode === 'PERCENT' ? 'Switch to Rs discount' : 'Switch to % discount'}
+                              aria-label="Toggle discount mode Rs or percent"
+                              onClick={() =>
+                                setCart((prev) =>
+                                  prev.map((l) => {
+                                    if (l.key !== line.key) return l;
+                                    const nextMode = l.discountMode === 'PERCENT' ? 'FLAT' : 'PERCENT';
+                                    return {
+                                      ...l,
+                                      discountMode: nextMode,
+                                      discount: 0,
+                                      discountPercent: 0,
+                                    };
+                                  }),
+                                )
+                              }
+                            >
+                              {line.discountMode === 'PERCENT' ? '%' : 'Rs'}
+                            </button>
+                            <TextInput
+                              className="w-16 text-right"
+                              type="number"
+                              min={0}
+                              step={line.discountMode === 'PERCENT' ? '0.01' : '0.01'}
+                              max={line.discountMode === 'PERCENT' ? 100 : undefined}
+                              value={String(
+                                line.discountMode === 'PERCENT' ? line.discountPercent : line.discount,
+                              )}
+                              onChange={(e) => {
+                                const raw = Math.max(0, Number(e.target.value) || 0);
+                                setCart((prev) =>
+                                  prev.map((l) => {
+                                    if (l.key !== line.key) return l;
+                                    if (l.discountMode === 'PERCENT') {
+                                      const discountPercent = Math.min(100, raw);
+                                      return {
+                                        ...l,
+                                        discountPercent,
+                                        discount: discountFromPercent(l.quantity, l.rate, discountPercent),
+                                      };
+                                    }
+                                    return { ...l, discount: raw, discountPercent: 0 };
+                                  }),
+                                );
+                              }}
+                            />
+                          </div>
                         </td>
                         <td className="px-2 py-2 text-right">{formatMoney(lineTotal(line))}</td>
                         <td className="px-2 py-2">

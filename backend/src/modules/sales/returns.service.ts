@@ -787,15 +787,40 @@ export async function createExchange(input: CreateExchangeInput) {
       legs.push({ accountId: accounts.inventory.id, type: LedgerEntryType.CREDIT, amount: newCost });
     }
 
+    // Settle only the *net* cash/AR difference. Do not also post a full-return
+    // refund or charge new items as udhaar — that double-counts and unbalances.
+    let exchangeCustomerCredit = 0;
     if (netAmountTx > 0.001) {
-      const paymentAccount = await resolvePaymentAccount(tx, paymentMethod, input.paymentAccountId);
-      legs.push({ accountId: paymentAccount.id, type: LedgerEntryType.DEBIT, amount: netAmountTx });
+      if (paidAmount > 0.001) {
+        const paymentAccount = await resolvePaymentAccount(tx, paymentMethod, input.paymentAccountId);
+        legs.push({
+          accountId: paymentAccount.id,
+          type: LedgerEntryType.DEBIT,
+          amount: paidAmount,
+        });
+      }
+      const stillOwed = roundMoney(netAmountTx - paidAmount);
+      if (stillOwed > 0.001) {
+        if (!invoice.customerId || !invoice.customer?.accountId) {
+          throw new AppError(400, 'Customer is required when exchange balance is unpaid');
+        }
+        legs.push({
+          accountId: invoice.customer.accountId,
+          type: LedgerEntryType.DEBIT,
+          amount: stillOwed,
+        });
+        await tx.customer.update({
+          where: { id: invoice.customerId },
+          data: { currentBalance: { increment: stillOwed } },
+        });
+      }
     } else if (netAmountTx < -0.001) {
       const netRefund = computeRefundSplit(invoice, -netAmountTx, {
         refundToCash: input.refundToCash,
         applyToUdhaar: input.applyToUdhaar,
         applyToUdhaarAmount: input.applyToUdhaarAmount,
       });
+      exchangeCustomerCredit = netRefund.customerCredit;
       const netRefundLegs = await applyRefundLegs(
         tx,
         invoice,
@@ -807,51 +832,14 @@ export async function createExchange(input: CreateExchangeInput) {
       legs.push(...netRefundLegs);
     }
 
-    const returnRefund = computeRefundSplit(invoice, returnTotalTx, {
-      refundToCash: input.refundToCash,
-      applyToUdhaar: input.applyToUdhaar,
-      applyToUdhaarAmount: input.applyToUdhaarAmount,
-    });
     await adjustInvoiceAfterExchange(
       tx,
       invoice,
       returnTotalTx,
       newSaleTotalTx,
-      returnRefund.customerCredit,
+      exchangeCustomerCredit,
       paidAmount,
     );
-
-    if (returnRefund.customerCredit > 0.001) {
-      const returnRefundLegs = await applyRefundLegs(
-        tx,
-        invoice,
-        returnRefund.customerCredit,
-        0,
-        paymentMethod,
-        input.paymentAccountId,
-      );
-      legs.push(...returnRefundLegs);
-    }
-
-    const udhaarOnNewItems = roundMoney(Math.max(0, newSaleTotalTx - paidAmount));
-    const netReceivableIncrease = roundMoney(
-      Math.max(0, udhaarOnNewItems - returnRefund.customerCredit),
-    );
-    if (
-      netReceivableIncrease > 0.001 &&
-      invoice.customerId &&
-      invoice.customer?.accountId
-    ) {
-      legs.push({
-        accountId: invoice.customer.accountId,
-        type: LedgerEntryType.DEBIT,
-        amount: netReceivableIncrease,
-      });
-      await tx.customer.update({
-        where: { id: invoice.customerId },
-        data: { currentBalance: { increment: udhaarOnNewItems } },
-      });
-    }
 
     const voucherAmount = roundMoney(Math.max(returnTotalTx, newSaleTotalTx, Math.abs(netAmountTx)));
     await createMultiLegVoucherInTx(tx, {
@@ -876,11 +864,45 @@ export async function getExchange(id: number) {
     where: { id },
     include: {
       invoice: { select: { id: true, invoiceNumber: true } },
-      saleReturn: { include: { items: true } },
+      saleReturn: {
+        include: {
+          items: {
+            include: {
+              invoiceItem: {
+                select: {
+                  product: { select: { id: true, name: true, sku: true } },
+                  variant: { select: { id: true, size: true, colour: true, sku: true } },
+                },
+              },
+            },
+          },
+        },
+      },
       newItems: true,
     },
   });
   if (!row) throw new AppError(404, 'Exchange not found');
+
+  const newProductIds = [...new Set(row.newItems.map((i) => i.productId))];
+  const newVariantIds = [
+    ...new Set(row.newItems.map((i) => i.variantId).filter((vid): vid is number => vid != null)),
+  ];
+  const [newProducts, newVariants] = await Promise.all([
+    newProductIds.length
+      ? prisma.product.findMany({
+          where: { id: { in: newProductIds } },
+          select: { id: true, name: true, sku: true },
+        })
+      : Promise.resolve([]),
+    newVariantIds.length
+      ? prisma.productVariant.findMany({
+          where: { id: { in: newVariantIds } },
+          select: { id: true, size: true, colour: true, sku: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const productById = new Map(newProducts.map((p) => [p.id, p]));
+  const variantById = new Map(newVariants.map((v) => [v.id, v]));
 
   return {
     id: row.id,
@@ -902,15 +924,43 @@ export async function getExchange(id: number) {
       quantity: i.quantity,
       lineTotal: Number(i.lineTotal),
       condition: i.condition,
+      product: {
+        id: i.invoiceItem.product.id,
+        name: i.invoiceItem.product.name,
+        productCode: i.invoiceItem.product.sku,
+      },
+      variant: i.invoiceItem.variant
+        ? {
+            id: i.invoiceItem.variant.id,
+            size: i.invoiceItem.variant.size,
+            colour: i.invoiceItem.variant.colour,
+            productCode: i.invoiceItem.variant.sku,
+          }
+        : null,
     })),
-    newItems: row.newItems.map((i) => ({
-      id: i.id,
-      productId: i.productId,
-      variantId: i.variantId,
-      quantity: i.quantity,
-      rate: Number(i.rate),
-      lineTotal: Number(i.lineTotal),
-    })),
+    newItems: row.newItems.map((i) => {
+      const product = productById.get(i.productId);
+      const variant = i.variantId != null ? variantById.get(i.variantId) ?? null : null;
+      return {
+        id: i.id,
+        productId: i.productId,
+        variantId: i.variantId,
+        quantity: i.quantity,
+        rate: Number(i.rate),
+        lineTotal: Number(i.lineTotal),
+        product: product
+          ? { id: product.id, name: product.name, productCode: product.sku }
+          : { id: i.productId, name: `Product #${i.productId}`, productCode: '' },
+        variant: variant
+          ? {
+              id: variant.id,
+              size: variant.size,
+              colour: variant.colour,
+              productCode: variant.sku,
+            }
+          : null,
+      };
+    }),
   };
 }
 
