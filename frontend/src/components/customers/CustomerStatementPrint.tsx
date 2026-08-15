@@ -56,7 +56,7 @@ export function buildCustomerStatementHtml(
 <div class="sheet">
   ${logo}
   <h1>${escapeHtml(settings.businessName)}</h1>
-  <p class="meta">${escapeHtml(settings.address)} · ${escapeHtml(settings.phone)}</p>
+  <p class="meta">${escapeHtml(settings.address)} · ${settings.phoneLabel ? escapeHtml(settings.phoneLabel) + ': ' : ''}${escapeHtml(settings.phone)}</p>
   <h2 style="font-size: 13pt; margin: 16px 0 4px;">Customer Statement</h2>
   <p class="meta"><strong>${escapeHtml(customer.name)}</strong>${customer.phone ? ` · ${escapeHtml(customer.phone)}` : ''}</p>
   ${customer.address ? `<p class="meta">${escapeHtml(customer.address)}</p>` : ''}

@@ -44,6 +44,10 @@ type ReportShellProps = {
   loading: boolean;
   error: string;
   onLoad: () => void;
+  /** True after at least one successful/failed load attempt finished. */
+  hasLoaded?: boolean;
+  /** Shown when hasLoaded && rows empty (overrides default). */
+  emptyMessage?: string;
   children?: ReactNode;
   preset?: DateRangePreset;
   onPresetChange?: (p: DateRangePreset) => void;
@@ -69,6 +73,8 @@ export function ReportShell({
   loading,
   error,
   onLoad,
+  hasLoaded = false,
+  emptyMessage,
   children,
   preset,
   onPresetChange,
@@ -152,7 +158,7 @@ export function ReportShell({
           ) : null}
           {children}
           <PrimaryButton type="button" onClick={onLoad} disabled={loading}>
-            {loading ? 'Loading…' : 'Load Report'}
+            {loading ? 'Loading…' : hasLoaded ? 'Refresh' : 'Load Report'}
           </PrimaryButton>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -196,7 +202,11 @@ export function ReportShell({
               {rows.length === 0 ? (
                 <tr>
                   <td colSpan={headers.length} className="py-4 text-textMuted">
-                    {loading ? 'Loading…' : 'Load report to see data.'}
+                    {loading
+                      ? 'Loading…'
+                      : hasLoaded
+                        ? emptyMessage || 'Nothing to show.'
+                        : 'Load report to see data.'}
                   </td>
                 </tr>
               ) : (
@@ -235,7 +245,9 @@ function usePaginatedReport<T extends Record<string, unknown>>(
   path: string,
   mapRow: (item: T) => (string | number)[],
   mapHeaders: () => string[],
+  options?: { autoLoad?: boolean; emptyMessage?: string },
 ) {
+  const autoLoad = options?.autoLoad !== false;
   const [preset, setPreset] = useState<DateRangePreset>('month');
   const [fromDate, setFromDate] = useState(monthStartInputValue());
   const [toDate, setToDate] = useState(todayInputValue());
@@ -243,15 +255,16 @@ function usePaginatedReport<T extends Record<string, unknown>>(
   const debouncedSearch = useDebouncedValue(search, 300);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<PaginatedResult<T> | null>(null);
+  const [result, setResult] = useState<(PaginatedResult<T> & { emptyMessage?: string }) | null>(null);
   const [extraParams, setExtraParams] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const data = await api.fetchReport<PaginatedResult<T>>(path, {
+      const data = await api.fetchReport<PaginatedResult<T> & { emptyMessage?: string }>(path, {
         preset,
         fromDate: preset === 'custom' ? fromDate : undefined,
         toDate: preset === 'custom' ? toDate : undefined,
@@ -265,6 +278,7 @@ function usePaginatedReport<T extends Record<string, unknown>>(
       setError(err instanceof Error ? err.message : 'Failed to load report');
       setResult(null);
     } finally {
+      setHasLoaded(true);
       setLoading(false);
     }
   }, [path, preset, fromDate, toDate, page, debouncedSearch, extraParams]);
@@ -272,6 +286,11 @@ function usePaginatedReport<T extends Record<string, unknown>>(
   useEffect(() => {
     setPage(1);
   }, [debouncedSearch, preset]);
+
+  useEffect(() => {
+    if (!autoLoad) return;
+    void load();
+  }, [autoLoad, load]);
 
   const headers = mapHeaders();
   const rows = (result?.items ?? []).map(mapRow);
@@ -288,12 +307,14 @@ function usePaginatedReport<T extends Record<string, unknown>>(
     page,
     setPage,
     loading,
+    hasLoaded,
     error,
     load,
     headers,
     rows,
     totalPages: result?.totalPages ?? 1,
     setExtraParams,
+    emptyMessage: result?.emptyMessage ?? options?.emptyMessage,
   };
 }
 
@@ -327,6 +348,8 @@ function bindPaginatedReport(
     totalPages: r.totalPages,
     onPage: r.setPage,
     loading: r.loading,
+    hasLoaded: r.hasLoaded,
+    emptyMessage: r.emptyMessage,
     error: r.error,
     onLoad: () => void r.load(),
     headers: r.headers,
@@ -694,80 +717,45 @@ export function CurrentStockReportPage() {
 }
 
 export function LowStockReportPage() {
-  const [limit, setLimit] = useState<number | null>(null);
-  const [rows, setRows] = useState<(string | number)[][]>([]);
-  const [emptyMessage, setEmptyMessage] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  async function load() {
-    setLoading(true);
-    setError('');
-    try {
-      const data = await api.fetchReport<
-        PaginatedResult<{ name: string; sku: string; currentStock: number }> & {
-          lowStockLimit?: number;
-          emptyMessage?: string;
-        }
-      >('/stock/low', { page: 1, pageSize: 100 });
-      setLimit(data.lowStockLimit ?? null);
-      setEmptyMessage(data.emptyMessage ?? '');
-      setRows(data.items.map((i) => [i.name, i.sku, i.currentStock]));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed');
-      setRows([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    void load();
-  }, []);
+  const r = usePaginatedReport<{
+    name: string;
+    sku: string;
+    currentStock: number;
+    variantLabel?: string | null;
+    lowStockLimit?: number;
+  }>(
+    '/stock/low',
+    (i) => [
+      i.variantLabel ? `${i.name} — ${i.variantLabel}` : i.name,
+      i.sku,
+      i.currentStock,
+      i.lowStockLimit ?? '—',
+    ],
+    () => ['Product', 'SKU', 'Stock', 'Limit'],
+    { emptyMessage: 'Nothing is low stock from your set limit.' },
+  );
 
   return (
-    <PageShell title="Low Stock" subtitle={limit != null ? `Products at or below limit of ${limit}` : 'Products below your stock limit'}>
-      <Panel>
-        {error ? <Feedback variant="error" className="mb-3">{error}</Feedback> : null}
-        {loading ? <p className="text-sm text-textMuted">Loading…</p> : null}
-        {!loading && rows.length === 0 ? (
-          <p className="rounded-lg border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
-            {emptyMessage || 'Nothing is low stock from your set limit.'}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="app-data-table w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-textMuted">
-                  <th className="py-2 pr-3">Product</th>
-                  <th className="py-2 pr-3">SKU</th>
-                  <th className="py-2 pr-3">Stock</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, i) => (
-                  <tr key={i} className="border-b border-border">
-                    {row.map((cell, j) => (
-                      <td key={j} className="py-2 pr-3">
-                        {cell}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
-    </PageShell>
+    <ReportShell
+      {...bindPaginatedReport(r, {
+        title: 'Low Stock',
+        subtitle: 'Products / variants at or below the low-stock limit (includes out of stock)',
+      })}
+    />
   );
 }
 
 export function OutOfStockReportPage() {
-  const r = usePaginatedReport<{ name: string; sku: string }>(
+  const r = usePaginatedReport<{
+    name: string;
+    sku: string;
+    currentStock: number;
+    variantLabel?: string | null;
+  }>(
     '/stock/out',
-    (i) => [i.name, i.sku],
-    () => ['Product', 'SKU'],
+    (i) => [i.variantLabel ? `${i.name} — ${i.variantLabel}` : i.name, i.sku, i.currentStock],
+    () => ['Product', 'SKU', 'Stock'],
+    { emptyMessage: 'Nothing is out of stock.' },
   );
   return <ReportShell {...bindPaginatedReport(r, { title: 'Out of Stock' })} />;
 }

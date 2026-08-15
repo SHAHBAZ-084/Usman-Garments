@@ -346,6 +346,30 @@ function serializeProduct(row: {
   const effectiveLow = row.lowStockLimit ?? defaultLowStockLimit;
   const damagedStock = row.damagedStock ?? 0;
   const { sku, variants, ...rest } = row;
+
+  const serializedVariants = variants?.map((v) => {
+    const { sku: variantSku, ...variantRest } = v;
+    const isOutOfStock = v.currentStock <= 0;
+    const isLowStock = v.currentStock > 0 && v.currentStock <= effectiveLow;
+    return {
+      ...variantRest,
+      productCode: variantSku,
+      damagedStock: v.damagedStock ?? 0,
+      purchasePrice: v.purchasePrice != null ? Number(v.purchasePrice) : null,
+      salePrice: v.salePrice != null ? Number(v.salePrice) : null,
+      isLowStock,
+      isOutOfStock,
+    };
+  });
+
+  const hasVariants = (serializedVariants?.length ?? 0) > 0;
+  const isLowStock = hasVariants
+    ? serializedVariants!.some((v) => v.isLowStock)
+    : row.currentStock > 0 && row.currentStock <= effectiveLow;
+  const isOutOfStock = hasVariants
+    ? serializedVariants!.some((v) => v.isOutOfStock)
+    : row.currentStock <= 0;
+
   return {
     ...rest,
     productCode: sku,
@@ -355,22 +379,13 @@ function serializeProduct(row: {
     needsVariants: Boolean(row.needsVariants) && (variants?.length ?? 0) === 0,
     damagedStock,
     effectiveLowStockLimit: effectiveLow,
-    isLowStock: row.currentStock > 0 && row.currentStock <= effectiveLow,
-    isOutOfStock: row.currentStock <= 0,
+    isLowStock,
+    isOutOfStock,
     hasDamagedStock: damagedStock > 0,
     category: row.category
       ? { id: row.category.id, name: row.category.name, code: row.category.code ?? '' }
       : null,
-    variants: variants?.map((v) => {
-      const { sku: variantSku, ...variantRest } = v;
-      return {
-        ...variantRest,
-        productCode: variantSku,
-        damagedStock: v.damagedStock ?? 0,
-        purchasePrice: v.purchasePrice != null ? Number(v.purchasePrice) : null,
-        salePrice: v.salePrice != null ? Number(v.salePrice) : null,
-      };
-    }),
+    variants: serializedVariants,
   };
 }
 
@@ -420,9 +435,9 @@ export async function listProducts(params: ProductListParams = {}) {
   }
 
   if (stockStatus === 'in_stock') where.currentStock = { gt: 0 };
-  else if (stockStatus === 'out_of_stock') where.currentStock = { lte: 0 };
   else if (stockStatus === 'damaged') where.damagedStock = { gt: 0 };
   else if (stockStatus === 'low_stock') where.currentStock = { gt: 0 };
+  // out_of_stock: no DB stock predicate — filtered per-variant in memory below
 
   const include = {
     category: { select: { id: true, name: true, code: true } },
@@ -441,15 +456,23 @@ export async function listProducts(params: ProductListParams = {}) {
     },
   } as const;
 
-  if (stockStatus === 'low_stock') {
+  if (stockStatus === 'low_stock' || stockStatus === 'out_of_stock') {
     const candidates = await prisma.product.findMany({
       where,
       include,
       orderBy: { name: 'asc' },
     });
-    const filtered = candidates.filter(
-      (p) => p.currentStock > 0 && p.currentStock <= (p.lowStockLimit ?? settings.lowStockLimit),
-    );
+    const filtered = candidates.filter((p) => {
+      const limit = p.lowStockLimit ?? settings.lowStockLimit;
+      if (stockStatus === 'out_of_stock') {
+        if (p.variants.length > 0) return p.variants.some((v) => v.currentStock <= 0);
+        return p.currentStock <= 0;
+      }
+      if (p.variants.length > 0) {
+        return p.variants.some((v) => v.currentStock > 0 && v.currentStock <= limit);
+      }
+      return p.currentStock > 0 && p.currentStock <= limit;
+    });
     const total = filtered.length;
     const rows = filtered.slice(skip, skip + pageSize);
     return {

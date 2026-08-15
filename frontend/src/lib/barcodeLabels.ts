@@ -6,6 +6,12 @@ export type LabelSizePreset = {
   mode: 'thermal' | 'a4';
   widthMm: number;
   heightMm: number;
+  /** Physical roll media width (mm) for printer gap/label sensing. */
+  rollWidthMm?: number;
+  /** Physical roll media height (mm) for printer gap/label sensing. */
+  rollHeightMm?: number;
+  /** Gap between stickers on the roll (mm). */
+  rollGapMm?: number;
 };
 
 /** Physical sticker roll default: 58 × 40 mm. */
@@ -15,7 +21,26 @@ export const DEFAULT_BARCODE_LABEL_SIZE = '58x40';
 
 /** Common thermal roll sizes + A4 sheet mode. */
 export const BARCODE_LABEL_PRESETS: LabelSizePreset[] = [
-  { key: '58x40', label: '58 × 40 mm (sticker roll)', mode: 'thermal', widthMm: 58, heightMm: 40 },
+  {
+    key: '58x40',
+    label: '58 × 40 mm (sticker roll)',
+    mode: 'thermal',
+    widthMm: 58,
+    heightMm: 40,
+    rollWidthMm: 58,
+    rollHeightMm: 40,
+    rollGapMm: 3,
+  },
+  {
+    key: '33x23',
+    label: '33 × 23 mm (short roll)',
+    mode: 'thermal',
+    widthMm: 33,
+    heightMm: 23,
+    rollWidthMm: 38,
+    rollHeightMm: 28,
+    rollGapMm: 2,
+  },
   { key: '40x30', label: '40 × 30 mm (thermal)', mode: 'thermal', widthMm: 40, heightMm: 30 },
   { key: '50x25', label: '50 × 25 mm (thermal)', mode: 'thermal', widthMm: 50, heightMm: 25 },
   { key: '50x30', label: '50 × 30 mm (thermal)', mode: 'thermal', widthMm: 50, heightMm: 30 },
@@ -29,6 +54,9 @@ export type ParsedLabelSize = {
   heightMm: number;
   label: string;
   isCustom: boolean;
+  rollWidthMm?: number;
+  rollHeightMm?: number;
+  rollGapMm?: number;
 };
 
 const CUSTOM_RE = /^(\d{2,3})x(\d{2,3})$/i;
@@ -44,6 +72,9 @@ export function parseLabelSize(raw: string | null | undefined): ParsedLabelSize 
       heightMm: preset.heightMm,
       label: preset.label,
       isCustom: false,
+      rollWidthMm: preset.rollWidthMm,
+      rollHeightMm: preset.rollHeightMm,
+      rollGapMm: preset.rollGapMm,
     };
   }
   const match = CUSTOM_RE.exec(key);
@@ -93,4 +124,43 @@ export function a4GridRows(labelHeightMm: number): number {
   const usable = 297 - 16;
   const gap = 2;
   return Math.max(1, Math.floor((usable + gap) / (labelHeightMm + gap)));
+}
+
+/** Merge hardcoded presets with DB custom presets (custom appended). */
+export function mergeLabelPresets(
+  customPresets: Array<{
+    key: string;
+    label: string;
+    widthMm: number;
+    heightMm: number;
+    rollWidthMm?: number | null;
+    rollHeightMm?: number | null;
+    rollGapMm?: number | null;
+  }>,
+): LabelSizePreset[] {
+  const custom = customPresets.map((p) => ({
+    key: p.key,
+    label: p.label,
+    mode: 'thermal' as const,
+    widthMm: p.widthMm,
+    heightMm: p.heightMm,
+    rollWidthMm: p.rollWidthMm ?? undefined,
+    rollHeightMm: p.rollHeightMm ?? undefined,
+    rollGapMm: p.rollGapMm ?? undefined,
+  }));
+  return [...BARCODE_LABEL_PRESETS, ...custom];
+}
+
+export function parsedSizeFromPreset(preset: LabelSizePreset): ParsedLabelSize {
+  return {
+    key: preset.key,
+    mode: preset.mode,
+    widthMm: preset.widthMm,
+    heightMm: preset.heightMm,
+    label: preset.label,
+    isCustom: !BARCODE_LABEL_PRESETS.some((p) => p.key === preset.key),
+    rollWidthMm: preset.rollWidthMm,
+    rollHeightMm: preset.rollHeightMm,
+    rollGapMm: preset.rollGapMm,
+  };
 }

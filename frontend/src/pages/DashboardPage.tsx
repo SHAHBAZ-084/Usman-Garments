@@ -436,10 +436,14 @@ export function DashboardPage() {
           <p className="mb-2 text-xs text-textMuted">Items at or below the low-stock limit (includes out of stock).</p>
           {dash?.lowStockProducts.length ? (
             <ul className="space-y-2 text-sm">
-              {dash.lowStockProducts.map((p) => (
-                <li key={p.id} className="flex justify-between gap-2 border-b border-border pb-2 last:border-0">
+              {dash.lowStockProducts.map((p, idx) => (
+                <li
+                  key={`${p.id}-${p.variantLabel ?? 'product'}-${idx}`}
+                  className="flex justify-between gap-2 border-b border-border pb-2 last:border-0"
+                >
                   <Link to={`/products/${p.id}`} className="truncate hover:underline">
                     {p.name}
+                    {p.variantLabel ? ` — ${p.variantLabel}` : ''}
                   </Link>
                   <span className={`font-medium ${p.currentStock <= 0 ? 'text-danger' : 'text-warning'}`}>
                     {p.currentStock <= 0 ? 'Out of stock' : `${p.currentStock} left`}

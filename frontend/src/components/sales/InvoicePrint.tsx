@@ -35,7 +35,14 @@ function paymentLabel(method: string): string {
 }
 
 function contactLines(settings: BusinessSettings): string[] {
-  const lines = [settings.phone?.trim(), settings.whatsapp?.trim()].filter(Boolean) as string[];
+  const lines = [
+    settings.phone?.trim()
+      ? `${settings.phoneLabel ? settings.phoneLabel + ': ' : ''}${settings.phone.trim()}`
+      : null,
+    settings.whatsapp?.trim()
+      ? `${settings.whatsappLabel ? settings.whatsappLabel + ': ' : ''}${settings.whatsapp.trim()}`
+      : null,
+  ].filter(Boolean) as string[];
   return [...new Set(lines)];
 }
 

@@ -715,8 +715,10 @@ model BusinessSettings {
   businessName      String      @default("Usman Mall")
   tagline           String      @default("Quality Clothes, Your Style")
   ownerName         String      @default("")
-  phone             String      @default("M Arslan 03024979697")
-  whatsapp          String      @default("M Usman 03006195469")
+  phoneLabel        String      @default("M Arslan")
+  phone             String      @default("03024979697")
+  whatsappLabel     String      @default("M Usman")
+  whatsapp          String      @default("03006195469")
   address           String      @default("Bano Bazar Al Nissa Road Near Taleem Un Nisa Madrasa Chishtian")
   invoiceFooter     String      @default("Thank you for shopping at Usman Mall")
   returnPolicy      String      @default("Returns accepted within 7 days with original receipt. Items must be unused and in original condition.")
@@ -744,4 +746,20 @@ model BusinessSettings {
   releaseMarker       String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
+}
+
+/// Developer-defined thermal label sizes (alongside hardcoded BARCODE_LABEL_PRESETS).
+model CustomLabelPreset {
+  id           Int      @id @default(autoincrement())
+  key          String   @unique
+  label        String
+  rollType     String
+  widthMm      Int
+  heightMm     Int
+  rollWidthMm  Int?
+  rollHeightMm Int?
+  rollGapMm    Int?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
 }

@@ -120,6 +120,7 @@ export type DashboardPayload = FinancialSummary & {
     sku: string;
     currentStock: number;
     lowStockLimit: number;
+    variantLabel: string | null;
   }[];
   topSellingProducts: {
     productId: number;
@@ -591,15 +592,24 @@ async function getLowStockThreshold(): Promise<number> {
 async function getStockCounts(): Promise<{ lowStockCount: number; outOfStockCount: number }> {
   const threshold = await getLowStockThreshold();
   const products = await prisma.product.findMany({
-    select: { currentStock: true, lowStockLimit: true },
+    select: {
+      currentStock: true,
+      lowStockLimit: true,
+      variants: { select: { currentStock: true } },
+    },
   });
   let lowStockCount = 0;
   let outOfStockCount = 0;
   for (const p of products) {
     const limit = p.lowStockLimit ?? threshold;
-    if (p.currentStock <= 0) outOfStockCount++;
-    // Low-stock alerts include out-of-stock (≤ limit, including 0).
-    if (p.currentStock <= limit) lowStockCount++;
+    if (p.variants.length > 0) {
+      if (p.variants.some((v) => v.currentStock <= 0)) outOfStockCount++;
+      // Low-stock alerts include out-of-stock (≤ limit, including 0).
+      if (p.variants.some((v) => v.currentStock <= limit)) lowStockCount++;
+    } else {
+      if (p.currentStock <= 0) outOfStockCount++;
+      if (p.currentStock <= limit) lowStockCount++;
+    }
   }
   return { lowStockCount, outOfStockCount };
 }
@@ -652,21 +662,56 @@ async function getRecentExpenses(limit = 8) {
 async function getLowStockProducts(limit = 15) {
   const threshold = await getLowStockThreshold();
   const products = await prisma.product.findMany({
-    select: { id: true, name: true, sku: true, currentStock: true, lowStockLimit: true },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      currentStock: true,
+      lowStockLimit: true,
+      variants: { select: { size: true, colour: true, currentStock: true } },
+    },
     orderBy: { currentStock: 'asc' },
     take: 200,
   });
-  // Include out-of-stock (0) and anything ≤ product/global low-stock limit.
-  return products
-    .filter((p) => p.currentStock <= (p.lowStockLimit ?? threshold))
-    .slice(0, limit)
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      sku: p.sku,
-      currentStock: p.currentStock,
-      lowStockLimit: p.lowStockLimit ?? threshold,
-    }));
+
+  type LowRow = {
+    id: number;
+    name: string;
+    sku: string;
+    currentStock: number;
+    lowStockLimit: number;
+    variantLabel: string | null;
+  };
+  const rows: LowRow[] = [];
+
+  for (const p of products) {
+    const lowStockLimit = p.lowStockLimit ?? threshold;
+    if (p.variants.length > 0) {
+      for (const v of p.variants) {
+        if (v.currentStock > lowStockLimit) continue;
+        const variantLabel = [v.size, v.colour].filter(Boolean).join('/') || null;
+        rows.push({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          currentStock: v.currentStock,
+          lowStockLimit,
+          variantLabel,
+        });
+      }
+    } else if (p.currentStock <= lowStockLimit) {
+      rows.push({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        currentStock: p.currentStock,
+        lowStockLimit,
+        variantLabel: null,
+      });
+    }
+  }
+
+  return rows.sort((a, b) => a.currentStock - b.currentStock).slice(0, limit);
 }
 
 async function getTopSellingProducts(from: Date | null, to: Date | null, limit = 5) {

@@ -15,8 +15,10 @@ export const DEFAULT_BUSINESS_SETTINGS = {
   businessName: 'Usman Mall',
   tagline: 'Quality Clothes, Your Style',
   ownerName: '',
-  phone: 'M Arslan 03024979697',
-  whatsapp: 'M Usman 03006195469',
+  phoneLabel: 'M Arslan',
+  phone: '03024979697',
+  whatsappLabel: 'M Usman',
+  whatsapp: '03006195469',
   address: 'Bano Bazar Al Nissa Road Near Taleem Un Nisa Madrasa Chishtian',
   invoiceFooter: 'Thank you for shopping at Usman Mall',
   returnPolicy:
@@ -40,11 +42,25 @@ const LEGACY_ADDRESS = 'Al-Nisa Road, Chishtian';
 const LEGACY_PHONE = '0300-6195469';
 const LEGACY_CREDIT = 'AS Solutions — Ali & Shahbaz — 0322-0726006';
 
+/** Split "Name 0300…" contact strings into label + number. */
+function splitContactNameFromNumber(raw: string): { label: string; number: string } | null {
+  const value = raw.trim();
+  if (!/[A-Za-z]/.test(value)) return null;
+  const match = /^(.*?)\s*([\d+\-\s()]{7,20})$/.exec(value);
+  if (!match) return null;
+  return {
+    label: (match[1] ?? '').trim(),
+    number: (match[2] ?? value).trim(),
+  };
+}
+
 export type BusinessSettingsUpdateInput = {
   businessName?: string;
   tagline?: string;
   ownerName?: string;
+  phoneLabel?: string;
   phone?: string;
+  whatsappLabel?: string;
   whatsapp?: string;
   address?: string;
   invoiceFooter?: string;
@@ -125,6 +141,24 @@ export async function ensureBusinessSettings() {
     if (existing.phone.trim() === LEGACY_PHONE) {
       patch.phone = DEFAULT_BUSINESS_SETTINGS.phone;
       patch.whatsapp = DEFAULT_BUSINESS_SETTINGS.whatsapp;
+      patch.phoneLabel = DEFAULT_BUSINESS_SETTINGS.phoneLabel;
+      patch.whatsappLabel = DEFAULT_BUSINESS_SETTINGS.whatsappLabel;
+    }
+    const phoneSplit = splitContactNameFromNumber(existing.phone);
+    if (phoneSplit) {
+      patch.phone = phoneSplit.number;
+      patch.phoneLabel =
+        phoneSplit.label ||
+        (existing as { phoneLabel?: string }).phoneLabel ||
+        DEFAULT_BUSINESS_SETTINGS.phoneLabel;
+    }
+    const whatsappSplit = splitContactNameFromNumber(existing.whatsapp);
+    if (whatsappSplit) {
+      patch.whatsapp = whatsappSplit.number;
+      patch.whatsappLabel =
+        whatsappSplit.label ||
+        (existing as { whatsappLabel?: string }).whatsappLabel ||
+        DEFAULT_BUSINESS_SETTINGS.whatsappLabel;
     }
     if (existing.developerCreditLine.trim() === LEGACY_CREDIT || /[\u2014\u2013]/.test(existing.developerCreditLine)) {
       patch.developerCreditLine = DEFAULT_BUSINESS_SETTINGS.developerCreditLine;
@@ -173,7 +207,9 @@ export async function updateBusinessSettings(
   if (input.businessName !== undefined) data.businessName = input.businessName.trim();
   if (input.tagline !== undefined) data.tagline = input.tagline.trim();
   if (input.ownerName !== undefined) data.ownerName = input.ownerName.trim();
+  if (input.phoneLabel !== undefined) data.phoneLabel = input.phoneLabel.trim();
   if (input.phone !== undefined) data.phone = input.phone.trim();
+  if (input.whatsappLabel !== undefined) data.whatsappLabel = input.whatsappLabel.trim();
   if (input.whatsapp !== undefined) data.whatsapp = input.whatsapp.trim();
   if (input.address !== undefined) data.address = input.address.trim();
   if (input.invoiceFooter !== undefined) data.invoiceFooter = input.invoiceFooter.trim();
@@ -190,7 +226,7 @@ export async function updateBusinessSettings(
     if (!isValidBarcodeLabelSize(normalized)) {
       throw new AppError(
         400,
-        'Barcode label size must be a preset (40x30, 50x25, 50x30, a4) or custom WxH in mm',
+        'Barcode label size must be a preset (58x40, 33x23, 40x30, 50x25, 50x30, a4) or custom WxH in mm',
       );
     }
     data.barcodeLabelSize = normalized;

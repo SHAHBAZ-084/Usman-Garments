@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   FieldLabel,
@@ -14,7 +14,7 @@ import { DEFAULT_DEVELOPER_CREDIT_LINE } from '../../config/printCredit';
 import { PROTECTED_SETTINGS_FIELD_KEYS } from '../../config/protectedSettingsFields';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAccessComboListener } from '../../hooks/useAccessComboListener';
-import { api, type BusinessSettings } from '../../lib/api';
+import { api, type BusinessSettings, type CustomLabelPreset } from '../../lib/api';
 import {
   contrastingTextColor,
   DEFAULT_PRIMARY_COLOR,
@@ -22,12 +22,17 @@ import {
   normalizeHexColor,
 } from '../../lib/brandColors';
 
+const HARDCODED_LABEL_KEYS = ['58x40', '33x23', '40x30', '50x25', '50x30', 'a4'] as const;
+const FREE_CUSTOM_SIZE_RE = /^(\d{2,3})x(\d{2,3})$/i;
+
 const emptyForm = {
   businessName: 'Usman Mall',
   tagline: 'Quality Clothes, Your Style',
   ownerName: '',
-  phone: 'M Arslan 03024979697',
-  whatsapp: 'M Usman 03006195469',
+  phoneLabel: 'M Arslan',
+  phone: '03024979697',
+  whatsappLabel: 'M Usman',
+  whatsapp: '03006195469',
   address: 'Bano Bazar Al Nissa Road Near Taleem Un Nisa Madrasa Chishtian',
   developerCreditLine: DEFAULT_DEVELOPER_CREDIT_LINE,
   invoiceFooter: 'Thank you for shopping at Usman Mall',
@@ -66,6 +71,31 @@ export function SettingsPage() {
   const [themeDraftPrimary, setThemeDraftPrimary] = useState(DEFAULT_PRIMARY_COLOR);
   const [themeDraftSecondary, setThemeDraftSecondary] = useState(DEFAULT_SECONDARY_COLOR);
   const [themeBusy, setThemeBusy] = useState(false);
+  const [customLabelPresets, setCustomLabelPresets] = useState<CustomLabelPreset[]>([]);
+  const [presetRollType, setPresetRollType] = useState('');
+  const [presetWidthMm, setPresetWidthMm] = useState('33');
+  const [presetHeightMm, setPresetHeightMm] = useState('23');
+  const [presetRollWidthMm, setPresetRollWidthMm] = useState('');
+  const [presetRollHeightMm, setPresetRollHeightMm] = useState('');
+  const [presetRollGapMm, setPresetRollGapMm] = useState('');
+  const [presetBusy, setPresetBusy] = useState(false);
+
+  const knownLabelKeys = useMemo(
+    () => [...HARDCODED_LABEL_KEYS, ...customLabelPresets.map((p) => p.key)],
+    [customLabelPresets],
+  );
+  const isFreeCustomSize =
+    !knownLabelKeys.includes(form.barcodeLabelSize) &&
+    FREE_CUSTOM_SIZE_RE.test(form.barcodeLabelSize);
+
+  const refreshCustomLabelPresets = useCallback(async () => {
+    try {
+      const rows = await api.listCustomLabelPresets();
+      setCustomLabelPresets(rows);
+    } catch {
+      setCustomLabelPresets([]);
+    }
+  }, []);
 
   const refreshAccessStatus = useCallback(async () => {
     try {
@@ -156,7 +186,9 @@ export function SettingsPage() {
           businessName: settings.businessName,
           tagline: settings.tagline,
           ownerName: settings.ownerName,
+          phoneLabel: settings.phoneLabel ?? '',
           phone: settings.phone,
+          whatsappLabel: settings.whatsappLabel ?? '',
           whatsapp: settings.whatsapp,
           address: settings.address,
           developerCreditLine: settings.developerCreditLine || DEFAULT_DEVELOPER_CREDIT_LINE,
@@ -177,6 +209,7 @@ export function SettingsPage() {
         setThemeDraftPrimary(settings.primaryColor || DEFAULT_PRIMARY_COLOR);
         setThemeDraftSecondary(settings.secondaryColor || DEFAULT_SECONDARY_COLOR);
         setLogoUrl(settings.logoUrl);
+        await refreshCustomLabelPresets();
         if (settings.themeMode !== theme) {
           await refreshThemeFromServer();
         } else {
@@ -235,7 +268,9 @@ export function SettingsPage() {
         businessName: saved.businessName,
         tagline: saved.tagline,
         ownerName: saved.ownerName,
+        phoneLabel: saved.phoneLabel ?? '',
         phone: saved.phone,
+        whatsappLabel: saved.whatsappLabel ?? '',
         whatsapp: saved.whatsapp,
         address: saved.address,
         developerCreditLine: saved.developerCreditLine || DEFAULT_DEVELOPER_CREDIT_LINE,
@@ -265,6 +300,82 @@ export function SettingsPage() {
       setError(err instanceof Error ? err.message : 'Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function addCustomLabelPreset() {
+    setError('');
+    setMessage('');
+    const rollType = presetRollType.trim();
+    const widthMm = Number(presetWidthMm);
+    const heightMm = Number(presetHeightMm);
+    if (!rollType) {
+      setError('Roll type / name is required');
+      return;
+    }
+    if (!Number.isInteger(widthMm) || widthMm < 10 || widthMm > 200) {
+      setError('Print width must be an integer between 10 and 200 mm');
+      return;
+    }
+    if (!Number.isInteger(heightMm) || heightMm < 10 || heightMm > 200) {
+      setError('Print height must be an integer between 10 and 200 mm');
+      return;
+    }
+
+    const optionalInt = (raw: string, label: string, min: number, max: number) => {
+      const t = raw.trim();
+      if (t === '') return undefined;
+      const n = Number(t);
+      if (!Number.isInteger(n) || n < min || n > max) {
+        throw new Error(`${label} must be an integer between ${min} and ${max} mm`);
+      }
+      return n;
+    };
+
+    setPresetBusy(true);
+    try {
+      const rollWidthMm = optionalInt(presetRollWidthMm, 'Roll width', 10, 200);
+      const rollHeightMm = optionalInt(presetRollHeightMm, 'Roll height', 10, 200);
+      const rollGapMm = optionalInt(presetRollGapMm, 'Roll gap', 0, 20);
+      const created = await api.createCustomLabelPreset({
+        rollType,
+        widthMm,
+        heightMm,
+        ...(rollWidthMm !== undefined ? { rollWidthMm } : {}),
+        ...(rollHeightMm !== undefined ? { rollHeightMm } : {}),
+        ...(rollGapMm !== undefined ? { rollGapMm } : {}),
+      });
+      await refreshCustomLabelPresets();
+      patchField('barcodeLabelSize', created.key);
+      setPresetRollType('');
+      setPresetWidthMm('33');
+      setPresetHeightMm('23');
+      setPresetRollWidthMm('');
+      setPresetRollHeightMm('');
+      setPresetRollGapMm('');
+      setMessage(`Added label preset: ${created.label}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add label preset');
+    } finally {
+      setPresetBusy(false);
+    }
+  }
+
+  async function removeCustomLabelPreset(preset: CustomLabelPreset) {
+    if (!window.confirm(`Delete label preset “${preset.label}”?`)) return;
+    setPresetBusy(true);
+    setError('');
+    try {
+      await api.deleteCustomLabelPreset(preset.id);
+      await refreshCustomLabelPresets();
+      if (form.barcodeLabelSize === preset.key) {
+        patchField('barcodeLabelSize', '58x40');
+      }
+      setMessage(`Deleted label preset: ${preset.label}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete label preset');
+    } finally {
+      setPresetBusy(false);
     }
   }
 
@@ -401,13 +512,41 @@ export function SettingsPage() {
                   <FieldLabel>Owner name</FieldLabel>
                   <TextInput value={form.ownerName} onChange={(e) => patchField('ownerName', e.target.value)} />
                 </div>
-                <div>
-                  <FieldLabel>Phone</FieldLabel>
-                  <TextInput value={form.phone} onChange={(e) => patchField('phone', e.target.value)} />
+                <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel>Phone contact name</FieldLabel>
+                    <TextInput
+                      value={form.phoneLabel}
+                      onChange={(e) => patchField('phoneLabel', e.target.value)}
+                      placeholder="e.g. M Arslan"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>Phone number</FieldLabel>
+                    <TextInput
+                      value={form.phone}
+                      onChange={(e) => patchField('phone', e.target.value)}
+                      placeholder="03024979697"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <FieldLabel>WhatsApp</FieldLabel>
-                  <TextInput value={form.whatsapp} onChange={(e) => patchField('whatsapp', e.target.value)} />
+                <div className="sm:col-span-2 grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <FieldLabel>WhatsApp contact name</FieldLabel>
+                    <TextInput
+                      value={form.whatsappLabel}
+                      onChange={(e) => patchField('whatsappLabel', e.target.value)}
+                      placeholder="e.g. M Usman"
+                    />
+                  </div>
+                  <div>
+                    <FieldLabel>WhatsApp number</FieldLabel>
+                    <TextInput
+                      value={form.whatsapp}
+                      onChange={(e) => patchField('whatsapp', e.target.value)}
+                      placeholder="03006195469"
+                    />
+                  </div>
                 </div>
                 <div className="sm:col-span-2">
                   <FieldLabel>Address</FieldLabel>
@@ -589,28 +728,35 @@ export function SettingsPage() {
                 <select
                   className="w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
                   value={
-                    ['58x40', '40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize)
+                    knownLabelKeys.includes(form.barcodeLabelSize)
                       ? form.barcodeLabelSize
                       : 'custom'
                   }
                   onChange={(e) => {
                     if (e.target.value === 'custom') {
                       const current = form.barcodeLabelSize;
-                      const isPreset = ['58x40', '40x30', '50x25', '50x30', 'a4'].includes(current);
-                      patchField('barcodeLabelSize', isPreset ? '58x40' : current);
+                      const keepFree =
+                        FREE_CUSTOM_SIZE_RE.test(current) && !knownLabelKeys.includes(current);
+                      patchField('barcodeLabelSize', keepFree ? current : '60x40');
                     } else {
                       patchField('barcodeLabelSize', e.target.value);
                     }
                   }}
                 >
                   <option value="58x40">58 × 40 mm (sticker roll)</option>
+                  <option value="33x23">33 × 23 mm (short roll)</option>
                   <option value="40x30">40 × 30 mm (thermal)</option>
                   <option value="50x25">50 × 25 mm (thermal)</option>
                   <option value="50x30">50 × 30 mm (thermal)</option>
                   <option value="a4">A4 sheet (grid)</option>
+                  {customLabelPresets.map((preset) => (
+                    <option key={preset.key} value={preset.key}>
+                      {preset.label}
+                    </option>
+                  ))}
                   <option value="custom">Custom size…</option>
                 </select>
-                {!['58x40', '40x30', '50x25', '50x30', 'a4'].includes(form.barcodeLabelSize) ? (
+                {isFreeCustomSize ? (
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <div>
                       <FieldLabel>Width (mm)</FieldLabel>
@@ -646,6 +792,114 @@ export function SettingsPage() {
                   Default size for bulk and single label printing. Override per print if needed.
                 </p>
               </div>
+              {identityEditActive ? (
+                <div className="sm:col-span-2 space-y-3 rounded-lg border border-amber-500/40 bg-amber-500/5 p-3">
+                  <h3 className="text-sm font-semibold text-textPrimary">
+                    Add custom label size (developer)
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <FieldLabel>Roll type / name</FieldLabel>
+                      <TextInput
+                        value={presetRollType}
+                        onChange={(e) => setPresetRollType(e.target.value)}
+                        placeholder="e.g. Short roll, Thermal, Sticker roll"
+                        maxLength={40}
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Print width (mm)</FieldLabel>
+                      <TextInput
+                        type="number"
+                        min={10}
+                        max={200}
+                        step={1}
+                        value={presetWidthMm}
+                        onChange={(e) => setPresetWidthMm(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Print height (mm)</FieldLabel>
+                      <TextInput
+                        type="number"
+                        min={10}
+                        max={200}
+                        step={1}
+                        value={presetHeightMm}
+                        onChange={(e) => setPresetHeightMm(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Roll width (mm)</FieldLabel>
+                      <TextInput
+                        type="number"
+                        min={10}
+                        max={200}
+                        step={1}
+                        value={presetRollWidthMm}
+                        onChange={(e) => setPresetRollWidthMm(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Roll height (mm)</FieldLabel>
+                      <TextInput
+                        type="number"
+                        min={10}
+                        max={200}
+                        step={1}
+                        value={presetRollHeightMm}
+                        onChange={(e) => setPresetRollHeightMm(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div>
+                      <FieldLabel>Gap between labels (mm)</FieldLabel>
+                      <TextInput
+                        type="number"
+                        min={0}
+                        max={20}
+                        step={1}
+                        value={presetRollGapMm}
+                        onChange={(e) => setPresetRollGapMm(e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <SecondaryButton
+                      type="button"
+                      disabled={presetBusy}
+                      onClick={() => void addCustomLabelPreset()}
+                    >
+                      {presetBusy ? 'Saving…' : 'Add preset'}
+                    </SecondaryButton>
+                  </div>
+                  <p className="text-xs text-textMuted">
+                    Saved presets appear in the Barcode label size dropdown immediately, no app
+                    update needed.
+                  </p>
+                  {customLabelPresets.length > 0 ? (
+                    <ul className="space-y-2 border-t border-border/60 pt-3">
+                      {customLabelPresets.map((preset) => (
+                        <li
+                          key={preset.id}
+                          className="flex items-center justify-between gap-2 text-sm"
+                        >
+                          <span className="min-w-0 truncate text-textPrimary">{preset.label}</span>
+                          <SecondaryButton
+                            type="button"
+                            disabled={presetBusy}
+                            onClick={() => void removeCustomLabelPreset(preset)}
+                          >
+                            Delete
+                          </SecondaryButton>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </Tile>
 

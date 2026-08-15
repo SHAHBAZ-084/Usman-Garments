@@ -4,16 +4,18 @@ import { createPortal } from 'react-dom';
 import {
   a4GridColumns,
   a4GridRows,
-  BARCODE_LABEL_PRESETS,
   DEFAULT_BARCODE_LABEL_SIZE,
   expandLabelCopies,
+  mergeLabelPresets,
   parseLabelSize,
+  parsedSizeFromPreset,
   STICKER_LABEL_HEIGHT_MM,
   STICKER_LABEL_WIDTH_MM,
   type ParsedLabelSize,
 } from '../../lib/barcodeLabels';
 import { LABEL_58X40_MICRONS, printHtmlDocument, type ElectronPrintResult } from '../../lib/electronPrint';
 import { formatMoney } from '../../lib/format';
+import { api, type CustomLabelPreset } from '../../lib/api';
 import { shortcutLabel } from '../../lib/shortcuts';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
 import { FieldLabel, PrimaryButton, SecondaryButton } from '../ui/PageShell';
@@ -363,6 +365,8 @@ function escapeHtml(text: string): string {
 
 export type PrintLabelsOptions = {
   labelSizeKey?: string;
+  /** Prefer this when printing a DB custom preset (parseLabelSize only knows hardcoded keys). */
+  resolvedSize?: ParsedLabelSize;
   creditLine?: string;
   labelLayout?: LabelLayoutKey;
   printerName?: string | null;
@@ -388,7 +392,7 @@ export async function printBarcodeLabels(
           labelLayout,
         };
 
-  const size = parseLabelSize(options.labelSizeKey);
+  const size = options.resolvedSize ?? parseLabelSize(options.labelSizeKey);
   const layout = options.labelLayout ?? 'standard';
   const html = buildPrintHtml(items, size, options.creditLine ?? '', layout);
   const isSticker = size.mode === 'thermal';
@@ -426,13 +430,40 @@ export function BarcodeLabelModal({
   printerName?: string | null;
 }) {
   const [sizeKey, setSizeKey] = useState(labelSizeKey ?? DEFAULT_BARCODE_LABEL_SIZE);
+  const [customPresets, setCustomPresets] = useState<CustomLabelPreset[]>([]);
   const [labelLayout, setLabelLayout] = useState<LabelLayoutKey>('standard');
   const [quantities, setQuantities] = useState<Record<string, number>>(() =>
     Object.fromEntries(items.map((item) => [item.key, Math.max(1, Math.min(99, item.defaultQty ?? 1))])),
   );
   const [printing, setPrinting] = useState(false);
   const [printMessage, setPrintMessage] = useState('');
-  const size = useMemo(() => parseLabelSize(sizeKey), [sizeKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .listCustomLabelPresets()
+      .then((rows) => {
+        if (!cancelled) setCustomPresets(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setCustomPresets([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const allPresets = useMemo(() => mergeLabelPresets(customPresets), [customPresets]);
+
+  const size = useMemo((): ParsedLabelSize => {
+    const fromMerged = allPresets.find((p) => p.key === sizeKey);
+    if (fromMerged) return parsedSizeFromPreset(fromMerged);
+    return parseLabelSize(sizeKey);
+  }, [allPresets, sizeKey]);
+
+  const bannerRollWidthMm = size.rollWidthMm ?? STICKER_LABEL_WIDTH_MM;
+  const bannerRollHeightMm = size.rollHeightMm ?? STICKER_LABEL_HEIGHT_MM;
+  const bannerRollGapMm = size.rollGapMm ?? 3;
   const printable = useMemo(
     () => (allowQuantityEdit ? expandLabelCopies(items, quantities) : items),
     [allowQuantityEdit, items, quantities],
@@ -450,6 +481,7 @@ export function BarcodeLabelModal({
     try {
       const result = await printBarcodeLabels(list, {
         labelSizeKey: sizeKey,
+        resolvedSize: size,
         creditLine,
         labelLayout,
         printerName,
@@ -516,8 +548,9 @@ export function BarcodeLabelModal({
             {size.mode === 'thermal' ? ' · one sticker per page' : ''}
           </p>
           <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-950 dark:text-amber-100">
-            Sticker roll: set Windows printer to gap/label sensing for {STICKER_LABEL_WIDTH_MM}×
-            {STICKER_LABEL_HEIGHT_MM} mm. Qty 1 = 1 sticker, qty 5 = 5 stickers (separate pages).
+            Sticker roll: set Windows printer to gap/label sensing for {bannerRollWidthMm}×
+            {bannerRollHeightMm} mm (gap {bannerRollGapMm}mm). Print area {size.widthMm}×
+            {size.heightMm}mm. Qty 1 = 1 sticker, qty 5 = 5 stickers (separate pages).
           </p>
           {printMessage ? (
             <p className="mt-2 text-xs font-medium text-textSecondary">{printMessage}</p>
@@ -572,18 +605,18 @@ export function BarcodeLabelModal({
               <select
                 className="mt-1 w-full rounded-lg border border-border bg-surface2 px-3 py-2 text-sm"
                 value={
-                  BARCODE_LABEL_PRESETS.some((p) => p.key === sizeKey) || size.isCustom
+                  allPresets.some((p) => p.key === sizeKey) || size.isCustom
                     ? sizeKey
                     : DEFAULT_BARCODE_LABEL_SIZE
                 }
                 onChange={(event) => setSizeKey(event.target.value)}
               >
-                {BARCODE_LABEL_PRESETS.map((preset) => (
+                {allPresets.map((preset) => (
                   <option key={preset.key} value={preset.key}>
                     {preset.label}
                   </option>
                 ))}
-                {size.isCustom && !BARCODE_LABEL_PRESETS.some((p) => p.key === sizeKey) ? (
+                {size.isCustom && !allPresets.some((p) => p.key === sizeKey) ? (
                   <option value={sizeKey}>{size.label}</option>
                 ) : null}
               </select>

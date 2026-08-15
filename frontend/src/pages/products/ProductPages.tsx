@@ -442,6 +442,7 @@ function ProductListRow({
                     <th className="text-right">Purchase</th>
                     <th className="text-right">Stock</th>
                     <th className="text-right">Damaged</th>
+                    <th>Status</th>
                     <th>Barcode / Product Code</th>
                   </tr>
                 </thead>
@@ -460,6 +461,19 @@ function ProductListRow({
                       </td>
                       <td className="text-right">{variant.currentStock}</td>
                       <td className="text-right">{(variant.damagedStock ?? 0) > 0 ? variant.damagedStock : '—'}</td>
+                      <td>
+                        {variant.isOutOfStock || variant.currentStock <= 0 ? (
+                          <span className="rounded bg-surface1 px-1.5 py-0.5 text-xs text-textMuted">
+                            Out of stock
+                          </span>
+                        ) : variant.isLowStock ? (
+                          <span className="rounded bg-bgDanger px-1.5 py-0.5 text-xs text-danger">
+                            Low stock
+                          </span>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
                       <td className="font-mono text-xs">{variant.barcode ?? '—'} / {variant.productCode}</td>
                     </tr>
                   ))}

@@ -10,7 +10,9 @@ export type BusinessSettings = {
   businessName: string;
   tagline: string;
   ownerName: string;
+  phoneLabel?: string;
   phone: string;
+  whatsappLabel?: string;
   whatsapp: string;
   address: string;
   invoiceFooter: string;
@@ -31,6 +33,19 @@ export type BusinessSettings = {
   developerCreditLine: string;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CustomLabelPreset = {
+  id: number;
+  key: string;
+  label: string;
+  rollType: string;
+  widthMm: number;
+  heightMm: number;
+  rollWidthMm: number | null;
+  rollHeightMm: number | null;
+  rollGapMm: number | null;
+  createdAt: string;
 };
 
 export type AccountCategory = {
@@ -178,6 +193,28 @@ export const api = {
     return request<{ ok: boolean }>('/api/settings/identity-access/passphrase', {
       method: 'POST',
       body: JSON.stringify({ currentPassphrase, newPassphrase }),
+    });
+  },
+
+  listCustomLabelPresets() {
+    return request<CustomLabelPreset[]>('/api/settings/custom-label-presets');
+  },
+  createCustomLabelPreset(input: {
+    rollType: string;
+    widthMm: number;
+    heightMm: number;
+    rollWidthMm?: number;
+    rollHeightMm?: number;
+    rollGapMm?: number;
+  }) {
+    return request<CustomLabelPreset>('/api/settings/custom-label-presets', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+  deleteCustomLabelPreset(id: number) {
+    return request<CustomLabelPreset>(`/api/settings/custom-label-presets/${id}`, {
+      method: 'DELETE',
     });
   },
 
@@ -779,6 +816,8 @@ export type ProductVariant = {
   salePrice: number | null;
   currentStock: number;
   damagedStock?: number;
+  isLowStock?: boolean;
+  isOutOfStock?: boolean;
 };
 
 export type Product = {
@@ -1411,6 +1450,7 @@ export type DashboardPayload = FinancialSummary & {
     sku: string;
     currentStock: number;
     lowStockLimit: number;
+    variantLabel?: string | null;
   }>;
   topSellingProducts: Array<{
     productId: number;

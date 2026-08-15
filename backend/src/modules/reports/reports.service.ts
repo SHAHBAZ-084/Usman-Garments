@@ -40,6 +40,58 @@ async function getLowStockThreshold() {
   return settings?.lowStockLimit ?? 5;
 }
 
+type StockAlertRow = {
+  id: number;
+  name: string;
+  sku: string;
+  barcode: string | null;
+  categoryName: string | null;
+  currentStock: number;
+  lowStockLimit: number;
+  variantLabel: string | null;
+};
+
+function variantLabelOf(v: { size: string | null; colour: string | null }): string | null {
+  const label = [v.size, v.colour].filter(Boolean).join('/');
+  return label || null;
+}
+
+async function loadProductsForStockAlerts(search?: string) {
+  const where: Prisma.ProductWhereInput = {};
+  if (search?.trim()) {
+    const q = search.trim();
+    where.OR = [
+      { name: { contains: q } },
+      { sku: { contains: q } },
+      { barcode: { contains: q } },
+      {
+        variants: {
+          some: {
+            OR: [{ sku: { contains: q } }, { barcode: { contains: q } }],
+          },
+        },
+      },
+    ];
+  }
+
+  return prisma.product.findMany({
+    where,
+    orderBy: { name: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      sku: true,
+      barcode: true,
+      currentStock: true,
+      lowStockLimit: true,
+      category: { select: { name: true } },
+      variants: {
+        select: { size: true, colour: true, currentStock: true, sku: true, barcode: true },
+      },
+    },
+  });
+}
+
 // ─── Sales reports ───────────────────────────────────────────────────────────
 
 export async function reportDailySales(params: {
@@ -475,25 +527,95 @@ export async function reportCurrentStock(params: {
 
 export async function reportLowStock(params: { page?: number; pageSize?: number; search?: string }) {
   const threshold = await getLowStockThreshold();
-  const all = await reportCurrentStock({ ...params, pageSize: 500, page: 1 });
-  const filtered = all.items.filter((p) => p.currentStock <= threshold);
+  const products = await loadProductsForStockAlerts(params.search);
+  const rows: StockAlertRow[] = [];
+
+  for (const p of products) {
+    const limit = p.lowStockLimit ?? threshold;
+    if (p.variants.length > 0) {
+      for (const v of p.variants) {
+        // Match dashboard: anything at or below limit (includes out of stock).
+        if (v.currentStock > limit) continue;
+        rows.push({
+          id: p.id,
+          name: p.name,
+          sku: v.sku || p.sku,
+          barcode: v.barcode ?? p.barcode,
+          categoryName: p.category?.name ?? null,
+          currentStock: v.currentStock,
+          lowStockLimit: limit,
+          variantLabel: variantLabelOf(v),
+        });
+      }
+    } else if (p.currentStock <= limit) {
+      rows.push({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        barcode: p.barcode,
+        categoryName: p.category?.name ?? null,
+        currentStock: p.currentStock,
+        lowStockLimit: limit,
+        variantLabel: null,
+      });
+    }
+  }
+
+  rows.sort((a, b) => a.currentStock - b.currentStock || a.name.localeCompare(b.name));
   const { page, pageSize } = paginateParams(params.page, params.pageSize);
-  const result = paginated(filtered, page, pageSize);
+  const result = paginated(rows, page, pageSize);
   return {
     ...result,
     lowStockLimit: threshold,
     emptyMessage:
-      filtered.length === 0
-        ? `Nothing is low stock. No products are at or below your limit of ${threshold}.`
+      rows.length === 0
+        ? `Nothing is low stock. No products or variants are at or below your limit of ${threshold}.`
         : undefined,
   };
 }
 
 export async function reportOutOfStock(params: { page?: number; pageSize?: number; search?: string }) {
-  const all = await reportCurrentStock({ ...params, pageSize: 500, page: 1 });
-  const filtered = all.items.filter((p) => p.currentStock <= 0);
+  const threshold = await getLowStockThreshold();
+  const products = await loadProductsForStockAlerts(params.search);
+  const rows: StockAlertRow[] = [];
+
+  for (const p of products) {
+    const limit = p.lowStockLimit ?? threshold;
+    if (p.variants.length > 0) {
+      for (const v of p.variants) {
+        if (v.currentStock > 0) continue;
+        rows.push({
+          id: p.id,
+          name: p.name,
+          sku: v.sku || p.sku,
+          barcode: v.barcode ?? p.barcode,
+          categoryName: p.category?.name ?? null,
+          currentStock: v.currentStock,
+          lowStockLimit: limit,
+          variantLabel: variantLabelOf(v),
+        });
+      }
+    } else if (p.currentStock <= 0) {
+      rows.push({
+        id: p.id,
+        name: p.name,
+        sku: p.sku,
+        barcode: p.barcode,
+        categoryName: p.category?.name ?? null,
+        currentStock: p.currentStock,
+        lowStockLimit: limit,
+        variantLabel: null,
+      });
+    }
+  }
+
+  rows.sort((a, b) => a.name.localeCompare(b.name));
   const { page, pageSize } = paginateParams(params.page, params.pageSize);
-  return paginated(filtered, page, pageSize);
+  const result = paginated(rows, page, pageSize);
+  return {
+    ...result,
+    emptyMessage: rows.length === 0 ? 'Nothing is out of stock.' : undefined,
+  };
 }
 
 export async function reportDamagedStock(params: {

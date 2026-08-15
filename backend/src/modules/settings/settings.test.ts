@@ -80,6 +80,9 @@ describe('business settings', () => {
     const thermal = await updateBusinessSettings({ barcodeLabelSize: '40x30' });
     expect(thermal.barcodeLabelSize).toBe('40x30');
 
+    const shortRoll = await updateBusinessSettings({ barcodeLabelSize: '33x23' });
+    expect(shortRoll.barcodeLabelSize).toBe('33x23');
+
     const custom = await updateBusinessSettings({ barcodeLabelSize: '60x40' });
     expect(custom.barcodeLabelSize).toBe('60x40');
 

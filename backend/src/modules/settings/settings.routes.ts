@@ -6,6 +6,7 @@ import { requireAuth } from '../../middleware/auth';
 import { asyncHandler, validateBody, AppError } from '../../utils/helpers';
 import * as settingsService from './settings.service';
 import * as identityAccess from './identity-access.service';
+import * as customLabelPresets from './custom-label-presets.service';
 
 export const settingsRouter = Router();
 
@@ -20,6 +21,7 @@ const updateSchema = z.object({
   businessName: z.string().min(1).max(120).optional(),
   tagline: z.string().max(200).optional(),
   ownerName: z.string().max(120).optional(),
+  phoneLabel: z.string().max(60).optional(),
   phone: z
     .string()
     .max(20)
@@ -27,6 +29,7 @@ const updateSchema = z.object({
       message: 'Invalid phone number',
     })
     .optional(),
+  whatsappLabel: z.string().max(60).optional(),
   whatsapp: z
     .string()
     .max(20)
@@ -169,5 +172,51 @@ settingsRouter.post(
       buffer: req.file.buffer,
     });
     res.json(settings);
+  }),
+);
+
+const createLabelPresetSchema = z.object({
+  rollType: z.string().min(1).max(40),
+  widthMm: z.number().int().min(10).max(200),
+  heightMm: z.number().int().min(10).max(200),
+  rollWidthMm: z.number().int().min(10).max(200).optional(),
+  rollHeightMm: z.number().int().min(10).max(200).optional(),
+  rollGapMm: z.number().int().min(0).max(20).optional(),
+});
+
+settingsRouter.get(
+  '/custom-label-presets',
+  asyncHandler(async (_req, res) => {
+    const presets = await customLabelPresets.listCustomLabelPresets();
+    res.json(presets);
+  }),
+);
+
+settingsRouter.post(
+  '/custom-label-presets',
+  validateBody(createLabelPresetSchema),
+  asyncHandler(async (req, res) => {
+    if (!identityAccess.isIdentityEditActive(req.session)) {
+      throw new AppError(403, 'This setting cannot be changed');
+    }
+    identityAccess.touchIdentityEditSession(req.session);
+    const preset = await customLabelPresets.createCustomLabelPreset(req.body);
+    res.status(201).json(preset);
+  }),
+);
+
+settingsRouter.delete(
+  '/custom-label-presets/:id',
+  asyncHandler(async (req, res) => {
+    if (!identityAccess.isIdentityEditActive(req.session)) {
+      throw new AppError(403, 'This setting cannot be changed');
+    }
+    identityAccess.touchIdentityEditSession(req.session);
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      throw new AppError(400, 'Invalid preset id');
+    }
+    const deleted = await customLabelPresets.deleteCustomLabelPreset(id);
+    res.json(deleted);
   }),
 );
