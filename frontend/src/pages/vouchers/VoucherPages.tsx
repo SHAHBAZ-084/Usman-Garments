@@ -385,7 +385,7 @@ export function VoucherFormPage({ kind }: { kind: keyof typeof VOUCHER_TYPES }) 
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 onFocus={(e) => e.currentTarget.select()}
-                placeholder="0.00"
+                placeholder="0"
               />
             </div>
             <div>
@@ -640,7 +640,7 @@ export function VoucherDetailCard({
                 </SecondaryButton>
               </form>
             ) : (
-              Number(voucher.amount).toFixed(2)
+              formatLedgerAmount(voucher.amount)
             )}
           </dd>
         </div>

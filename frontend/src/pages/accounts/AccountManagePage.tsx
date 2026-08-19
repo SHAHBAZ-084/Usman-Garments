@@ -154,7 +154,7 @@ export function AccountManagePage({ mode }: { mode: Mode }) {
                     step="0.01"
                     value={openingBalance}
                     onChange={(e) => setOpeningBalance(e.target.value)}
-                    placeholder="0.00 (optional)"
+                    placeholder="0 (optional)"
                   />
                 </div>
                 <div>

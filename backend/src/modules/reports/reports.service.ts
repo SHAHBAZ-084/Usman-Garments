@@ -7,7 +7,7 @@ import {
 } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { multiplyMoney, roundMoney, toNumber } from '../../utils/money';
-import { dateFilter, paginateParams, resolveDateRange, type DateRangePreset } from './date-range';
+import { dateFilter, localDateKey, paginateParams, resolveDateRange, type DateRangePreset } from './date-range';
 import {
   getFinancialSummary,
   getInvoiceWiseProfit,
@@ -128,7 +128,7 @@ export async function reportDailySales(params: {
 
   const byDay = new Map<string, typeof invoices>();
   for (const inv of invoices) {
-    const key = inv.date.toISOString().slice(0, 10);
+    const key = localDateKey(inv.date);
     const list = byDay.get(key) ?? [];
     list.push(inv);
     byDay.set(key, list);
@@ -1159,7 +1159,7 @@ export async function reportExpensesDaily(params: {
 
   const byDay = new Map<string, { total: number; count: number }>();
   for (const e of expenses) {
-    const key = e.date.toISOString().slice(0, 10);
+    const key = localDateKey(e.date);
     const cur = byDay.get(key) ?? { total: 0, count: 0 };
     cur.total += toNumber(e.amount);
     cur.count++;

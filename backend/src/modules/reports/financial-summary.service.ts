@@ -22,6 +22,7 @@ import { prisma } from '../../lib/prisma';
 import { multiplyMoney, roundMoney, sumMoney, toNumber } from '../../utils/money';
 import {
   dateFilter,
+  localDateKey,
   resolveDateRange,
   resolvePreviousDateRange,
   type DateRangePreset,
@@ -769,7 +770,7 @@ async function getSalesChart(from: Date | null, to: Date | null) {
 
   const byDay = new Map<string, { netSales: number; invoiceCount: number }>();
   for (const inv of invoices) {
-    const key = inv.date.toISOString().slice(0, 10);
+    const key = localDateKey(inv.date);
     const cur = byDay.get(key) ?? { netSales: 0, invoiceCount: 0 };
     cur.netSales += toNumber(inv.totalAmount);
     cur.invoiceCount++;
@@ -793,8 +794,8 @@ export async function getDashboardPayload(
 ): Promise<DashboardPayload> {
   const range = resolveDateRange(preset, fromDate, toDate);
   const prevRange = resolvePreviousDateRange(range);
-  const prevFrom = prevRange?.from?.toISOString().slice(0, 10);
-  const prevTo = prevRange?.to?.toISOString().slice(0, 10);
+  const prevFrom = prevRange?.from ? localDateKey(prevRange.from) : undefined;
+  const prevTo = prevRange?.to ? localDateKey(prevRange.to) : undefined;
 
   const [summary, prevSummary, purchases, stockCounts, recentSales, recentExpenses, lowStockProducts, topSellingProducts, salesChart, paymentMethodBreakdown, salesCollectionBreakdown] =
     await Promise.all([

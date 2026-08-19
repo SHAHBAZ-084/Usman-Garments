@@ -13,6 +13,7 @@ import { logger } from '../../lib/logger';
 import { prisma } from '../../lib/prisma';
 import { withWindowsSafeShellEnv } from '../../lib/shell-env';
 import { AppError } from '../../utils/helpers';
+import { localDateKey } from '../reports/date-range';
 import { getBusinessSettings } from '../settings/settings.service';
 
 export type BackupManifest = {
@@ -245,7 +246,7 @@ export async function getLastBackupInfo(): Promise<{ lastBackupAt: string | null
 }
 
 function todayKey() {
-  return new Date().toISOString().slice(0, 10);
+  return localDateKey(new Date());
 }
 
 export async function runDailyBackupIfNeeded(): Promise<BackupEntry | null> {

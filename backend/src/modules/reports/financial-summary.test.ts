@@ -14,6 +14,7 @@ import { createExpense, listExpenseCategories } from '../finance/finance.service
 import { createProduct, updateProduct } from '../products/products.service';
 import { createSaleReturn } from '../sales/returns.service';
 import { createSale } from '../sales/sales.service';
+import { localDateKey } from './date-range';
 import {
   computeChangePercent,
   getDashboardPayload,
@@ -23,6 +24,7 @@ import {
   resolveDateRange,
   resolvePreviousDateRange,
 } from './financial-summary.service';
+import { reportDailySales, reportExpensesDaily } from './reports.service';
 
 const PREFIX = 'TEST-P11-';
 
@@ -332,5 +334,74 @@ describe('Financial summary service (Phase 11)', () => {
     expect(payload.comparisons).not.toBeNull();
     expect(payload.comparisons!.netSales.current).toBe(200);
     expect(payload.paymentMethodBreakdown.some((r) => r.paymentMethod === 'CASH')).toBe(true);
+  });
+
+  it('sales/expense day buckets and chart use local calendar date, not UTC ISO', async () => {
+    const testDate = await isolatedTestDate();
+    const [y, mo, d] = testDate.split('-').map(Number);
+    const earlyLocal = new Date(y, mo - 1, d, 0, 30, 0, 0);
+    const utcKey = earlyLocal.toISOString().slice(0, 10);
+    expect(localDateKey(earlyLocal)).toBe(testDate);
+
+    const product = await createProduct({
+      name: `${PREFIX}TzBucket ${runId}`,
+      salePrice: 150,
+      purchasePrice: 60,
+      openingStock: 10,
+    });
+
+    const sale = await createSale({
+      items: [{ productId: product.id, quantity: 1, rate: 150 }],
+      paymentMethod: SalePaymentMethod.CASH,
+      paidAmount: 150,
+      date: testDate,
+      createdById: userId,
+    });
+    await prisma.invoice.update({
+      where: { id: sale.id },
+      data: { date: earlyLocal },
+    });
+
+    const categories = await listExpenseCategories();
+    const misc = categories.find((c) => c.name === 'Miscellaneous');
+    const expense = await createExpense({
+      categoryId: misc!.id,
+      date: testDate,
+      amount: 25,
+      paymentMethod: PurchasePaymentMethod.CASH,
+      description: `${PREFIX}Tz expense ${runId}`,
+      createdById: userId,
+    });
+    await prisma.expense.update({
+      where: { id: expense.id },
+      data: { date: earlyLocal },
+    });
+
+    const daily = await reportDailySales({
+      preset: 'custom',
+      fromDate: testDate,
+      toDate: testDate,
+      pageSize: 100,
+    });
+    expect(daily.items.some((r) => r.date === testDate)).toBe(true);
+    if (utcKey !== testDate) {
+      expect(daily.items.some((r) => r.date === utcKey)).toBe(false);
+    }
+
+    const expenseDaily = await reportExpensesDaily({
+      fromDate: localDateKey(new Date(y, mo - 1, d - 1)),
+      toDate: testDate,
+      pageSize: 100,
+    });
+    expect(expenseDaily.items.some((r) => r.date === testDate)).toBe(true);
+    if (utcKey !== testDate) {
+      expect(expenseDaily.items.some((r) => r.date === utcKey)).toBe(false);
+    }
+
+    const payload = await getDashboardPayload('custom', testDate, testDate);
+    expect(payload.salesChart.some((r) => r.date === testDate)).toBe(true);
+    if (utcKey !== testDate) {
+      expect(payload.salesChart.some((r) => r.date === utcKey)).toBe(false);
+    }
   });
 });

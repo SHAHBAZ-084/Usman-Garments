@@ -17,6 +17,16 @@ function endOfDay(d: Date): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999);
 }
 
+/** Local calendar-day key (YYYY-MM-DD), NEVER use toISOString() for this —
+ *  toISOString() converts to UTC and silently shifts dates across timezone
+ *  boundaries. This must match startOfDay/endOfDay's local logic exactly. */
+export function localDateKey(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function startOfWeek(d: Date): Date {
   const day = d.getDay();
   const diff = day === 0 ? 6 : day - 1;

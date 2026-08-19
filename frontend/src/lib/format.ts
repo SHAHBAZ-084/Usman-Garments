@@ -1,12 +1,23 @@
+const MONEY_FORMAT: Intl.NumberFormatOptions = {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+};
+
+/** Whole rupees as 200, paisa only when needed (200.5). Never 200.00. */
+export function formatMoney(amount: number | string) {
+  const n = Math.round((Number(amount) || 0) * 100) / 100;
+  return n.toLocaleString('en-PK', MONEY_FORMAT);
+}
+
 export function formatLedgerAmount(amount: number | string) {
-  return Number(amount).toLocaleString('en-PK');
+  return formatMoney(amount);
 }
 
 /** Running balance: positive = Dr, negative = Cr (never show negative Dr). Zero = no suffix. */
 export function formatLedgerBalance(balance: number | string) {
-  const n = Number(balance);
-  const abs = Math.abs(n).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (n === 0) return '0.00';
+  const n = Math.round((Number(balance) || 0) * 100) / 100;
+  const abs = formatMoney(Math.abs(n));
+  if (n === 0) return '0';
   return n > 0 ? `${abs} Dr` : `${abs} Cr`;
 }
 
@@ -88,8 +99,4 @@ const STOCK_MOVEMENT_LABELS: Record<string, string> = {
 
 export function formatStockMovementType(type: string) {
   return STOCK_MOVEMENT_LABELS[type.toUpperCase()] ?? type;
-}
-
-export function formatMoney(amount: number | string) {
-  return Number(amount).toLocaleString('en-PK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }

@@ -263,10 +263,10 @@ export function TrialBalancePage() {
     const headers = ['Account', 'Money in (Debit)', 'Money out side (Credit)'];
     const rows = data.accounts.map((row) => [
       row.accountName,
-      row.debit.toFixed(2),
-      row.credit.toFixed(2),
+      formatMoney(row.debit),
+      formatMoney(row.credit),
     ]);
-    rows.push(['Total', data.totalDebit.toFixed(2), data.totalCredit.toFixed(2)]);
+    rows.push(['Total', formatMoney(data.totalDebit), formatMoney(data.totalCredit)]);
     const title = data.isBalanced
       ? 'Trial Balance — books match'
       : 'Trial Balance — books do not match (check entries)';

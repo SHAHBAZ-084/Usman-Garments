@@ -75,16 +75,21 @@ describe('parseVoucherDateInput', () => {
 
 describe('display convention (frontend mirrors this)', () => {
   function formatSignedBalance(balance: number) {
-    if (balance === 0) return '0.00';
-    const abs = Math.abs(balance).toFixed(2);
-    return balance > 0 ? `${abs} Dr` : `${abs} Cr`;
+    const n = Math.round((balance || 0) * 100) / 100;
+    if (n === 0) return '0';
+    const abs = Math.abs(n).toLocaleString('en-PK', {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 2,
+    });
+    return n > 0 ? `${abs} Dr` : `${abs} Cr`;
   }
 
-  it('never shows negative Dr', () => {
-    expect(formatSignedBalance(-30000)).toBe('30000.00 Cr');
+  it('never shows negative Dr and omits .00', () => {
+    expect(formatSignedBalance(-30000)).toMatch(/Cr$/);
+    expect(formatSignedBalance(-30000)).not.toMatch(/\.00/);
   });
 
-  it('shows zero without suffix', () => {
-    expect(formatSignedBalance(0)).toBe('0.00');
+  it('shows zero without suffix or .00', () => {
+    expect(formatSignedBalance(0)).toBe('0');
   });
 });

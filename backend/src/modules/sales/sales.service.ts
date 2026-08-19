@@ -19,6 +19,7 @@ import {
 } from '../accounting/accounting.service';
 import { adjustStockInTx } from '../products/products.service';
 import { resolvePaymentAccount } from '../purchases/purchases.service';
+import { localDateKey } from '../reports/date-range';
 import { restocksInventory } from './returns.service';
 
 function roundMoney(n: number) {
@@ -359,7 +360,7 @@ export async function createSale(input: CreateSaleInput) {
       amount: udhaarRecoveryApplied,
       paymentMethod: payMethod,
       paymentAccountId: input.paymentAccountId,
-      date: saleDate.toISOString().slice(0, 10),
+      date: localDateKey(saleDate),
       note: `Udhaar recovery with sale`,
       createdById: input.createdById,
     });
