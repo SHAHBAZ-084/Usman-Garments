@@ -178,6 +178,8 @@ export async function printHtmlDocument(
     const failureReason = err instanceof Error ? err.message : 'Print failed';
     clientLog('result-fail', { jobType: options.jobType, reason: failureReason });
     return { ok: false, failureReason, copies, jobType: options.jobType, pageSize: options.pageSize };
+  } finally {
+    void window.usmanGarments?.restoreWindowInput?.();
   }
 }
 

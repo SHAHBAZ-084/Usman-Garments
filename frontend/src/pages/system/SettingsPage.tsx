@@ -15,6 +15,7 @@ import { PROTECTED_SETTINGS_FIELD_KEYS } from '../../config/protectedSettingsFie
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAccessComboListener } from '../../hooks/useAccessComboListener';
 import { api, type BusinessSettings, type CustomLabelPreset } from '../../lib/api';
+import { confirmAction } from '../../lib/confirmAction';
 import {
   contrastingTextColor,
   DEFAULT_PRIMARY_COLOR,
@@ -362,7 +363,11 @@ export function SettingsPage() {
   }
 
   async function removeCustomLabelPreset(preset: CustomLabelPreset) {
-    if (!window.confirm(`Delete label preset “${preset.label}”?`)) return;
+    const ok = await confirmAction(`Delete label preset “${preset.label}”?`, {
+      title: 'Delete preset',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     setPresetBusy(true);
     setError('');
     try {
@@ -467,7 +472,7 @@ export function SettingsPage() {
       ) : null}
 
       {accessPromptOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div data-page-modal="open" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Panel className="w-full max-w-sm">
             <form onSubmit={submitAccessPrompt} className="space-y-3">
               <TextInput

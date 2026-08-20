@@ -16,7 +16,7 @@ export async function configureSqlite(): Promise<void> {
   // journal_mode SET returns the active mode as a row — must use queryRaw, not executeRaw
   await prisma.$queryRawUnsafe('PRAGMA journal_mode = WAL');
   // busy_timeout SET returns the previous timeout value as a row
-  await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 5000');
+  await prisma.$queryRawUnsafe('PRAGMA busy_timeout = 15000');
   configured = true;
 }
 

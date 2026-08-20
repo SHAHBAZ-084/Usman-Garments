@@ -105,7 +105,7 @@ export function expandLabelCopies<T extends { key: string }>(
 ): T[] {
   const out: T[] = [];
   for (const item of items) {
-    const qty = Math.max(1, Math.min(99, Math.floor(quantities[item.key] ?? 1)));
+    const qty = Math.max(0, Math.min(99, Math.floor(Number(quantities[item.key] ?? 1))));
     for (let i = 0; i < qty; i++) {
       out.push(i === 0 ? item : { ...item, key: `${item.key}-copy-${i}` });
     }

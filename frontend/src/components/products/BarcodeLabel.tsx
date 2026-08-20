@@ -15,6 +15,7 @@ import {
 } from '../../lib/barcodeLabels';
 import { LABEL_58X40_MICRONS, printHtmlDocument, type ElectronPrintResult } from '../../lib/electronPrint';
 import { formatMoney } from '../../lib/format';
+import { restorePageInteraction } from '../../lib/restorePageInteraction';
 import { api, type CustomLabelPreset } from '../../lib/api';
 import { shortcutLabel } from '../../lib/shortcuts';
 import { useFormShortcuts } from '../../hooks/useFormShortcuts';
@@ -508,10 +509,10 @@ export function BarcodeLabelModal({
   });
 
   useEffect(() => {
-    const previous = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
-      document.body.style.overflow = previous;
+      document.body.style.overflow = '';
+      restorePageInteraction();
     };
   }, []);
 
@@ -527,6 +528,7 @@ export function BarcodeLabelModal({
 
   const modal = (
     <div
+      data-page-modal="open"
       className="fixed inset-0 z-[200] flex items-center justify-center bg-black/55 p-3 sm:p-4"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -562,6 +564,7 @@ export function BarcodeLabelModal({
             <div className="space-y-2 rounded-lg border border-border bg-surface1 p-3">
               <div className="flex items-baseline justify-between gap-2">
                 <p className="text-sm font-medium text-textPrimary">Print quantity per variant</p>
+                <p className="text-xs text-textSecondary">Set 0 to skip a variant. Print needs at least one copy.</p>
                 <p className="text-xs text-textMuted">Size/colour · copies</p>
               </div>
               {items.map((item) => (
@@ -580,19 +583,24 @@ export function BarcodeLabelModal({
                     aria-label={`Print quantity for ${variantTitle(item)}`}
                     className="h-9 w-[4.5rem] shrink-0 rounded-lg border border-border bg-surface1 px-2 text-center text-sm font-semibold text-textPrimary outline-none ring-accent focus:ring-2"
                     type="number"
-                    min={1}
+                    min={0}
                     max={99}
                     value={String(quantities[item.key] ?? 1)}
                     onWheel={(event) => {
                       event.currentTarget.blur();
                       event.preventDefault();
                     }}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const raw = event.target.value;
+                      if (raw === '') {
+                        setQuantities((prev) => ({ ...prev, [item.key]: 0 }));
+                        return;
+                      }
                       setQuantities((prev) => ({
                         ...prev,
-                        [item.key]: Math.max(1, Math.min(99, Number(event.target.value) || 1)),
-                      }))
-                    }
+                        [item.key]: Math.max(0, Math.min(99, Math.floor(Number(raw) || 0))),
+                      }));
+                    }}
                   />
                 </div>
               ))}

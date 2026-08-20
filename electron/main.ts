@@ -113,6 +113,19 @@ ipcMain.handle('restart-app', () => {
 
 ipcMain.handle('get-user-data-path', () => app.getPath('userData'));
 
+ipcMain.handle('restore-window-input', () => {
+  const win = BrowserWindow.getFocusedWindow() ?? mainWindow;
+  if (!win || win.isDestroyed()) return;
+  try {
+    win.setIgnoreMouseEvents(false);
+  } catch {
+    /* ignore */
+  }
+  win.setEnabled(true);
+  win.focus();
+  win.webContents.focus();
+});
+
 registerPrintIpc();
 
 app.whenReady().then(async () => {

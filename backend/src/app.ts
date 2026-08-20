@@ -18,6 +18,7 @@ import { reportsRouter } from './modules/reports/reports.routes';
 import { backupRouter } from './modules/backup/backup.routes';
 import { healthRouter } from './modules/health/health.routes';
 import { getUploadsDir } from './config/paths';
+import { withSqliteWrite } from './lib/sqlite-mutex';
 
 declare module 'express-session' {
   interface SessionData {
@@ -53,6 +54,27 @@ export function createApp() {
       },
     }),
   );
+
+  /** One SQLite write at a time — overlapping deletes were freezing the desktop UI. */
+  app.use((req, res, next) => {
+    if (req.method !== 'DELETE') {
+      next();
+      return;
+    }
+    void withSqliteWrite(
+      () =>
+        new Promise<void>((resolve) => {
+          const done = () => {
+            res.removeListener('finish', done);
+            res.removeListener('close', done);
+            resolve();
+          };
+          res.once('finish', done);
+          res.once('close', done);
+          next();
+        }),
+    );
+  });
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true, app: 'usman-mall' });

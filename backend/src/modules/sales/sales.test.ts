@@ -20,7 +20,7 @@ import {
 } from '../accounting/accounting.service';
 import { createCustomer } from '../customers/customers.service';
 import { createProduct } from '../products/products.service';
-import { cancelSale, createSale, deleteSale } from './sales.service';
+import { cancelSale, createSale, deleteSale, getInvoice } from './sales.service';
 import { createExchange, createSaleReturn } from './returns.service';
 
 const PREFIX = 'TEST-P7-';
@@ -50,6 +50,11 @@ async function cleanup(cancelUserId?: number) {
         }
       }
     }
+    await prisma.exchange.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+    await prisma.saleReturnItem.deleteMany({
+      where: { saleReturn: { invoiceId: { in: invoiceIds } } },
+    });
+    await prisma.saleReturn.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.invoiceItem.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
     await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
   }
@@ -350,6 +355,16 @@ describe('POS sales (Phase 7)', () => {
       refundToCash: true,
       createdById: userId,
     });
+
+    const withReturn = await getInvoice(invoice.id);
+    expect(withReturn.returnedAmount).toBeGreaterThan(0);
+    expect(withReturn.netAfterReturns).toBe(
+      Math.round((withReturn.totalAmount - withReturn.returnedAmount) * 100) / 100,
+    );
+    expect(withReturn.returnCount).toBe(1);
+    expect(withReturn.returns).toHaveLength(1);
+    expect(withReturn.returns[0]!.items[0]!.quantity).toBe(1);
+    expect(withReturn.returns[0]!.items[0]!.product.name).toContain('GoodReturn');
 
     const afterReturnStock = (await prisma.product.findUniqueOrThrow({ where: { id: product.id } })).currentStock;
     expect(afterReturnStock).toBe(8);

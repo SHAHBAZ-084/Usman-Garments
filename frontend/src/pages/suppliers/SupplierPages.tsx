@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, type Supplier, type SupplierDetail } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { confirmAction } from '../../lib/confirmAction';
 import { Plus } from 'lucide-react';
 import {
   DangerButton,
@@ -259,7 +260,11 @@ export function SupplierDetailPage() {
   }, [id]);
 
   async function onDeactivate() {
-    if (!window.confirm('Deactivate this supplier?')) return;
+    const ok = await confirmAction('Deactivate this supplier?', {
+      title: 'Deactivate supplier',
+      confirmLabel: 'Deactivate',
+    });
+    if (!ok) return;
     try {
       await api.deactivateSupplier(id);
       await load();

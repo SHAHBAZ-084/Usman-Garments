@@ -23,9 +23,9 @@ describe('barcodeLabels helpers', () => {
       { key: 'a', name: 'One' },
       { key: 'b', name: 'Two' },
     ];
-    const expanded = expandLabelCopies(items, { a: 3, b: 1 });
-    expect(expanded).toHaveLength(4);
-    expect(expanded.filter((i) => i.key.startsWith('a')).length).toBe(3);
+    expect(expandLabelCopies(items, { a: 3, b: 1 })).toHaveLength(4);
+    expect(expandLabelCopies(items, { a: 0, b: 2 })).toHaveLength(2);
+    expect(expandLabelCopies(items, { a: 0, b: 0 })).toHaveLength(0);
   });
 
   it('computes A4 grid that fits the page', () => {

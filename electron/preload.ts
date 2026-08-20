@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('usmanGarments', {
   platform: process.platform,
   restartApp: () => ipcRenderer.invoke('restart-app'),
   getUserDataPath: () => ipcRenderer.invoke('get-user-data-path') as Promise<string>,
+  restoreWindowInput: () => ipcRenderer.invoke('restore-window-input') as Promise<void>,
   printHtml: (request: ElectronPrintRequest) =>
     ipcRenderer.invoke('print-html', request) as Promise<ElectronPrintResult>,
   listPrinters: () => ipcRenderer.invoke('list-printers') as Promise<ElectronPrinterInfo[]>,
@@ -51,6 +52,7 @@ declare global {
       platform: string;
       restartApp: () => Promise<void>;
       getUserDataPath: () => Promise<string>;
+      restoreWindowInput: () => Promise<void>;
       printHtml: (request: ElectronPrintRequest) => Promise<ElectronPrintResult>;
       listPrinters: () => Promise<ElectronPrinterInfo[]>;
     };

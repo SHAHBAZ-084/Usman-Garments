@@ -11,6 +11,7 @@ import {
   type StockMovement,
 } from '../../lib/api';
 import { formatDate, formatMoney, formatStockMovementType } from '../../lib/format';
+import { confirmAction } from '../../lib/confirmAction';
 import { Plus, Printer, Trash2 } from 'lucide-react';
 import { DangerButton, Feedback, FieldLabel, GhostButton, IconButton, LoadingState, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput } from '../../components/ui/PageShell';
 
@@ -107,6 +108,7 @@ export function ProductsListPage() {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const searchRequestId = useRef(0);
 
   const load = useCallback(async () => {
@@ -307,9 +309,37 @@ export function ProductsListPage() {
               setAllowQtyEdit(true);
               setLabelItems(items);
             }}
-            onDeleted={() => {
-              setSuccessMessage(`“${product.name}” removed from the list.`);
-              void load();
+            deleting={deletingId === product.id}
+            deleteDisabled={deletingId != null}
+            onDeleteStart={() => {
+              void (async () => {
+                const ok = await confirmAction(
+                  `Permanently delete "${product.name}"? This cannot be undone.`,
+                  { title: 'Delete product', confirmLabel: 'Delete' },
+                );
+                if (!ok) return;
+                const snapshot = result;
+                setDeletingId(product.id);
+                setResult((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        items: prev.items.filter((p) => p.id !== product.id),
+                        total: Math.max(0, prev.total - 1),
+                      }
+                    : prev,
+                );
+                try {
+                  await api.deleteProduct(product.id);
+                  setSuccessMessage(`“${product.name}” removed from the list.`);
+                  void load();
+                } catch (err) {
+                  setResult(snapshot);
+                  setError(err instanceof Error ? err.message : 'Failed to delete product');
+                } finally {
+                  setDeletingId(null);
+                }
+              })();
             }}
           />
         ))}
@@ -343,7 +373,9 @@ function ProductListRow({
   expanded,
   onToggle,
   onGenerateBarcode,
-  onDeleted,
+  deleting,
+  deleteDisabled,
+  onDeleteStart,
 }: {
   srNo: number;
   product: Product;
@@ -351,26 +383,12 @@ function ProductListRow({
   expanded: boolean;
   onToggle: () => void;
   onGenerateBarcode: () => void;
-  onDeleted: () => void;
+  deleting: boolean;
+  deleteDisabled: boolean;
+  onDeleteStart: () => void;
 }) {
   const targets = labelItemsFromProduct(product, businessName);
   const hasVariants = (product.variants?.length ?? 0) > 0;
-
-  async function onDelete() {
-    if (
-      !window.confirm(
-        `Permanently delete "${product.name}"? This cannot be undone.`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await api.deleteProduct(product.id);
-      onDeleted();
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Failed to delete product');
-    }
-  }
 
   return (
     <>
@@ -420,9 +438,10 @@ function ProductListRow({
             <GhostButton
               type="button"
               className="text-xs text-danger"
-              onClick={() => void onDelete()}
+              disabled={deleteDisabled}
+              onClick={onDeleteStart}
             >
-              Delete
+              {deleting ? 'Deleting…' : 'Delete'}
             </GhostButton>
           </div>
         </td>
@@ -540,7 +559,7 @@ function StockAdjustModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div data-page-modal="open" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
       <Panel className="w-full max-w-md">
         <h2 className="text-lg font-semibold text-textPrimary">Adjust Stock</h2>
         <p className="mt-1 text-sm text-textSecondary">
@@ -905,13 +924,21 @@ export function ProductFormPage({ mode }: { mode: 'add' | 'edit' }) {
   }
 
   async function onDeleteProduct() {
-    if (!productId || !product || !window.confirm(`Permanently delete "${product.name}"? This cannot be undone.`)) return;
+    if (!productId || !product) return;
+    const ok = await confirmAction(`Permanently delete "${product.name}"? This cannot be undone.`, {
+      title: 'Delete product',
+      confirmLabel: 'Delete',
+    });
+    if (!ok) return;
     setError('');
+    setSaving(true);
     try {
       await api.deleteProduct(productId);
       navigate('/products/list');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setSaving(false);
     }
   }
 

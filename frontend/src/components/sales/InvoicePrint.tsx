@@ -52,12 +52,14 @@ function invoiceBarcodeSvg(invoiceNumber: string): string {
   try {
     JsBarcode(svg, invoiceNumber, {
       format: 'CODE128',
-      displayValue: true,
-      fontSize: 11,
-      height: 36,
-      margin: 0,
-      width: 1.15,
-      textMargin: 2,
+      displayValue: false,
+      fontSize: 14,
+      height: 42,
+      margin: 8,
+      width: 1.4,
+      textMargin: 3,
+      textAlign: 'center',
+      textPosition: 'bottom',
     });
   } catch {
     return `<div class="barcode-fallback">${escapeHtml(invoiceNumber)}</div>`;
@@ -218,12 +220,14 @@ export function buildInvoicePrintHtml(
 
       <footer class="footer">
         <div class="footer-note">${escapeHtml(settings.invoiceFooter)}</div>
+        <div class="policy-rule"></div>
         <div class="policy">${escapeHtml(settings.returnPolicy)}</div>
       </footer>
 
       <section class="invoice-barcode">
         <div class="barcode-caption">Scan for return / exchange</div>
         <div class="barcode-wrap">${barcodeMarkup}</div>
+        <div class="barcode-code">${escapeHtml(invoice.invoiceNumber)}</div>
       </section>
 
       ${(() => {
@@ -358,9 +362,20 @@ export function buildInvoicePrintHtml(
   .sum-total span:last-child { font-weight: 800; font-size: 15px; }
   .sum-change { font-weight: 800; font-size: 13px; }
   .sum-due { font-weight: 800; font-size: 13px; color: #000; }
-  .footer { text-align: center; padding: 2px; }
-  .footer-note { font-size: 12px; font-weight: 700; margin: 3px 0; word-wrap: break-word; color: #000; }
-  .policy { font-size: 10.5px; color: #000; font-weight: 700; line-height: 1.35; margin: 3px 0 0; word-wrap: break-word; }
+  .footer { text-align: center; padding: 4px 0; }
+  .footer-note { font-size: 12px; font-weight: 700; margin: 3px 0 0; word-wrap: break-word; color: #000; }
+  .policy-rule { border: none; border-top: 1.5px dashed #000; margin: 8px 0 6px; height: 0; }
+  .policy {
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.4;
+    margin: 0;
+    padding: 0;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    color: #000;
+    text-align: center;
+  }
   .invoice-barcode {
     text-align: center;
     margin-top: 8px;
@@ -375,8 +390,28 @@ export function buildInvoicePrintHtml(
     color: #000;
     margin-bottom: 4px;
   }
-  .barcode-wrap { display: flex; justify-content: center; width: 100%; overflow: hidden; }
-  .barcode-wrap svg { max-width: 100%; height: auto; }
+  .barcode-wrap {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    overflow: hidden;
+  }
+  .barcode-wrap svg {
+    display: block;
+    margin: 0 auto;
+    max-width: 100%;
+    height: auto;
+  }
+  .barcode-code {
+    font-family: ui-monospace, Consolas, "Courier New", monospace;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    margin-top: 3px;
+    color: #000;
+    text-align: center;
+  }
   .barcode-fallback {
     font-family: ui-monospace, monospace;
     font-size: 12px;
@@ -403,6 +438,7 @@ export function buildInvoicePrintHtml(
   .shop-name { font-size: 22pt; }
   .tagline, .address, .contact { font-size: 10pt; }
   table.items { font-size: 10pt; }
+  .policy { font-size: 14pt; font-weight: 800; padding: 0; }
 </style></head><body>${body}</body></html>`;
   }
 

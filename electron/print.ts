@@ -105,6 +105,17 @@ export function printHtmlInHiddenWindow(request: ElectronPrintRequest): Promise<
       } catch {
         /* ignore */
       }
+      const parent = BrowserWindow.getAllWindows().find((w) => w !== win && !w.isDestroyed());
+      if (parent) {
+        try {
+          parent.setIgnoreMouseEvents(false);
+          parent.setEnabled(true);
+          parent.focus();
+          parent.webContents.focus();
+        } catch {
+          /* ignore */
+        }
+      }
       if (result.ok) {
         printLog('job-ok', {
           jobType,

@@ -13,6 +13,7 @@ import {
   type SalePaymentMethod,
 } from '../../lib/api';
 import { formatDate, formatDateTime, formatMoney } from '../../lib/format';
+import { confirmAction } from '../../lib/confirmAction';
 import { shortcutLabel } from '../../lib/shortcuts';
 import { Printer, Trash2 } from 'lucide-react';
 import {
@@ -804,7 +805,7 @@ export function NewSalePage() {
       </div>
 
       {completedInvoice && settings ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div data-page-modal="open" className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Panel className="max-h-[90vh] w-full max-w-lg overflow-y-auto">
             <h2 className="text-lg font-semibold">Sale complete</h2>
             <p className="mt-1 text-sm text-textSecondary">
@@ -859,10 +860,20 @@ export function NewSalePage() {
   );
 }
 
+function invoiceActivityLabel(inv: Invoice) {
+  if (inv.status === 'CANCELLED') return 'Cancelled';
+  const returned = inv.returnedAmount ?? 0;
+  if (returned <= 0) return 'Active';
+  if (returned >= inv.totalAmount - 0.009) return 'Fully returned';
+  return 'Partial return';
+}
+
 export function InvoicesListPage() {
   const [result, setResult] = useState<Awaited<ReturnType<typeof api.listInvoices>> | null>(null);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [listError, setListError] = useState('');
 
   useEffect(() => {
     setLoading(true);
@@ -884,6 +895,11 @@ export function InvoicesListPage() {
       }
     >
       <Panel>
+        {listError ? (
+          <Feedback variant="error" className="mb-3">
+            {listError}
+          </Feedback>
+        ) : null}
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
@@ -891,8 +907,9 @@ export function InvoicesListPage() {
                 <th className="px-2 py-2">Invoice</th>
                 <th className="px-2 py-2">Date</th>
                 <th className="px-2 py-2">Customer</th>
-                <th className="px-2 py-2 text-right">Total</th>
-                <th className="px-2 py-2 text-right">Paid</th>
+                <th className="px-2 py-2 text-right">Sold</th>
+                <th className="px-2 py-2 text-right">Returned</th>
+                <th className="px-2 py-2 text-right">Net</th>
                 <th className="px-2 py-2">Status</th>
                 <th className="px-2 py-2 text-right">Actions</th>
               </tr>
@@ -908,44 +925,56 @@ export function InvoicesListPage() {
                   <td className="px-2 py-2">{formatDate(inv.date)}</td>
                   <td className="px-2 py-2">{inv.customer?.name ?? 'Walk-in'}</td>
                   <td className="px-2 py-2 text-right">{formatMoney(inv.totalAmount)}</td>
-                  <td className="px-2 py-2 text-right">{formatMoney(inv.paidAmount)}</td>
-                  <td className="px-2 py-2">{inv.status === 'ACTIVE' ? 'Active' : 'Cancelled'}</td>
+                  <td className="px-2 py-2 text-right">
+                    {(inv.returnedAmount ?? 0) > 0 ? formatMoney(inv.returnedAmount ?? 0) : '—'}
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    {formatMoney(inv.netAfterReturns ?? inv.totalAmount)}
+                  </td>
+                  <td className="px-2 py-2">{invoiceActivityLabel(inv)}</td>
                   <td className="px-2 py-2 text-right">
                     <button
                       type="button"
-                      className="text-xs font-semibold text-danger hover:underline"
-                      onClick={async () => {
-                        if (
-                          window.confirm(
+                      className="text-xs font-semibold text-danger hover:underline disabled:opacity-50"
+                      disabled={deletingId != null}
+                      onClick={() => {
+                        void (async () => {
+                          const ok = await confirmAction(
                             `Permanently delete invoice ${inv.invoiceNumber}? This cannot be undone, and will restock all items if active.`,
-                          )
-                        ) {
+                            { title: 'Delete invoice', confirmLabel: 'Delete' },
+                          );
+                          if (!ok) return;
+                          const snapshot = result;
+                          setDeletingId(inv.id);
+                          setResult((prev) =>
+                            prev
+                              ? {
+                                  ...prev,
+                                  items: prev.items.filter((i) => i.id !== inv.id),
+                                  total: Math.max(0, prev.total - 1),
+                                }
+                              : null,
+                          );
                           try {
                             await api.deleteSale(inv.id);
                             window.dispatchEvent(new CustomEvent('sales-changed'));
-                            setResult((prev) =>
-                              prev
-                                ? {
-                                    ...prev,
-                                    items: prev.items.filter((i) => i.id !== inv.id),
-                                    total: Math.max(0, prev.total - 1),
-                                  }
-                                : null,
-                            );
                           } catch (err) {
-                            alert(err instanceof Error ? err.message : 'Delete failed');
+                            setResult(snapshot);
+                            setListError(err instanceof Error ? err.message : 'Delete failed');
+                          } finally {
+                            setDeletingId(null);
                           }
-                        }
+                        })();
                       }}
                     >
-                      Delete
+                      {deletingId === inv.id ? 'Deleting…' : 'Delete'}
                     </button>
                   </td>
                 </tr>
               ))}
               {!loading && result?.items.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-2 py-8 text-center text-textSecondary">
+                  <td colSpan={8} className="px-2 py-8 text-center text-textSecondary">
                     No invoices yet.
                   </td>
                 </tr>
@@ -1010,9 +1039,12 @@ export function InvoiceDetailPage() {
   }
 
   async function onCancel() {
-    if (!invoice || !window.confirm(`Cancel invoice ${invoice.invoiceNumber}? Stock and accounts will be reversed.`)) {
-      return;
-    }
+    if (!invoice) return;
+    const ok = await confirmAction(
+      `Cancel invoice ${invoice.invoiceNumber}? Stock and accounts will be reversed.`,
+      { title: 'Cancel sale', confirmLabel: 'Cancel sale' },
+    );
+    if (!ok) return;
     setBusy(true);
     setError('');
     try {
@@ -1026,14 +1058,12 @@ export function InvoiceDetailPage() {
   }
 
   async function onDelete() {
-    if (
-      !invoice ||
-      !window.confirm(
-        `Permanently delete sale ${invoice.invoiceNumber}? This cannot be undone, and will restock all items if active.`,
-      )
-    ) {
-      return;
-    }
+    if (!invoice) return;
+    const ok = await confirmAction(
+      `Permanently delete sale ${invoice.invoiceNumber}? This cannot be undone, and will restock all items if active.`,
+      { title: 'Delete sale', confirmLabel: 'Delete' },
+    );
+    if (!ok) return;
     setBusy(true);
     setError('');
     try {
@@ -1042,6 +1072,7 @@ export function InvoiceDetailPage() {
       navigate('/sales/list');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
       setBusy(false);
     }
   }
@@ -1062,7 +1093,7 @@ export function InvoiceDetailPage() {
   return (
     <PageShell
       title={invoice.invoiceNumber}
-      subtitle={`${formatDateTime(invoice.date)} · ${invoice.status}`}
+      subtitle={`${formatDateTime(invoice.date)} · ${invoiceActivityLabel(invoice)}`}
       actions={
         <div className="flex flex-wrap gap-2">
           <Link to="/sales/list">
@@ -1137,6 +1168,56 @@ export function InvoiceDetailPage() {
             ))}
           </tbody>
         </table>
+        {(invoice.returns ?? []).length > 0 ? (
+          <div className="mt-6 border-t border-border pt-4">
+            <h3 className="text-sm font-semibold text-textPrimary">Returns on this invoice</h3>
+            <p className="mt-1 text-xs text-textSecondary">
+              Original sale stays {invoice.invoiceNumber}. Later returns are recorded here, not as a new bill.
+            </p>
+            {(invoice.returns ?? []).map((ret, index) => (
+              <div key={ret.id} className="mt-3 rounded-md border border-border bg-surface1 p-3">
+                <p className="text-sm font-medium">
+                  Return {index + 1} · {formatDateTime(ret.date)}
+                  {ret.exchangeId ? ' · Exchange' : ''}
+                </p>
+                <table className="mt-2 w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-textSecondary">
+                      <th className="py-1">Item</th>
+                      <th className="py-1 text-right">Qty</th>
+                      <th className="py-1 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {ret.items.map((item) => (
+                      <tr key={item.id}>
+                        <td className="py-1">
+                          {item.product.name}
+                          {item.variant ? (
+                            <span className="block text-xs text-textSecondary">
+                              {[item.variant.size, item.variant.colour].filter(Boolean).join(' / ')}
+                            </span>
+                          ) : null}
+                        </td>
+                        <td className="py-1 text-right">{item.quantity}</td>
+                        <td className="py-1 text-right">{formatMoney(item.lineTotal)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="mt-2 flex justify-between text-sm">
+                  <span>Returned</span>
+                  <span>Rs {formatMoney(ret.totalAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Cash / refund given</span>
+                  <span>Rs {formatMoney(ret.refundAmount)}</span>
+                </div>
+                {ret.note ? <p className="mt-1 text-xs text-textSecondary">{ret.note}</p> : null}
+              </div>
+            ))}
+          </div>
+        ) : null}
         <div className="mt-4 space-y-1 text-sm">
           <div className="flex justify-between">
             <span>Subtotal</span>
@@ -1149,9 +1230,27 @@ export function InvoiceDetailPage() {
             </div>
           ) : null}
           <div className="flex justify-between font-semibold">
-            <span>Bill total</span>
+            <span>Bill total (sold)</span>
             <span>Rs {formatMoney(invoice.totalAmount)}</span>
           </div>
+          {(invoice.returnedAmount ?? 0) > 0 ? (
+            <>
+              <div className="flex justify-between text-amber-800 dark:text-amber-200">
+                <span>Returned later</span>
+                <span>Rs {formatMoney(invoice.returnedAmount ?? 0)}</span>
+              </div>
+              <div className="flex justify-between font-semibold">
+                <span>Net after returns</span>
+                <span>Rs {formatMoney(invoice.netAfterReturns ?? invoice.totalAmount)}</span>
+              </div>
+              {(invoice.refundedAmount ?? 0) > 0 ? (
+                <div className="flex justify-between">
+                  <span>Cash refunded</span>
+                  <span>Rs {formatMoney(invoice.refundedAmount ?? 0)}</span>
+                </div>
+              ) : null}
+            </>
+          ) : null}
           <div className="flex justify-between">
             <span>Cash / amount received</span>
             <span>Rs {formatMoney(invoice.amountReceived ?? invoice.paidAmount)}</span>

@@ -7,6 +7,7 @@ import {
   type PurchasePaymentMethod,
 } from '../../lib/api';
 import { formatDate, formatMoney } from '../../lib/format';
+import { confirmAction } from '../../lib/confirmAction';
 import { printCustomerStatement } from '../../components/customers/CustomerStatementPrint';
 import { HandCoins, Pencil, Plus, Printer } from 'lucide-react';
 import {
@@ -269,7 +270,11 @@ export function CustomerDetailPage() {
   }, [id]);
 
   async function onDeactivate() {
-    if (!window.confirm('Deactivate this customer?')) return;
+    const ok = await confirmAction('Deactivate this customer?', {
+      title: 'Deactivate customer',
+      confirmLabel: 'Deactivate',
+    });
+    if (!ok) return;
     try {
       await api.deactivateCustomer(id);
       await load();

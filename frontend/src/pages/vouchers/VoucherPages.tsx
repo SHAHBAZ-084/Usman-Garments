@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Pencil, Trash2 } from 'lucide-react';
 import { formatDate, formatLedgerAmount, formatLedgerBalance, formatVoucherNumber, formatVoucherTypeLabel, voucherTypeColorClass } from '../../lib/format';
 import { api, Account, AccountCategory, Voucher, VoucherAccount, VoucherUser } from '../../lib/api';
+import { confirmAction, notifyAction } from '../../lib/confirmAction';
 import { FieldLabel, FinancialButton, IconButton, PageShell, Panel, PrimaryButton, SecondaryButton, TextInput, Tile } from '../../components/ui/PageShell';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -707,14 +708,18 @@ export function VoucherListPage() {
 
   async function handleCancel() {
     if (!result || result === 'notfound') return;
-    if (!window.confirm(`Cancel voucher #${result.number}? Reversal entries will be posted.`)) return;
+    const ok = await confirmAction(`Cancel voucher #${result.number}? Reversal entries will be posted.`, {
+      title: 'Cancel voucher',
+      confirmLabel: 'Cancel voucher',
+    });
+    if (!ok) return;
     setCancelling(true);
     try {
       const updated = await api.cancelVoucher(result.id);
       setResult(updated);
       loadVouchers();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Cancel failed');
+      await notifyAction(err instanceof Error ? err.message : 'Cancel failed');
     } finally {
       setCancelling(false);
     }
@@ -728,7 +733,7 @@ export function VoucherListPage() {
       setResult(updated);
       loadVouchers();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Update failed');
+      await notifyAction(err instanceof Error ? err.message : 'Update failed');
     } finally {
       setUpdating(false);
     }

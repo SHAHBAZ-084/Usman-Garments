@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PageShell, Panel, PrimaryButton, SecondaryButton, Feedback, Tile } from '../../components/ui/PageShell';
 import { api } from '../../lib/api';
+import { confirmAction } from '../../lib/confirmAction';
 import { formatDate, formatMoney } from '../../lib/format';
 
 function formatBytes(n: number) {
@@ -157,11 +158,12 @@ export function SystemHealthPage() {
       setMessage('Enter the full path to a backup folder.');
       return;
     }
-    const confirmed = window.confirm(
+    const confirmed = await confirmAction(
       'Restore will replace your current database and uploaded images with the selected backup.\n\n' +
         'A safety copy of your current data is created automatically first.\n\n' +
         'The app will need to restart after restore.\n\n' +
         'This cannot be undone except by restoring another backup. Continue?',
+      { title: 'Restore backup', confirmLabel: 'Restore' },
     );
     if (!confirmed) return;
 

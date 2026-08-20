@@ -101,22 +101,46 @@ export type Voucher = {
 
 type ApiError = { error: string };
 
+const inFlightDeletes = new Set<string>();
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  let response: Response;
+  const method = (init?.method ?? 'GET').toUpperCase();
+  const deleteKey = method === 'DELETE' ? path : null;
+  if (deleteKey) {
+    if (inFlightDeletes.has(deleteKey)) {
+      throw new Error('This item is already being deleted. Please wait.');
+    }
+    inFlightDeletes.add(deleteKey);
+  }
+
+  const timeoutMs = method === 'DELETE' ? 25000 : 60000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   try {
-    response = await fetch(path, {
-      ...init,
-      headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
-      credentials: 'include',
-    });
-  } catch {
-    throw new Error('Cannot reach the server. Restart the app / backend and try again.');
+    let response: Response;
+    try {
+      response = await fetch(path, {
+        ...init,
+        signal: controller.signal,
+        headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+        credentials: 'include',
+      });
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error('Request timed out. Try again.');
+      }
+      throw new Error('Cannot reach the server. Restart the app / backend and try again.');
+    }
+    const data = (await response.json().catch(() => ({}))) as T & ApiError;
+    if (!response.ok) {
+      throw new Error(data.error || `Request failed (${response.status})`);
+    }
+    return data;
+  } finally {
+    clearTimeout(timer);
+    if (deleteKey) inFlightDeletes.delete(deleteKey);
   }
-  const data = (await response.json().catch(() => ({}))) as T & ApiError;
-  if (!response.ok) {
-    throw new Error(data.error || `Request failed (${response.status})`);
-  }
-  return data;
 }
 
 export const api = {
@@ -1133,6 +1157,27 @@ export type InvoiceItem = {
   variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
 };
 
+export type InvoiceReturnItem = {
+  id: number;
+  quantity: number;
+  rate: number;
+  lineTotal: number;
+  condition: ReturnCondition;
+  product: { id: number; name: string; productCode: string };
+  variant: { id: number; size: string | null; colour: string | null; productCode: string } | null;
+};
+
+export type InvoiceReturn = {
+  id: number;
+  date: string;
+  totalAmount: number;
+  refundAmount: number;
+  refundMethod: PurchasePaymentMethod;
+  note: string | null;
+  exchangeId: number | null;
+  items: InvoiceReturnItem[];
+};
+
 export type Invoice = {
   id: number;
   invoiceNumber: string;
@@ -1155,6 +1200,12 @@ export type Invoice = {
   notes: string | null;
   createdAt: string;
   items: InvoiceItem[];
+  /** Goods value returned against this invoice (not a new invoice). */
+  returnedAmount?: number;
+  refundedAmount?: number;
+  netAfterReturns?: number;
+  returnCount?: number;
+  returns?: InvoiceReturn[];
 };
 
 export type InvoiceListResult = {

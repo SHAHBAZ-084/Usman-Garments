@@ -374,6 +374,32 @@ export async function createSale(input: CreateSaleInput) {
   };
 }
 
+const invoiceWithReturnsInclude = {
+  customer: { select: { id: true, name: true, phone: true } },
+  items: {
+    include: {
+      product: { select: { id: true, name: true, sku: true } },
+      variant: { select: { id: true, size: true, colour: true, sku: true } },
+    },
+  },
+  saleReturns: {
+    orderBy: { date: 'asc' as const },
+    include: {
+      exchange: { select: { id: true } },
+      items: {
+        include: {
+          invoiceItem: {
+            select: {
+              product: { select: { id: true, name: true, sku: true } },
+              variant: { select: { id: true, size: true, colour: true, sku: true } },
+            },
+          },
+        },
+      },
+    },
+  },
+} satisfies Prisma.InvoiceInclude;
+
 function serializeInvoice(row: {
   id: number;
   invoiceNumber: string;
@@ -402,12 +428,63 @@ function serializeInvoice(row: {
     product: { id: number; name: string; sku: string };
     variant: { id: number; size: string | null; colour: string | null; sku: string } | null;
   }>;
+  saleReturns?: Array<{
+    id: number;
+    date: Date;
+    totalAmount: Prisma.Decimal;
+    refundAmount: Prisma.Decimal;
+    refundMethod: PurchasePaymentMethod;
+    note: string | null;
+    exchange: { id: number } | null;
+    items: Array<{
+      id: number;
+      quantity: number;
+      rate: Prisma.Decimal;
+      lineTotal: Prisma.Decimal;
+      condition: string;
+      invoiceItem: {
+        product: { id: number; name: string; sku: string };
+        variant: { id: number; size: string | null; colour: string | null; sku: string } | null;
+      };
+    }>;
+  }>;
 }) {
   const totalAmount = Number(row.totalAmount);
   const paidAmount = Number(row.paidAmount);
   const amountReceived =
     row.amountReceived != null ? Number(row.amountReceived) : paidAmount;
   const changeAmount = Math.max(0, roundMoney(amountReceived - totalAmount));
+  const returns = (row.saleReturns ?? []).map((r) => ({
+    id: r.id,
+    date: r.date,
+    totalAmount: Number(r.totalAmount),
+    refundAmount: Number(r.refundAmount),
+    refundMethod: r.refundMethod,
+    note: r.note,
+    exchangeId: r.exchange?.id ?? null,
+    items: r.items.map((item) => ({
+      id: item.id,
+      quantity: item.quantity,
+      rate: Number(item.rate),
+      lineTotal: Number(item.lineTotal),
+      condition: item.condition,
+      product: {
+        id: item.invoiceItem.product.id,
+        name: item.invoiceItem.product.name,
+        productCode: item.invoiceItem.product.sku,
+      },
+      variant: item.invoiceItem.variant
+        ? {
+            id: item.invoiceItem.variant.id,
+            size: item.invoiceItem.variant.size,
+            colour: item.invoiceItem.variant.colour,
+            productCode: item.invoiceItem.variant.sku,
+          }
+        : null,
+    })),
+  }));
+  const returnedAmount = roundMoney(returns.reduce((sum, r) => sum + r.totalAmount, 0));
+  const refundedAmount = roundMoney(returns.reduce((sum, r) => sum + r.refundAmount, 0));
   return {
     id: row.id,
     invoiceNumber: row.invoiceNumber,
@@ -425,6 +502,11 @@ function serializeInvoice(row: {
     status: row.status,
     notes: row.notes,
     createdAt: row.createdAt,
+    returnedAmount,
+    refundedAmount,
+    netAfterReturns: roundMoney(totalAmount - returnedAmount),
+    returnCount: returns.length,
+    returns,
     items: row.items.map((i) => ({
       id: i.id,
       productId: i.productId,
@@ -450,15 +532,7 @@ function serializeInvoice(row: {
 export async function getInvoice(id: number) {
   const row = await prisma.invoice.findUnique({
     where: { id },
-    include: {
-      customer: { select: { id: true, name: true, phone: true } },
-      items: {
-        include: {
-          product: { select: { id: true, name: true, sku: true } },
-          variant: { select: { id: true, size: true, colour: true, sku: true } },
-        },
-      },
-    },
+    include: invoiceWithReturnsInclude,
   });
   if (!row) throw new AppError(404, 'Invoice not found');
   return serializeInvoice(row);
@@ -474,15 +548,7 @@ export async function listInvoices(params: { page?: number; pageSize?: number; s
     prisma.invoice.count({ where }),
     prisma.invoice.findMany({
       where,
-      include: {
-        customer: { select: { id: true, name: true, phone: true } },
-        items: {
-          include: {
-            product: { select: { id: true, name: true, sku: true } },
-            variant: { select: { id: true, size: true, colour: true, sku: true } },
-          },
-        },
-      },
+      include: invoiceWithReturnsInclude,
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * pageSize,
       take: pageSize,
@@ -647,7 +713,7 @@ export async function deleteSale(id: number, userId: number) {
 
     await tx.invoiceItem.deleteMany({ where: { invoiceId: id } });
     await tx.invoice.delete({ where: { id } });
-  });
+  }, { timeout: 20000, maxWait: 10000 });
 
   return { ok: true, deletedInvoiceNumber: existing.invoiceNumber };
 }

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type Account, type AccountCategory, type Voucher } from '../../lib/api';
 import { formatDate, formatLedgerAmount, formatLedgerBalance, formatMoney, formatVoucherNumber, formatVoucherTypeLabel, voucherTypeColorClass } from '../../lib/format';
+import { confirmAction, notifyAction } from '../../lib/confirmAction';
 import { downloadExcel, downloadPdf } from '../../lib/reportExport';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
@@ -629,14 +630,18 @@ export function VouchersReportPage() {
 
   async function handleCancel() {
     if (!selected) return;
-    if (!window.confirm(`Cancel voucher #${selected.number}? Reversal entries will be posted.`)) return;
+    const ok = await confirmAction(`Cancel voucher #${selected.number}? Reversal entries will be posted.`, {
+      title: 'Cancel voucher',
+      confirmLabel: 'Cancel voucher',
+    });
+    if (!ok) return;
     setCancelling(true);
     try {
       const updated = await api.cancelVoucher(selected.id);
       setSelected(updated);
       await loadReport();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Cancel failed');
+      await notifyAction(err instanceof Error ? err.message : 'Cancel failed');
     } finally {
       setCancelling(false);
     }
@@ -650,7 +655,7 @@ export function VouchersReportPage() {
       setSelected(updated);
       await loadReport();
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Update failed');
+      await notifyAction(err instanceof Error ? err.message : 'Update failed');
     } finally {
       setUpdating(false);
     }

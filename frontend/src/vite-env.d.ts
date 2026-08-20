@@ -8,6 +8,7 @@ declare global {
       platform: NodeJS.Platform;
       restartApp?: () => Promise<void>;
       getUserDataPath?: () => Promise<string>;
+      restoreWindowInput?: () => Promise<void>;
       printHtml?: (request: {
         html: string;
         deviceName?: string | null;
